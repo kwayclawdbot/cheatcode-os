@@ -2,13 +2,40 @@
 // Brand: CC Cyan for Kai/AI elements, CC Green for bullish, CC Red for bearish,
 // CC Yellow for watch, dark gradient hero, spectrum top bar
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Lock, ChevronDown, ChevronUp, Zap, ArrowRight } from "lucide-react";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { tickerData, radarTickers } from "@/lib/mockData";
+import { tickerData as mockTickerData, radarTickers as mockRadar } from "@/lib/mockData";
+import { fetchTicker, fetchRadar, type TickerData, type RadarData } from "@/lib/api";
+
+// Use live API data with mock fallback
+const tickerData = mockTickerData;
+
+function useRadarTickers() {
+  const [tickers, setTickers] = useState(mockRadar);
+  useEffect(() => {
+    fetchRadar()
+      .then((r) => {
+        const all = [...(r.critical || []), ...(r.high_conviction || []), ...(r.watch || [])];
+        if (all.length) {
+          setTickers(all.map((t) => ({
+            ticker: t.symbol,
+            score: t.score,
+            direction: t.direction ? t.direction.charAt(0).toUpperCase() + t.direction.slice(1) : "Neutral",
+            timeframe: t.timeframe ? t.timeframe.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : "Swing",
+            confidence: t.confidence ? t.confidence.charAt(0).toUpperCase() + t.confidence.slice(1).replace(/_/g, " ") : "Watch",
+            change: "",
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+  return tickers;
+}
+const radarTickers = mockRadar; // will be overridden in component
 
 const SOURCE_ICONS: Record<string, string> = {
   "Flow Agent": "🌊",
@@ -220,6 +247,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
 export default function IntelligencePage() {
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState("");
+  const radarTickers = useRadarTickers();
 
   const handleSearch = () => {
     if (query.trim()) setSearched(query.trim());

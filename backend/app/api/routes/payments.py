@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 import stripe
 from app.core.config import get_settings
 from app.core.auth import require_user
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -101,7 +101,7 @@ async def stripe_webhook(request: Request):
         customer_id = subscription.get("customer")
 
         # Find user by stripe customer ID
-        profile = db.table("profiles").select("id").eq("stripe_customer_id", customer_id).maybe_single().execute()
+        profile = maybe_one(db.table("profiles").select("id").eq("stripe_customer_id", customer_id))
         if profile.data:
             db.table("profiles").update({
                 "tier": "free",
@@ -114,7 +114,7 @@ async def stripe_webhook(request: Request):
         status = subscription.get("status")
 
         if status in ("past_due", "unpaid", "canceled"):
-            profile = db.table("profiles").select("id").eq("stripe_customer_id", customer_id).maybe_single().execute()
+            profile = maybe_one(db.table("profiles").select("id").eq("stripe_customer_id", customer_id))
             if profile.data:
                 db.table("profiles").update({"tier": "free"}).eq("id", profile.data["id"]).execute()
 

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 from app.core.auth import get_current_user, require_user
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 from app.models.content import KaiChatRequest, KaiChatResponse, KaiMessage
 from app.services.kai_chat import chat
 
@@ -37,7 +37,7 @@ async def list_conversations(user: dict = Depends(require_user)):
 async def get_conversation_messages(conversation_id: str, user: dict = Depends(require_user)):
     db = get_supabase()
     # Verify ownership
-    conv = db.table("kai_conversations").select("id").eq("id", conversation_id).eq("user_id", user["id"]).maybe_single().execute()
+    conv = maybe_one(db.table("kai_conversations").select("id").eq("id", conversation_id).eq("user_id", user["id"]))
     if not conv.data:
         return []
     messages = db.table("kai_messages").select(

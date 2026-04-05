@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 import httpx
 from app.core.config import get_settings
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 
 log = logging.getLogger("intelligence")
 
@@ -102,7 +102,7 @@ async def update_ticker_convergence(symbol: str, new_evidence: list[dict]):
     db = get_supabase()
 
     # Fetch existing evidence
-    existing = db.table("tickers").select("evidence_chain").eq("symbol", symbol).maybe_single().execute()
+    existing = maybe_one(db.table("tickers").select("evidence_chain").eq("symbol", symbol))
     if existing.data:
         old_evidence = existing.data.get("evidence_chain", [])
     else:
@@ -343,7 +343,7 @@ async def _maybe_create_prediction(ticker: str, convergence: dict, evidence: lis
     db = get_supabase()
 
     # Check if active prediction already exists
-    existing = db.table("predictions").select("id, convergence_score").eq("ticker", ticker).eq("status", "active").maybe_single().execute()
+    existing = maybe_one(db.table("predictions").select("id, convergence_score").eq("ticker", ticker).eq("status", "active"))
     if existing.data:
         # Update if score changed significantly
         old_score = existing.data["convergence_score"]
@@ -358,7 +358,7 @@ async def _maybe_create_prediction(ticker: str, convergence: dict, evidence: lis
         return
 
     # Get ticker themes
-    ticker_data = db.table("tickers").select("themes, name").eq("symbol", ticker).maybe_single().execute()
+    ticker_data = maybe_one(db.table("tickers").select("themes, name").eq("symbol", ticker))
     themes = (ticker_data.data or {}).get("themes", [])
 
     db.table("predictions").insert({

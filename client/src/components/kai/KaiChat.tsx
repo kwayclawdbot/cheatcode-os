@@ -5,6 +5,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Minimize2, Zap, Lock } from "lucide-react";
+import { sendKaiMessage } from "@/lib/api";
 
 interface Message {
   role: "user" | "kai";
@@ -48,17 +49,30 @@ export function KaiChat() {
     if (open) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
-  const sendMessage = () => {
+  const [conversationId, setConversationId] = useState<string | undefined>();
+
+  const sendMessage = async () => {
     if (!input.trim() || messageCount >= FREE_LIMIT) return;
     const userMsg: Message = { role: "user", content: input, timestamp: "now" };
+    const userInput = input;
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setMessageCount(c => c + 1);
     setIsTyping(true);
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: "kai", content: getKaiResponse(userMsg.content), timestamp: "now" }]);
+
+    try {
+      const res = await sendKaiMessage(userInput, conversationId);
+      setConversationId(res.conversation_id);
+      setMessages(prev => [...prev, { role: "kai", content: res.message.content, timestamp: "now" }]);
+      if (res.remaining_messages !== null) {
+        setMessageCount(FREE_LIMIT - res.remaining_messages);
+      }
+    } catch {
+      // Fallback to mock response if API unavailable
+      setMessages(prev => [...prev, { role: "kai", content: getKaiResponse(userInput), timestamp: "now" }]);
+    } finally {
       setIsTyping(false);
-    }, 1200);
+    }
   };
 
   const remaining = FREE_LIMIT - messageCount;

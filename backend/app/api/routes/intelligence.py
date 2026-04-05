@@ -1,7 +1,7 @@
 """Intelligence API — ticker lookup, predictions, radar, themes."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 from app.core.auth import get_current_user, require_pro
 from app.models.content import TickerLookup, TickerDetail, PredictionCard, RadarSnapshot, ThemeDetail, ContentCard
 from datetime import datetime, timezone
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/intelligence", tags=["intelligence"])
 async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_user)):
     """Ticker intelligence lookup. Free: score + direction. Pro: full breakdown."""
     db = get_supabase()
-    t = db.table("tickers").select("*").eq("symbol", symbol.upper()).maybe_single().execute()
+    t = maybe_one(db.table("tickers").select("*").eq("symbol", symbol.upper()))
     if not t.data:
         raise HTTPException(status_code=404, detail=f"No data for {symbol.upper()}")
 
@@ -74,7 +74,7 @@ async def get_radar(date: str | None = None):
     """Get radar snapshot. Defaults to today."""
     db = get_supabase()
     target_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    r = db.table("radar_snapshots").select("*").eq("date", target_date).maybe_single().execute()
+    r = maybe_one(db.table("radar_snapshots").select("*").eq("date", target_date))
     if not r.data:
         raise HTTPException(status_code=404, detail=f"No radar for {target_date}")
 
@@ -131,7 +131,7 @@ async def list_themes(status: str | None = None):
 @router.get("/themes/{slug}", response_model=ThemeDetail)
 async def get_theme(slug: str):
     db = get_supabase()
-    t = db.table("themes").select("*").eq("slug", slug).maybe_single().execute()
+    t = maybe_one(db.table("themes").select("*").eq("slug", slug))
     if not t.data:
         raise HTTPException(status_code=404, detail="Theme not found")
 

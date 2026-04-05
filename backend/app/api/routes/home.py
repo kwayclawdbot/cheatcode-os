@@ -1,7 +1,7 @@
 """Home page API — today's picks, sentiment, topics."""
 
 from fastapi import APIRouter, Depends
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 from app.core.auth import get_current_user
 from app.models.content import HomePageData, ContentCard
 from datetime import datetime, timezone
@@ -28,7 +28,7 @@ async def get_home(user: dict | None = Depends(get_current_user)):
 
     # Today's radar for sentiment
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    radar = db.table("radar_snapshots").select("market_sentiment, sentiment_summary").eq("date", today).maybe_single().execute()
+    radar = maybe_one(db.table("radar_snapshots").select("market_sentiment, sentiment_summary").eq("date", today))
     sentiment = (radar.data or {}).get("market_sentiment", "neutral")
     sentiment_summary = (radar.data or {}).get("sentiment_summary")
 

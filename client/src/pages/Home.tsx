@@ -9,8 +9,61 @@ import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import {
-  marketSentiment, todaysPicks, topicGrid, hotThemes, radarTickers, creators
+  marketSentiment as mockSentiment, todaysPicks as mockPicks, topicGrid as mockTopicGrid,
+  hotThemes as mockThemes, radarTickers as mockRadar, creators as mockCreators
 } from "@/lib/mockData";
+import { fetchHome, fetchRadar } from "@/lib/api";
+import { useApi } from "@/hooks/useApi";
+
+// Transform API data to match existing component shapes
+function useHomeData() {
+  const { data: home } = useApi(fetchHome, null);
+  const { data: radar } = useApi(fetchRadar, null);
+
+  const marketSentiment = home ? {
+    label: home.market_sentiment.charAt(0).toUpperCase() + home.market_sentiment.slice(1),
+    description: home.sentiment_summary || "",
+    type: home.market_sentiment as "bullish" | "bearish" | "choppy" | "neutral",
+    date: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
+  } : mockSentiment;
+
+  const todaysPicks = home?.todays_picks?.length ? home.todays_picks.map((p) => ({
+    id: p.id,
+    type: p.content_type as "video" | "podcast",
+    title: p.title,
+    creator: { name: p.creator_name || "Unknown", avatar: (p.creator_name || "??").slice(0, 2).toUpperCase(), color: "#667085" },
+    thumbnail: p.thumbnail_url || "",
+    duration: p.duration_seconds ? `${Math.floor(p.duration_seconds / 60)}:${String(p.duration_seconds % 60).padStart(2, "0")}` : "",
+    quickTake: p.quick_take || "",
+    tags: p.topics.map((t) => t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())),
+    relevanceBadge: p.relevance_score >= 0.8 ? "Critical" : p.relevance_score >= 0.6 ? "High Relevance" : "Watch",
+    tickers: [] as string[],
+    convergenceScore: Math.round(p.relevance_score * 100),
+    publishedAt: p.published_at ? new Date(p.published_at).toLocaleDateString() : "",
+  })) : mockPicks;
+
+  const radarTickers = radar?.critical?.concat(radar.high_conviction || [], radar.watch || []).map((t) => ({
+    ticker: t.symbol,
+    score: t.score,
+    direction: t.direction ? t.direction.charAt(0).toUpperCase() + t.direction.slice(1) : "Neutral",
+    timeframe: t.timeframe ? t.timeframe.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Swing",
+    confidence: t.confidence ? t.confidence.charAt(0).toUpperCase() + t.confidence.slice(1).replace(/_/g, " ") : "Watch",
+    change: "",
+  })) || mockRadar;
+
+  const hotThemes = home?.themes?.length ? home.themes.map((t) => ({
+    id: t.slug,
+    label: t.name,
+    status: t.status.charAt(0).toUpperCase() + t.status.slice(1),
+    level: Math.round(t.score / 20),
+    tickers: [] as string[],
+    score: Math.round(t.score),
+    color: t.status === "escalating" ? "#F04438" : t.status === "active" ? "#12B76A" : "#F79009",
+  })) : mockThemes;
+
+  return { marketSentiment, todaysPicks, topicGrid: mockTopicGrid, hotThemes, radarTickers, creators: mockCreators };
+}
+
 
 const HERO_IMAGE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663185570724/QgiApnmXYRXSMA2KNkFFkL/hero-banner-2yeBhxB5MaexrZkXyaLwmy.webp";
 
@@ -141,6 +194,7 @@ function ThemeCard({ theme }: { theme: typeof hotThemes[0] }) {
 }
 
 export default function Home() {
+  const { marketSentiment, todaysPicks, topicGrid, hotThemes, radarTickers, creators } = useHomeData();
   const videos = todaysPicks.filter(p => p.type === "video");
   const podcasts = todaysPicks.filter(p => p.type === "podcast");
 

@@ -4,7 +4,7 @@ from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
 from app.core.config import get_settings
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 
 security = HTTPBearer(auto_error=False)
 
@@ -36,7 +36,7 @@ async def get_current_user(
 
     # Fetch tier from profiles table
     db = get_supabase()
-    result = db.table("profiles").select("tier, display_name, avatar_url").eq("id", user_id).maybe_single().execute()
+    result = maybe_one(db.table("profiles").select("tier, display_name, avatar_url").eq("id", user_id))
     profile = result.data or {}
 
     return {

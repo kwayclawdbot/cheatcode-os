@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 import httpx
 from app.core.config import get_settings
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 
 log = logging.getLogger("curation")
 
@@ -290,12 +290,12 @@ async def process_video(video: dict, creator: dict) -> dict | None:
     video_id = video["video_id"]
 
     # Check if already curated
-    existing = db.table("content").select("id").eq("external_id", video_id).maybe_single().execute()
+    existing = maybe_one(db.table("content").select("id").eq("external_id", video_id))
     if existing.data:
         return None
 
     # Check if in queue and already rejected
-    queued = db.table("curation_queue").select("status").eq("external_id", video_id).maybe_single().execute()
+    queued = maybe_one(db.table("curation_queue").select("status").eq("external_id", video_id))
     if queued.data and queued.data.get("status") == "rejected":
         return None
 

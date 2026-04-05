@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 import anthropic
 from app.core.config import get_settings
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 
 log = logging.getLogger("newsletter")
 
@@ -18,13 +18,13 @@ async def generate_daily_newsletter() -> dict:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Check if already generated
-    existing = db.table("newsletters").select("id").eq("date", today).maybe_single().execute()
+    existing = maybe_one(db.table("newsletters").select("id").eq("date", today))
     if existing.data:
         log.info("Newsletter already generated for %s", today)
         return existing.data
 
     # Gather data
-    radar = db.table("radar_snapshots").select("*").eq("date", today).maybe_single().execute()
+    radar = maybe_one(db.table("radar_snapshots").select("*").eq("date", today))
     radar_data = radar.data or {}
 
     # Top curated content from last 24h

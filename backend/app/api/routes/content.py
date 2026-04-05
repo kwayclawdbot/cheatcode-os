@@ -1,7 +1,7 @@
 """Content API — browse, search, detail pages."""
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 from app.core.auth import get_current_user, require_user
 from app.models.content import ContentCard, ContentDetail, CreatorProfile
 from app.services.curation import generate_embedding
@@ -54,7 +54,7 @@ async def list_content(
         q = q.eq("skill_level", skill_level)
     if creator_slug:
         # Resolve creator
-        creator = db.table("creators").select("id").eq("slug", creator_slug).maybe_single().execute()
+        creator = maybe_one(db.table("creators").select("id").eq("slug", creator_slug))
         if creator.data:
             q = q.eq("creator_id", creator.data["id"])
 
@@ -96,13 +96,64 @@ async def search_content(q: str = Query(..., min_length=2)):
     ) for r in (results.data or [])]
 
 
+# ── Creators (must be before /{content_id} to avoid route conflict) ──────────
+
+@router.get("/creators", response_model=list[CreatorProfile])
+async def list_creators():
+    db = get_supabase()
+    creators = db.table("creators").select("*").eq("is_active", True).order("quality_score", desc=True).execute()
+
+    result = []
+    for c in (creators.data or []):
+        count = db.table("content").select("id", count="exact").eq("creator_id", c["id"]).eq("is_published", True).execute()
+        result.append(CreatorProfile(
+            id=c["id"], name=c["name"], slug=c["slug"], platform=c["platform"],
+            avatar_url=c.get("avatar_url"), description=c.get("description"),
+            quality_score=c["quality_score"], tags=c.get("tags", []),
+            content_count=count.count or 0,
+        ))
+    return result
+
+
+@router.get("/creators/{slug}", response_model=CreatorProfile)
+async def get_creator(slug: str):
+    db = get_supabase()
+    c = maybe_one(db.table("creators").select("*").eq("slug", slug))
+    if not c.data:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    count = db.table("content").select("id", count="exact").eq("creator_id", c.data["id"]).eq("is_published", True).execute()
+    return CreatorProfile(
+        id=c.data["id"], name=c.data["name"], slug=c.data["slug"], platform=c.data["platform"],
+        avatar_url=c.data.get("avatar_url"), description=c.data.get("description"),
+        quality_score=c.data["quality_score"], tags=c.data.get("tags", []),
+        content_count=count.count or 0,
+    )
+
+
+@router.get("/by-ticker/{symbol}", response_model=list[ContentCard])
+async def content_by_ticker(symbol: str, page: int = Query(1, ge=1)):
+    """Get content mentioning a specific ticker."""
+    db = get_supabase()
+    mentions = db.table("content_tickers").select("content_id").eq("ticker", symbol.upper()).execute()
+    content_ids = [m["content_id"] for m in (mentions.data or [])]
+    if not content_ids:
+        return []
+
+    offset = (page - 1) * 20
+    results = db.table("content").select(CARD_SELECT).in_("id", content_ids).eq(
+        "is_published", True
+    ).order("curated_at", desc=True).range(offset, offset + 19).execute()
+
+    return [_row_to_card(r) for r in (results.data or [])]
+
+
 @router.get("/{content_id}", response_model=ContentDetail)
 async def get_content_detail(content_id: str, user: dict | None = Depends(get_current_user)):
     db = get_supabase()
 
-    row = db.table("content").select(
+    row = maybe_one(db.table("content").select(
         "*, creators:creator_id(name, slug)"
-    ).eq("id", content_id).eq("is_published", True).maybe_single().execute()
+    ).eq("id", content_id).eq("is_published", True))
 
     if not row.data:
         raise HTTPException(status_code=404, detail="Content not found")
@@ -116,7 +167,7 @@ async def get_content_detail(content_id: str, user: dict | None = Depends(get_cu
     # Enrich tickers with convergence scores
     enriched_tickers = []
     for t in (tickers.data or []):
-        ticker_data = db.table("tickers").select("convergence_score, direction").eq("symbol", t["ticker"]).maybe_single().execute()
+        ticker_data = maybe_one(db.table("tickers").select("convergence_score, direction").eq("symbol", t["ticker"]))
         td = ticker_data.data or {}
         enriched_tickers.append({
             **t,
@@ -158,57 +209,6 @@ async def get_content_detail(content_id: str, user: dict | None = Depends(get_cu
         tickers=enriched_tickers,
         related=related_cards,
         transcript=transcript,
-    )
-
-
-@router.get("/by-ticker/{symbol}", response_model=list[ContentCard])
-async def content_by_ticker(symbol: str, page: int = Query(1, ge=1)):
-    """Get content mentioning a specific ticker."""
-    db = get_supabase()
-    mentions = db.table("content_tickers").select("content_id").eq("ticker", symbol.upper()).execute()
-    content_ids = [m["content_id"] for m in (mentions.data or [])]
-    if not content_ids:
-        return []
-
-    offset = (page - 1) * 20
-    results = db.table("content").select(CARD_SELECT).in_("id", content_ids).eq(
-        "is_published", True
-    ).order("curated_at", desc=True).range(offset, offset + 19).execute()
-
-    return [_row_to_card(r) for r in (results.data or [])]
-
-
-# ── Creators ─────────────────────────────────────────────────────────────────
-
-@router.get("/creators", response_model=list[CreatorProfile])
-async def list_creators():
-    db = get_supabase()
-    creators = db.table("creators").select("*").eq("is_active", True).order("quality_score", desc=True).execute()
-
-    result = []
-    for c in (creators.data or []):
-        count = db.table("content").select("id", count="exact").eq("creator_id", c["id"]).eq("is_published", True).execute()
-        result.append(CreatorProfile(
-            id=c["id"], name=c["name"], slug=c["slug"], platform=c["platform"],
-            avatar_url=c.get("avatar_url"), description=c.get("description"),
-            quality_score=c["quality_score"], tags=c.get("tags", []),
-            content_count=count.count or 0,
-        ))
-    return result
-
-
-@router.get("/creators/{slug}", response_model=CreatorProfile)
-async def get_creator(slug: str):
-    db = get_supabase()
-    c = db.table("creators").select("*").eq("slug", slug).maybe_single().execute()
-    if not c.data:
-        raise HTTPException(status_code=404, detail="Creator not found")
-    count = db.table("content").select("id", count="exact").eq("creator_id", c.data["id"]).eq("is_published", True).execute()
-    return CreatorProfile(
-        id=c.data["id"], name=c.data["name"], slug=c.data["slug"], platform=c.data["platform"],
-        avatar_url=c.data.get("avatar_url"), description=c.data.get("description"),
-        quality_score=c.data["quality_score"], tags=c.data.get("tags", []),
-        content_count=count.count or 0,
     )
 
 

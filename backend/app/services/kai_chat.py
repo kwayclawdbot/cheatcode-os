@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 import anthropic
 from app.core.config import get_settings
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 from app.services.curation import generate_embedding
 
 log = logging.getLogger("kai_chat")
@@ -84,7 +84,7 @@ async def chat(
 
     # Get or create conversation
     if conversation_id:
-        conv = db.table("kai_conversations").select("id").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
+        conv = maybe_one(db.table("kai_conversations").select("id").eq("id", conversation_id).eq("user_id", user_id))
         if not conv.data:
             conversation_id = None
 
@@ -174,7 +174,7 @@ async def _gather_context(query: str, tier: str) -> str:
     # 2. Ticker convergence data
     if tickers:
         for symbol in tickers[:5]:
-            result = db.table("tickers").select("*").eq("symbol", symbol).maybe_single().execute()
+            result = maybe_one(db.table("tickers").select("*").eq("symbol", symbol))
             if result.data:
                 t = result.data
                 sections.append(f"""TICKER: {t['symbol']} ({t.get('name', '')})
@@ -215,7 +215,7 @@ Key Insights: {json.dumps(c.get('key_insights', [])[:3])}""")
 
     # 5. Today's radar
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    radar = db.table("radar_snapshots").select("market_sentiment, sentiment_summary, critical, high_conviction").eq("date", today).maybe_single().execute()
+    radar = maybe_one(db.table("radar_snapshots").select("market_sentiment, sentiment_summary, critical, high_conviction").eq("date", today))
     if radar.data:
         r = radar.data
         sections.append(f"""TODAY'S RADAR:
