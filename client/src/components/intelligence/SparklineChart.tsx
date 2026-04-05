@@ -5,7 +5,9 @@
 //      intraday shape from open/high/low/close/prev_close data
 // KEY FIX: Y-axis domain is set to [dataMin * 0.998, dataMax * 1.002] so the
 //          chart zooms into the actual price range instead of starting at 0.
-import { useEffect, useState } from "react";
+// MOBILE FIX: Uses ResizeObserver to measure actual container width instead of
+//             hardcoded 112px, so sparklines render correctly on all screen sizes.
+import { useEffect, useState, useRef } from "react";
 
 interface SparklineChartProps {
   symbol: string;
@@ -141,6 +143,23 @@ function SvgSparkline({ values, color, width, height }: {
 export function SparklineChart({ symbol, color, height = 40 }: SparklineChartProps) {
   const [values, setValues] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
+  const [width, setWidth] = useState(112);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Measure actual container width so the SVG fills it on all screen sizes
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setWidth(Math.floor(w));
+    });
+    ro.observe(el);
+    // Initial measurement
+    const initial = el.getBoundingClientRect().width;
+    if (initial > 0) setWidth(Math.floor(initial));
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +176,7 @@ export function SparklineChart({ symbol, color, height = 40 }: SparklineChartPro
   if (loading || values.length < 3) {
     return (
       <div
+        ref={containerRef}
         style={{ height, width: "100%" }}
         className={loading ? "animate-pulse bg-muted/40 rounded" : "bg-muted/20 rounded"}
       />
@@ -164,8 +184,8 @@ export function SparklineChart({ symbol, color, height = 40 }: SparklineChartPro
   }
 
   return (
-    <div style={{ width: "100%", height }}>
-      <SvgSparkline values={values} color={color} width={112} height={height} />
+    <div ref={containerRef} style={{ width: "100%", height }}>
+      <SvgSparkline values={values} color={color} width={width || 112} height={height} />
     </div>
   );
 }

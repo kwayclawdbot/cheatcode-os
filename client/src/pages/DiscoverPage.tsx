@@ -135,7 +135,7 @@ function TickerListRow({
             {ticker.symbol}
           </span>
           {ticker.theme && (
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden sm:inline-block"
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden md:inline-block"
               style={{ background: color + "15", color }}>
               {ticker.theme}
             </span>
@@ -145,7 +145,7 @@ function TickerListRow({
       </div>
 
       {/* Sparkline */}
-      <div className="w-16 flex-shrink-0 hidden sm:block">
+      <div className="w-14 flex-shrink-0">
         <SparklineChart symbol={ticker.symbol} color={color} height={32} />
       </div>
 

@@ -5,6 +5,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Nav } from "@/components/layout/Nav";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Sparkles, TrendingUp, BarChart2, BookOpen, Zap,
@@ -467,7 +468,9 @@ export default function KaiAssistPage() {
   const borderColor = isDark ? "rgba(255,255,255,0.08)" : "#EAECF0";
 
   return (
-    <div className="flex h-[calc(100vh-56px)] overflow-hidden" style={{ background: bg }}>
+    <>
+    <Nav />
+    <div className="flex h-[calc(100vh-56px)] overflow-hidden relative" style={{ background: bg }}>
 
       {/* ── Sidebar ── */}
       <AnimatePresence>
@@ -477,7 +480,7 @@ export default function KaiAssistPage() {
             animate={{ width: 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="flex-shrink-0 flex flex-col border-r overflow-hidden"
+            className="flex-shrink-0 flex flex-col border-r overflow-hidden absolute md:relative z-30 h-full md:h-auto"
             style={{ background: sidebarBg, borderColor }}
           >
             {/* Sidebar header */}
@@ -648,7 +651,7 @@ export default function KaiAssistPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="grid grid-cols-2 gap-2 w-full max-w-xl"
+                className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-xl"
               >
                 {SUGGESTED_PROMPTS.map((p, i) => (
                   <button
@@ -754,5 +757,6 @@ export default function KaiAssistPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
