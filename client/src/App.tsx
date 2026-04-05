@@ -7,6 +7,8 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { useEffect } from "react";
+import { syncCreatorRegistry } from "./lib/creatorRegistry";
 
 // Pages
 import Home from "./pages/Home";
@@ -62,6 +64,12 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    // Sync creator registry on mount — merges API creators with mock data
+    // and auto-generates profiles for new creators from the curation pipeline
+    syncCreatorRegistry().catch(() => {});
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>

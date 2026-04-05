@@ -568,6 +568,47 @@ function ChatSidebar({ mode }: { mode: MarketMode }) {
   );
 }
 
+// ─── Mobile Terminal Tabs ────────────────────────────────────────────────────
+function MobileTerminalTabs({ mode, onSelectSymbol, activeSymbol, isLoggedIn }: {
+  mode: MarketMode;
+  onSelectSymbol: (s: string) => void;
+  activeSymbol: string;
+  isLoggedIn: boolean;
+}) {
+  const [activeTab, setActiveTab] = useState<"watchlist" | "chat" | "order">("watchlist");
+  const config = MARKET_MODES[mode];
+
+  return (
+    <div className="lg:hidden flex flex-col border-t" style={{ borderColor: "#1e2a3a", background: "#0d1117", maxHeight: "45vh" }}>
+      {/* Tab bar */}
+      <div className="flex border-b flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
+        {(["watchlist", "chat", "order"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className="flex-1 py-2 text-xs font-bold capitalize transition-all"
+            style={{
+              color: activeTab === tab ? config.color : "#667085",
+              borderBottom: activeTab === tab ? `2px solid ${config.color}` : "2px solid transparent",
+              background: "transparent",
+            }}
+          >
+            {tab === "watchlist" ? "📋 Watchlist" : tab === "chat" ? "💬 Chat" : "📊 Order"}
+          </button>
+        ))}
+      </div>
+      {/* Tab content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === "watchlist" && (
+          <WatchlistPanel mode={mode} onSelectSymbol={onSelectSymbol} activeSymbol={activeSymbol} />
+        )}
+        {activeTab === "chat" && <ChatSidebar mode={mode} />}
+        {activeTab === "order" && <OrderPanel mode={mode} isLoggedIn={isLoggedIn} />}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Terminal Page ───────────────────────────────────────────────────────
 export default function TerminalPage() {
   const [, setLocation] = useLocation();
@@ -707,8 +748,8 @@ export default function TerminalPage() {
         {/* ── Terminal Body ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* Watchlist — left strip */}
-          <div className="w-44 flex-shrink-0 border-r overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+          {/* Watchlist — left strip (hidden on mobile) */}
+          <div className="hidden lg:block w-44 flex-shrink-0 border-r overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
             <WatchlistPanel mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} />
           </div>
 
@@ -717,8 +758,8 @@ export default function TerminalPage() {
             <TradingViewChart symbol={symbol} mode={mode} />
           </div>
 
-          {/* Right panel: Order + Stats */}
-          <div className="w-44 flex-shrink-0 border-l flex flex-col overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+          {/* Right panel: Order + Stats (hidden on mobile) */}
+          <div className="hidden lg:flex w-44 flex-shrink-0 border-l flex-col overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
             {/* Mini stats */}
             <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
@@ -747,11 +788,14 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Community Chat — far right */}
-          <div className="w-64 flex-shrink-0 border-l overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+          {/* Community Chat — far right (hidden on mobile) */}
+          <div className="hidden lg:block w-64 flex-shrink-0 border-l overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
             <ChatSidebar mode={mode} />
           </div>
         </div>
+
+        {/* ── Mobile Panel Tabs (lg: hidden) ── */}
+        <MobileTerminalTabs mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} isLoggedIn={isLoggedIn} />
 
         {/* ── Bottom Status Bar ── */}
         <div className="flex items-center justify-between px-4 py-1 border-t flex-shrink-0"

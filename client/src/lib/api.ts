@@ -116,6 +116,10 @@ export async function fetchCreators(): Promise<Creator[]> {
   return apiFetch("/content/creators");
 }
 
+export async function fetchCreatorDetail(slug: string): Promise<Creator> {
+  return apiFetch(`/content/creators/${slug}`);
+}
+
 // ── Intelligence ────────────────────────────────────────────────────────────
 
 export interface TickerData {

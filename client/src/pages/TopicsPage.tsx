@@ -24,8 +24,14 @@ function useCreators() {
     specialty: c.tags.map(t => t.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())).join(", "),
     videoCount: c.content_count,
     avatar: c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
+    avatarUrl: c.avatar_url || "",
     color: CREATOR_COLORS[i % CREATOR_COLORS.length],
     verified: true,
+    bio: c.description || "",
+    tags: c.tags || [],
+    youtubeUrl: "",
+    topTickers: [] as string[],
+    kaiTake: "",
   }));
 }
 
