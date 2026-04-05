@@ -566,27 +566,6 @@ function OrderPanel({ mode, isLoggedIn }: { mode: MarketMode; isLoggedIn: boolea
   const [qty, setQty] = useState("100");
   const [price, setPrice] = useState("");
 
-  if (!isLoggedIn) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 px-4 text-center"
-           style={{ background: "#0d1117" }}>
-        <div className="w-12 h-12 rounded-full flex items-center justify-center"
-             style={{ background: "#1a2035" }}>
-          <Lock size={20} style={{ color: "#667085" }} />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-white mb-1">Sign in to Trade</p>
-          <p className="text-xs" style={{ color: "#667085" }}>Connect your broker to place orders directly from the terminal</p>
-        </div>
-        <button className="flex items-center gap-2 text-sm font-bold px-5 py-2.5 rounded-xl w-full justify-center"
-                style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}>
-          <LogIn size={14} />
-          Sign In
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full p-3 gap-3" style={{ background: "#0d1117" }}>
       <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#667085" }}>Place Order</p>
@@ -956,8 +935,8 @@ export default function TerminalPage() {
         {/* ── Terminal Body ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* Watchlist — left strip (hidden on mobile) */}
-          <div className="hidden lg:block w-44 flex-shrink-0 border-r overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+          {/* Watchlist — left panel (hidden on mobile) */}
+          <div className="hidden lg:block w-56 flex-shrink-0 border-r overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
             <WatchlistPanel mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} />
           </div>
 
@@ -968,10 +947,8 @@ export default function TerminalPage() {
 
           {/* Right panel: CheatCode ALGO signals + stats */}
           <div className="hidden lg:flex w-52 flex-shrink-0 border-l flex-col overflow-y-auto" style={{ borderColor: "#1e2a3a" }}>
-            {/* CheatCode ALGO panel */}
             <AlgoSignalPanel symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol} />
 
-            {/* Mini stats */}
             <div className="px-3 py-2 border-t flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
                 Market Stats
@@ -993,7 +970,6 @@ export default function TerminalPage() {
               </div>
             </div>
 
-            {/* Order panel */}
             <div className="flex-1 min-h-0 overflow-hidden">
               <OrderPanel mode={mode} isLoggedIn={isLoggedIn} />
             </div>
@@ -1020,9 +996,6 @@ export default function TerminalPage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[10px]" style={{ color: "#3d4f6a" }}>
-              Paper Trading Mode
-            </span>
             <div className="flex items-center gap-1">
               <Circle size={5} fill="#4DC820" color="#4DC820" />
               <span className="text-[10px]" style={{ color: "#4DC820" }}>Connected</span>
