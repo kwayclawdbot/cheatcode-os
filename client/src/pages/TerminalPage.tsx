@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
+import { CheatCodeChart } from "@/components/CheatCodeChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MarketMode = "stocks" | "futures" | "forex" | "crypto";
@@ -37,7 +38,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Stocks",
     icon: <TrendingUp size={14} />,
     color: "#4DC820",
-    defaultSymbol: "NASDAQ:NVDA",
+    defaultSymbol: "NVDA",
     watchlist: [
       { symbol: "NVDA", name: "NVIDIA Corp", price: "875.40", change: "+21.30", pct: "+2.49%", up: true },
       { symbol: "TSLA", name: "Tesla Inc", price: "182.63", change: "-4.21", pct: "-2.25%", up: false },
@@ -63,7 +64,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Futures",
     icon: <BarChart2 size={14} />,
     color: "#F79009",
-    defaultSymbol: "CME_MINI:ES1!",
+    defaultSymbol: "ES",
     watchlist: [
       { symbol: "ES1!", name: "S&P 500 E-mini", price: "5,248.50", change: "+12.25", pct: "+0.23%", up: true },
       { symbol: "NQ1!", name: "Nasdaq E-mini", price: "18,342.00", change: "-45.50", pct: "-0.25%", up: false },
@@ -89,7 +90,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Forex",
     icon: <Globe size={14} />,
     color: "#00AEEF",
-    defaultSymbol: "FX:EURUSD",
+    defaultSymbol: "EURUSD",
     watchlist: [
       { symbol: "EUR/USD", name: "Euro / US Dollar", price: "1.0842", change: "+0.0018", pct: "+0.17%", up: true },
       { symbol: "GBP/USD", name: "Pound / US Dollar", price: "1.2634", change: "-0.0024", pct: "-0.19%", up: false },
@@ -115,7 +116,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Crypto",
     icon: <Bitcoin size={14} />,
     color: "#7B2FBE",
-    defaultSymbol: "BINANCE:BTCUSDT",
+    defaultSymbol: "BTC",
     watchlist: [
       { symbol: "BTC/USDT", name: "Bitcoin", price: "68,420.00", change: "+1,240.00", pct: "+1.85%", up: true },
       { symbol: "ETH/USDT", name: "Ethereum", price: "3,482.50", change: "-48.20", pct: "-1.37%", up: false },
@@ -678,8 +679,12 @@ export default function TerminalPage() {
   };
 
   const handleSelectSymbol = (sym: string) => {
-    // Map watchlist symbol to TradingView format
-    const tvMap: Record<string, string> = {
+    // Direct symbol — CheatCode chart handles raw symbols
+    setSymbol(sym);
+  };
+
+  // Legacy TV map kept for reference but not used
+  const _tvMapUnused: Record<string, string> = {
       "NVDA": "NASDAQ:NVDA", "TSLA": "NASDAQ:TSLA", "AMD": "NASDAQ:AMD",
       "AAPL": "NASDAQ:AAPL", "META": "NASDAQ:META", "MSFT": "NASDAQ:MSFT",
       "NFLX": "NASDAQ:NFLX", "SMCI": "NASDAQ:SMCI",
@@ -795,9 +800,16 @@ export default function TerminalPage() {
             <WatchlistPanel mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} />
           </div>
 
-          {/* Chart — main area */}
+          {/* Chart — CheatCode ALGO */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <TradingViewChart symbol={symbol} mode={mode} />
+            <CheatCodeChart
+              symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol}
+              height={typeof window !== "undefined" ? window.innerHeight - 120 : 600}
+              showEmaClouds={true}
+              showReversalBands={false}
+              showTradeLines={true}
+              colorScheme="heatmap"
+            />
           </div>
 
           {/* Right panel: Order + Stats (hidden on mobile) */}
