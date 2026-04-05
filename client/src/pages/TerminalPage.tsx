@@ -754,10 +754,11 @@ export default function TerminalPage() {
         {/* ── Terminal Body ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* Community Chat — left panel (hidden on mobile) */}
-          <div className="hidden lg:block w-64 flex-shrink-0 border-r overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
-            <ChatSidebar mode={mode} />
+          {/* Watchlist — left panel (hidden on mobile) */}
+          <div className="hidden lg:block w-56 flex-shrink-0 border-r overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+            <WatchlistPanel mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} />
           </div>
+
           {/* Chart — CheatCode ALGO */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <CheatCodeChart
@@ -770,39 +771,9 @@ export default function TerminalPage() {
             />
           </div>
 
-          {/* Right panel: Order + Stats (hidden on mobile) */}
-          <div className="hidden lg:flex w-44 flex-shrink-0 border-l flex-col overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
-            {/* Mini stats */}
-            <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
-                Market Stats
-              </p>
-              <div className="space-y-1.5">
-                {[
-                  { label: "Open", value: mode === "stocks" ? "5,218.40" : mode === "crypto" ? "67,180" : "1.0824" },
-                  { label: "High", value: mode === "stocks" ? "5,261.20" : mode === "crypto" ? "68,920" : "1.0868" },
-                  { label: "Low", value: mode === "stocks" ? "5,198.80" : mode === "crypto" ? "67,040" : "1.0812" },
-                  { label: "Volume", value: mode === "stocks" ? "2.4B" : mode === "crypto" ? "28.4B" : "142K" },
-                ].map(stat => (
-                  <div key={stat.label} className="flex justify-between">
-                    <span className="text-[10px]" style={{ color: "#667085" }}>{stat.label}</span>
-                    <span className="text-[10px] font-semibold" style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)" }}>
-                      {stat.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Order panel */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <OrderPanel mode={mode} isLoggedIn={isLoggedIn} />
-            </div>
-          </div>
-
-          {/* Watchlist — far right strip (hidden on mobile) */}
-          <div className="hidden lg:block w-44 flex-shrink-0 border-l overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
-            <WatchlistPanel mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} />
+          {/* Community Chat — right panel (hidden on mobile) */}
+          <div className="hidden lg:block w-72 flex-shrink-0 border-l overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+            <ChatSidebar mode={mode} />
           </div>
         </div>
 
@@ -821,9 +792,6 @@ export default function TerminalPage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[10px]" style={{ color: "#3d4f6a" }}>
-              Paper Trading Mode
-            </span>
             <div className="flex items-center gap-1">
               <Circle size={5} fill="#4DC820" color="#4DC820" />
               <span className="text-[10px]" style={{ color: "#4DC820" }}>Connected</span>
