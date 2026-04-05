@@ -679,27 +679,7 @@ export default function TerminalPage() {
   };
 
   const handleSelectSymbol = (sym: string) => {
-    // Direct symbol — CheatCode chart handles raw symbols
     setSymbol(sym);
-  };
-
-  // Legacy TV map kept for reference but not used
-  const _tvMapUnused: Record<string, string> = {
-      "NVDA": "NASDAQ:NVDA", "TSLA": "NASDAQ:TSLA", "AMD": "NASDAQ:AMD",
-      "AAPL": "NASDAQ:AAPL", "META": "NASDAQ:META", "MSFT": "NASDAQ:MSFT",
-      "NFLX": "NASDAQ:NFLX", "SMCI": "NASDAQ:SMCI",
-      "ES1!": "CME_MINI:ES1!", "NQ1!": "CME_MINI:NQ1!", "YM1!": "CBOT_MINI:YM1!",
-      "RTY1!": "CME_MINI:RTY1!", "CL1!": "NYMEX:CL1!", "GC1!": "COMEX:GC1!",
-      "ZB1!": "CBOT:ZB1!", "VX1!": "CBOE:VX1!",
-      "EUR/USD": "FX:EURUSD", "GBP/USD": "FX:GBPUSD", "USD/JPY": "FX:USDJPY",
-      "AUD/USD": "FX:AUDUSD", "USD/CAD": "FX:USDCAD", "USD/CHF": "FX:USDCHF",
-      "NZD/USD": "FX:NZDUSD", "EUR/GBP": "FX:EURGBP",
-      "BTC/USDT": "BINANCE:BTCUSDT", "ETH/USDT": "BINANCE:ETHUSDT",
-      "SOL/USDT": "BINANCE:SOLUSDT", "BNB/USDT": "BINANCE:BNBUSDT",
-      "XRP/USDT": "BINANCE:XRPUSDT", "AVAX/USDT": "BINANCE:AVAXUSDT",
-      "DOGE/USDT": "BINANCE:DOGEUSDT", "LINK/USDT": "BINANCE:LINKUSDT",
-    };
-    setSymbol(tvMap[sym] || sym);
   };
 
   const modeIcons: Record<MarketMode, React.ReactNode> = {
