@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 
 # Install Python deps
 COPY pyproject.toml .
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" supabase anthropic httpx pydantic pydantic-settings python-dotenv yt-dlp openai numpy redis apscheduler stripe feedparser beautifulsoup4 yfinance
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" supabase anthropic httpx pydantic pydantic-settings python-dotenv yt-dlp openai numpy pandas redis apscheduler stripe feedparser beautifulsoup4 yfinance
 
 COPY app/ app/
 

@@ -452,3 +452,15 @@ export async function fetchQuotes(symbols?: string): Promise<MarketQuote[]> {
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
   return apiFetch(`/market/quote/${symbol}`);
 }
+
+// ── CheatCode Chart ─────────────────────────────────────────────────────────
+
+export async function fetchChartData(
+  symbol: string,
+  sensitivity = "medium",
+  period = "d",
+  limit = 200,
+  colors = "heatmap",
+): Promise<any> {
+  return apiFetch(`/chart/${symbol}?sensitivity=${sensitivity}&period=${period}&limit=${limit}&colors=${colors}`);
+}
