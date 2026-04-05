@@ -1,12 +1,6 @@
-// CheatCode OS — VideoCard v3: YouTube x Netflix
-// Design: Thumbnail fills the card. Text lives BELOW (YouTube) or overlays on hover (Netflix).
-// - No border boxes around text
-// - Creator avatar + name below thumbnail (YouTube style)
-// - Title is 2 lines max, no description visible by default
-// - Score ring overlays bottom-right of thumbnail
-// - Relevance badge overlays top-left
-// - Duration overlays bottom-left
-// - On hover: card lifts, thumbnail scales slightly, a "quick take" preview fades in
+// CheatCode OS — VideoCard v4: Real avatars + creator links + YouTube playback
+// Design: Thumbnail fills the card. Real creator avatar image below (YouTube style).
+// Creator name links to /creators/:id. Card click goes to /video/:id with YouTube embed.
 
 import { Link } from "wouter";
 import { Play, Headphones } from "lucide-react";
@@ -15,7 +9,8 @@ interface VideoCardProps {
   id: string;
   type: "video" | "podcast";
   title: string;
-  creator: { name: string; avatar: string; color: string };
+  creator: { name: string; avatar: string; avatarUrl?: string; color: string };
+  creatorId?: string;
   thumbnail: string;
   duration: string;
   quickTake: string;
@@ -55,31 +50,67 @@ function ScoreCircle({ score }: { score: number }) {
   );
 }
 
+function CreatorAvatar({ creator, size = 28 }: { creator: VideoCardProps["creator"]; size?: number }) {
+  if (creator.avatarUrl) {
+    return (
+      <img
+        src={creator.avatarUrl}
+        alt={creator.name}
+        className="rounded-full object-cover flex-shrink-0"
+        style={{ width: size, height: size }}
+        onError={(e) => {
+          // Fallback to initials on image error
+          const target = e.currentTarget as HTMLImageElement;
+          target.style.display = "none";
+          const parent = target.parentElement;
+          if (parent) {
+            parent.style.backgroundColor = creator.color;
+            parent.textContent = creator.avatar;
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <div
+      className="rounded-full flex items-center justify-center text-white font-bold flex-shrink-0"
+      style={{ width: size, height: size, backgroundColor: creator.color, fontSize: size * 0.35 }}
+    >
+      {creator.avatar}
+    </div>
+  );
+}
+
 export function VideoCard({
-  id, type, title, creator, thumbnail, duration,
-  quickTake, relevanceBadge, tickers, convergenceScore, publishedAt, compact = false, wide = false
+  id, type, title, creator, creatorId, thumbnail, duration,
+  quickTake, relevanceBadge, tickers, convergenceScore, publishedAt,
+  compact = false, wide = false
 }: VideoCardProps) {
-  const href = type === "video" ? `/video/${id}` : `/podcast/${id}`;
+  const videoHref = type === "video" ? `/video/${id}` : `/podcast/${id}`;
+  const creatorHref = creatorId ? `/creators/${creatorId}` : null;
   const badge = badgeStyles[relevanceBadge] || badgeStyles["Watch"];
   const cardWidth = wide ? "w-80" : compact ? "w-44" : "w-64";
 
   return (
-    <Link href={href}>
-      <div className={`group cursor-pointer ${cardWidth} flex-shrink-0`}
-           style={{ transition: "transform 0.2s ease" }}
-           onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)"}
-           onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"}>
+    <div className={`group cursor-pointer ${cardWidth} flex-shrink-0`}
+         style={{ transition: "transform 0.2s ease" }}
+         onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)"}
+         onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"}>
 
-        {/* Thumbnail — the hero */}
+      {/* Thumbnail — links to video page */}
+      <Link href={videoHref}>
         <div className="relative overflow-hidden rounded-xl bg-[#1a2035]"
              style={{ aspectRatio: wide ? "16/9" : "16/10" }}>
           <img
             src={thumbnail}
             alt={title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640&q=80";
+            }}
           />
 
-          {/* Dark gradient overlay — always present at bottom */}
+          {/* Dark gradient overlay */}
           <div className="absolute inset-0"
                style={{ background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.1) 50%, transparent 100%)" }} />
 
@@ -122,27 +153,43 @@ export function VideoCard({
             </div>
           )}
         </div>
+      </Link>
 
-        {/* Below-thumbnail info — YouTube style */}
-        <div className="flex gap-2 mt-2.5 px-0.5">
-          {/* Creator avatar */}
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5"
-               style={{ backgroundColor: creator.color }}>
-            {creator.avatar}
+      {/* Below-thumbnail info — YouTube style */}
+      <div className="flex gap-2 mt-2.5 px-0.5">
+        {/* Creator avatar — links to creator page */}
+        {creatorHref ? (
+          <Link href={creatorHref} onClick={e => e.stopPropagation()}>
+            <div className="mt-0.5 flex-shrink-0">
+              <CreatorAvatar creator={creator} size={28} />
+            </div>
+          </Link>
+        ) : (
+          <div className="mt-0.5 flex-shrink-0">
+            <CreatorAvatar creator={creator} size={28} />
           </div>
-          <div className="flex-1 min-w-0">
-            {/* Title */}
-            <h3 className={`font-semibold text-foreground leading-snug line-clamp-2 ${compact ? "text-[11px]" : "text-[13px]"}`}
+        )}
+
+        <div className="flex-1 min-w-0">
+          {/* Title — links to video */}
+          <Link href={videoHref}>
+            <h3 className={`font-semibold text-foreground leading-snug line-clamp-2 hover:underline ${compact ? "text-[11px]" : "text-[13px]"}`}
                 style={{ fontFamily: "var(--font-display)" }}>
               {title}
             </h3>
-            {/* Creator + time */}
-            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              {creator.name} · {publishedAt}
-            </p>
-          </div>
+          </Link>
+          {/* Creator name — links to creator page */}
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            {creatorHref ? (
+              <Link href={creatorHref} onClick={e => e.stopPropagation()}
+                    className="hover:underline hover:text-foreground transition-colors">
+                {creator.name}
+              </Link>
+            ) : creator.name}
+            {" · "}{publishedAt}
+          </p>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
