@@ -68,6 +68,37 @@ function EvidenceCard({ item, isPaid }: { item: { source: string; signal: string
   );
 }
 
+function normalizeTicker(d: any) {
+  if (!d) return null;
+  const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "";
+  const pct = d.price_change_pct ?? 0;
+  return {
+    ...d,
+    ticker: d.symbol || d.ticker,
+    score: d.convergence_score ?? d.score ?? 0,
+    direction: cap(d.direction || "neutral"),
+    timeframe: cap(d.timeframe || "swing"),
+    confidence: cap(d.confidence || "medium"),
+    price: d.last_price ? `$${d.last_price.toFixed(2)}` : "N/A",
+    change: pct >= 0 ? `+${pct.toFixed(2)}` : pct.toFixed(2),
+    changePercent: pct >= 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`,
+    theme: (d.themes || [])[0] || "",
+    evidenceChain: (d.evidence_chain || []).map((e: any) => ({
+      source: e.source || "Unknown",
+      signal: e.signal || "",
+      detail: e.signal || e.detail || "",
+      date: e.timestamp ? new Date(e.timestamp).toLocaleDateString() : "Recent",
+    })),
+    invalidationLevel: d.key_levels?.invalidation || "N/A",
+    catalysts: d.catalysts || [],
+    risks: d.risks || [],
+    videosMentioning: d.related_content || [],
+    relatedTickers: d.related_tickers || [],
+    daily_analysis: d.daily_analysis,
+    key_levels: d.key_levels,
+  };
+}
+
 function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boolean }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +110,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
     setLoading(true);
     setData(null);
     fetchTicker(ticker.toUpperCase())
-      .then((d) => { setData(d); setLoading(false); })
+      .then((d) => { setData(normalizeTicker(d)); setLoading(false); })
       .catch(() => { setData(null); setLoading(false); });
   }, [ticker]);
 
@@ -172,6 +203,44 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
           <p className="text-xs mt-1" style={{ color: "#E8193C" }}>Monitor this level closely.</p>
         </div>
       </div>
+
+      {/* Kai's Daily Analysis */}
+      {data.daily_analysis && (
+        <div className="bg-card rounded-xl border border-border overflow-hidden p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#00AEEF" }}>
+              <span className="text-white text-[10px] font-bold">K</span>
+            </div>
+            <span className="font-bold text-sm text-foreground" style={{ fontFamily: "var(--font-display)" }}>Kai's Analysis</span>
+            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Updated daily</span>
+          </div>
+          <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+            {data.daily_analysis}
+          </div>
+          {data.key_levels && (
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-muted p-3">
+                <p className="text-[10px] font-semibold text-muted-foreground mb-1">Support</p>
+                <p className="text-sm font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                  {(data.key_levels.support || []).map((l: number) => `$${l}`).join(" / ") || "N/A"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-muted p-3">
+                <p className="text-[10px] font-semibold text-muted-foreground mb-1">Resistance</p>
+                <p className="text-sm font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                  {(data.key_levels.resistance || []).map((l: number) => `$${l}`).join(" / ") || "N/A"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-muted p-3">
+                <p className="text-[10px] font-semibold text-muted-foreground mb-1">Invalidation</p>
+                <p className="text-sm font-bold text-foreground" style={{ fontFamily: "var(--font-mono)", color: "#E8193C" }}>
+                  ${data.key_levels.invalidation || "N/A"}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Evidence Chain */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
