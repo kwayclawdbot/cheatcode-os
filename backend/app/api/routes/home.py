@@ -1,5 +1,6 @@
 """Home page API — today's picks, sentiment, topics."""
 
+import time as _time
 from fastapi import APIRouter, Depends
 from app.core.supabase import get_supabase, maybe_one
 from app.core.auth import get_current_user
@@ -7,6 +8,9 @@ from app.models.content import HomePageData, ContentCard
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/home", tags=["home"])
+
+# In-memory cache — 60 second TTL
+_cache: dict = {"data": None, "expires": 0}
 
 TOPIC_GRID = [
     {"slug": "technical_analysis", "label": "Technical Analysis", "icon": "chart-line"},
@@ -24,6 +28,10 @@ TOPIC_GRID = [
 
 @router.get("", response_model=HomePageData)
 async def get_home(user: dict | None = Depends(get_current_user)):
+    # Return cached data for anonymous users (most traffic)
+    if not user and _cache["data"] and _time.time() < _cache["expires"]:
+        return _cache["data"]
+
     db = get_supabase()
 
     # Today's radar for sentiment
@@ -100,7 +108,7 @@ async def get_home(user: dict | None = Depends(get_current_user)):
         "status", ["active", "escalating"]
     ).order("escalation_score", desc=True).limit(8).execute()
 
-    return HomePageData(
+    result = HomePageData(
         market_sentiment=sentiment,
         sentiment_summary=sentiment_summary,
         todays_picks=pick_cards,
@@ -108,3 +116,10 @@ async def get_home(user: dict | None = Depends(get_current_user)):
         topics=TOPIC_GRID,
         themes=[{"name": t["name"], "slug": t["slug"], "status": t["status"], "score": t["escalation_score"]} for t in (themes.data or [])],
     )
+
+    # Cache for 60 seconds
+    if not user:
+        _cache["data"] = result
+        _cache["expires"] = _time.time() + 60
+
+    return result

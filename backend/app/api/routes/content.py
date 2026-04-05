@@ -98,20 +98,36 @@ async def search_content(q: str = Query(..., min_length=2)):
 
 # ── Creators (must be before /{content_id} to avoid route conflict) ──────────
 
+_creators_cache: dict = {"data": None, "expires": 0}
+
 @router.get("/creators", response_model=list[CreatorProfile])
 async def list_creators():
+    import time as _time
+    if _creators_cache["data"] and _time.time() < _creators_cache["expires"]:
+        return _creators_cache["data"]
+
     db = get_supabase()
     creators = db.table("creators").select("*").eq("is_active", True).order("quality_score", desc=True).execute()
 
+    # Single query to get all content counts grouped by creator
+    all_content = db.table("content").select("creator_id").eq("is_published", True).execute()
+    count_map: dict[str, int] = {}
+    for c in (all_content.data or []):
+        cid = c.get("creator_id")
+        if cid:
+            count_map[cid] = count_map.get(cid, 0) + 1
+
     result = []
     for c in (creators.data or []):
-        count = db.table("content").select("id", count="exact").eq("creator_id", c["id"]).eq("is_published", True).execute()
         result.append(CreatorProfile(
             id=c["id"], name=c["name"], slug=c["slug"], platform=c["platform"],
             avatar_url=c.get("avatar_url"), description=c.get("description"),
             quality_score=c["quality_score"], tags=c.get("tags", []),
-            content_count=count.count or 0,
+            content_count=count_map.get(c["id"], 0),
         ))
+
+    _creators_cache["data"] = result
+    _creators_cache["expires"] = _time.time() + 120  # 2 min cache
     return result
 
 
