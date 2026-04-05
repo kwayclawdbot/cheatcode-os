@@ -4,6 +4,7 @@
 
 import { Link } from "wouter";
 import { Play, Headphones } from "lucide-react";
+import { useState } from "react";
 
 interface VideoCardProps {
   id: string;
@@ -51,23 +52,16 @@ function ScoreCircle({ score }: { score: number }) {
 }
 
 function CreatorAvatar({ creator, size = 28 }: { creator: VideoCardProps["creator"]; size?: number }) {
-  if (creator.avatarUrl) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (creator.avatarUrl && !imgFailed) {
     return (
       <img
         src={creator.avatarUrl}
         alt={creator.name}
         className="rounded-full object-cover flex-shrink-0"
         style={{ width: size, height: size }}
-        onError={(e) => {
-          // Fallback to initials on image error
-          const target = e.currentTarget as HTMLImageElement;
-          target.style.display = "none";
-          const parent = target.parentElement;
-          if (parent) {
-            parent.style.backgroundColor = creator.color;
-            parent.textContent = creator.avatar;
-          }
-        }}
+        onError={() => setImgFailed(true)}
       />
     );
   }

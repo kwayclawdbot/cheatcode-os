@@ -50,7 +50,7 @@ function useHomeData() {
       youtubeId: n.youtubeId || "",
       title: n.title,
       creatorId: n.creator_slug || "",
-      creator: { name: n.creator_name || "Unknown", avatar: (n.creator_name || "??").slice(0, 2).toUpperCase(), avatarUrl: "", color: "#667085" },
+      creator: { name: n.creator_name || "Unknown", avatar: (n.creator_name || "??").slice(0, 2).toUpperCase(), avatarUrl: mockCreators.find(c => c.id === n.creator_slug)?.avatarUrl || "", color: mockCreators.find(c => c.id === n.creator_slug)?.color || "#667085" },
       thumbnail: n.thumbnailUrl || "",
       duration: n.durationLabel || "",
       quickTake: n.quick_take || "",
@@ -92,7 +92,8 @@ function useHomeData() {
     specialty: c.tags.map(t => t.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())).join(", "),
     videoCount: c.content_count,
     avatar: c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
-    color: CREATOR_COLORS[i % CREATOR_COLORS.length],
+    avatarUrl: mockCreators.find(mc => mc.id === c.slug)?.avatarUrl || "",
+    color: mockCreators.find(mc => mc.id === c.slug)?.color || CREATOR_COLORS[i % CREATOR_COLORS.length],
     verified: true,
   })) : mockCreators;
 
@@ -416,8 +417,8 @@ export default function Home() {
                     <div className="flex-shrink-0 w-36 cursor-pointer group/creator text-center">
                       <div className="w-16 h-16 rounded-full overflow-hidden mx-auto mb-2 transition-transform duration-200 group-hover/creator:scale-110"
                            style={{ backgroundColor: c.color }}>
-                        {(c as any).avatarUrl ? (
-                          <img src={(c as any).avatarUrl} alt={c.name} className="w-full h-full object-cover" />
+                        {c.avatarUrl ? (
+                          <img src={c.avatarUrl} alt={c.name} className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-white text-xl font-bold">
                             {c.avatar}
