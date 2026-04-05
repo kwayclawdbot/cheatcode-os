@@ -16,6 +16,7 @@ import TopicsPage from "./pages/TopicsPage";
 import LearnPage from "./pages/LearnPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import PricingPage from "./pages/PricingPage";
+import CreatorPage from "./pages/CreatorPage";
 
 function Router() {
   return (
@@ -35,7 +36,7 @@ function Router() {
       {/* Placeholder routes — show toast on nav */}
       <Route path="/topics/:id" component={TopicsPage} />
       <Route path="/creators" component={TopicsPage} />
-      <Route path="/creators/:id" component={TopicsPage} />
+      <Route path="/creators/:id" component={CreatorPage} />
       <Route path="/themes/:id" component={TopicsPage} />
       <Route path="/podcasts" component={Home} />
 
