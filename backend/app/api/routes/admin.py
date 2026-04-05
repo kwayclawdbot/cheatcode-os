@@ -10,6 +10,7 @@ from app.services.newsletter import generate_daily_newsletter
 from app.services.ingestion import ingest_all_pending, ingest_content
 from app.services.repurposing import repurpose_content, repurpose_all_pending, extract_clips, render_clip, post_clip
 from app.services.live_clipper import clip_content, find_clip_segments, render_live_clip
+from app.services.ticker_analysis import run_daily_analysis, analyze_ticker
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -112,6 +113,22 @@ async def trigger_live_render(clip_id: str, user: dict = Depends(_require_admin)
     """Render a specific live clip."""
     path = await render_live_clip(clip_id)
     return {"render_path": path} if path else {"error": "Render failed"}
+
+
+# ── Ticker Analysis ──────────────────────────────────────────────────────────
+
+@router.post("/analysis/run")
+async def trigger_daily_analysis(user: dict = Depends(_require_admin)):
+    """Run daily analysis for all tracked tickers."""
+    results = await run_daily_analysis()
+    return {"analyzed": len(results), "results": results}
+
+
+@router.post("/analysis/{symbol}")
+async def trigger_single_analysis(symbol: str, user: dict = Depends(_require_admin)):
+    """Generate analysis for a single ticker."""
+    result = await analyze_ticker(symbol.upper())
+    return result or {"error": "Analysis failed"}
 
 
 @router.post("/newsletter/generate")

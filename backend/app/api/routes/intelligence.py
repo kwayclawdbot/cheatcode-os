@@ -65,6 +65,11 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
             themes=data.get("themes", []),
             related_content=related_content,
             related_tickers=None,
+            daily_analysis=data.get("daily_analysis"),
+            analysis_date=data.get("analysis_date"),
+            key_levels=data.get("key_levels"),
+            catalysts=data.get("catalysts"),
+            risks=data.get("risks"),
         )
     else:
         # Free: score + direction only

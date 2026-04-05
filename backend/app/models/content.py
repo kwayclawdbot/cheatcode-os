@@ -83,6 +83,11 @@ class TickerDetail(TickerLookup):
     themes: list[str]
     related_content: list[ContentCard] | None = None
     related_tickers: list[str] | None = None
+    daily_analysis: str | None = None
+    analysis_date: str | None = None
+    key_levels: dict | None = None
+    catalysts: list[str] | None = None
+    risks: list[str] | None = None
 
 
 class PredictionCard(BaseModel):

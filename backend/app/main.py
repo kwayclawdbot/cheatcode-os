@@ -9,6 +9,7 @@ from app.api.routes import home, content, intelligence, kai, payments, admin, ev
 from app.services.curation import run_curation_cycle
 from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.market_data import sync_ticker_prices
+from app.services.ticker_analysis import run_daily_analysis
 
 scheduler = AsyncIOScheduler()
 
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(generate_radar, "cron", hour=6, minute=0, id="radar_morning")  # 6am UTC
     scheduler.add_job(generate_radar, "cron", hour=14, minute=0, id="radar_midday")  # 2pm UTC
     scheduler.add_job(sync_ticker_prices, "interval", minutes=5, id="price_sync")  # Live prices every 5 min
+    scheduler.add_job(run_daily_analysis, "cron", hour=7, minute=30, id="daily_analysis")  # 7:30am UTC daily
     scheduler.start()
     yield
     scheduler.shutdown()
