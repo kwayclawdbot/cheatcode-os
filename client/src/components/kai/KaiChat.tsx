@@ -81,7 +81,7 @@ export function KaiChat() {
     <>
       {/* Chat Panel */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-50 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-[#EAECF0] flex flex-col overflow-hidden"
+        <div className="fixed bottom-20 right-4 z-50 w-80 sm:w-96 bg-card rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden"
              style={{ maxHeight: "520px" }}>
           {/* Header — dark gradient with spectrum top bar */}
           <div>
@@ -113,7 +113,7 @@ export function KaiChat() {
                   </div>
                 )}
                 <div className={`max-w-[85%] px-3 py-2 text-sm leading-relaxed ${
-                  msg.role === "kai" ? "kai-message text-[#101828]" : "user-message text-[#101828]"
+                  msg.role === "kai" ? "kai-message text-foreground" : "user-message text-foreground"
                 }`}>
                   {msg.content}
                 </div>
@@ -140,8 +140,8 @@ export function KaiChat() {
 
           {/* Message limit banner */}
           {remaining <= 2 && remaining > 0 && (
-            <div className="px-4 py-2 border-t text-xs font-medium"
-                 style={{ background: "#FAFDE8", borderColor: "#E8F08A", color: "#7A6800" }}>
+            <div className="px-4 py-2 border-t border-border text-xs font-medium text-muted-foreground"
+                 style={{ background: "rgba(200,212,0,0.08)" }}>
               {remaining} free message{remaining !== 1 ? "s" : ""} left.{" "}
               <a href="/pricing" className="underline font-semibold">Upgrade to Pro</a> for unlimited.
             </div>
@@ -149,8 +149,8 @@ export function KaiChat() {
 
           {/* Input */}
           {messageCount >= FREE_LIMIT ? (
-            <div className="p-4 border-t border-[#EAECF0] bg-[#F9FAFB]">
-              <div className="flex items-center gap-2 text-sm text-[#667085] mb-2">
+            <div className="p-4 border-t border-border bg-muted">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                 <Lock size={14} />
                 <span>You've used your 5 free messages today.</span>
               </div>
@@ -162,7 +162,7 @@ export function KaiChat() {
               </a>
             </div>
           ) : (
-            <div className="p-3 border-t border-[#EAECF0]">
+            <div className="p-3 border-t border-border">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -170,7 +170,7 @@ export function KaiChat() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && sendMessage()}
                   placeholder="Ask about any ticker or theme..."
-                  className="flex-1 text-sm bg-[#F9FAFB] border border-[#EAECF0] rounded-lg px-3 py-2 outline-none transition-colors"
+                  className="flex-1 text-sm bg-muted border border-border rounded-lg px-3 py-2 outline-none transition-colors text-foreground"
                   style={{ fontFamily: "var(--font-body)" }}
                   onFocus={e => { e.currentTarget.style.borderColor = "#00AEEF"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(0,174,239,0.15)"; }}
                   onBlur={e => { e.currentTarget.style.borderColor = "#EAECF0"; e.currentTarget.style.boxShadow = "none"; }}
@@ -184,7 +184,7 @@ export function KaiChat() {
                   <Send size={14} />
                 </button>
               </div>
-              <p className="text-[10px] text-[#98A2B3] mt-1.5 text-center">
+              <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
                 {remaining} free message{remaining !== 1 ? "s" : ""} remaining today
               </p>
             </div>

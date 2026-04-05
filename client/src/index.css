@@ -150,6 +150,41 @@
   --sidebar-ring: oklch(0.68 0.22 130);
 }
 
+.dark {
+  /* Dark surface palette — CC Dark BG as base */
+  --background: oklch(0.14 0.015 260);        /* #1a2035 */
+  --foreground: oklch(0.93 0.005 265);        /* #F2F4F7 */
+  --card: oklch(0.18 0.015 260);              /* #212840 */
+  --card-foreground: oklch(0.93 0.005 265);
+  --popover: oklch(0.18 0.015 260);
+  --popover-foreground: oklch(0.93 0.005 265);
+  --secondary: oklch(0.22 0.015 260);         /* #2B3245 */
+  --secondary-foreground: oklch(0.75 0.008 265);
+  --muted: oklch(0.22 0.015 260);
+  --muted-foreground: oklch(0.6 0.01 265);    /* #98A2B3 */
+  --accent: oklch(0.25 0.015 260);
+  --accent-foreground: oklch(0.93 0.005 265);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.68 0.22 130);
+  --sidebar: oklch(0.18 0.015 260);
+  --sidebar-foreground: oklch(0.93 0.005 265);
+  --sidebar-accent: oklch(0.22 0.015 260);
+  --sidebar-accent-foreground: oklch(0.93 0.005 265);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.68 0.22 130);
+}
+
+/* ─── Dark mode utility overrides ─── */
+.dark .score-ring-track { stroke: rgba(255,255,255,0.1); }
+.dark .content-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.dark .sentiment-bullish { background-color: rgba(77,200,32,0.12); color: #7FD95A; border-color: rgba(77,200,32,0.25); }
+.dark .sentiment-bearish { background-color: rgba(232,25,60,0.12); color: #F87096; border-color: rgba(232,25,60,0.25); }
+.dark .sentiment-choppy  { background-color: rgba(200,212,0,0.12); color: #D4E000; border-color: rgba(200,212,0,0.25); }
+.dark .kai-message { background: linear-gradient(135deg, rgba(0,174,239,0.12) 0%, rgba(77,200,32,0.08) 100%); border-color: rgba(0,174,239,0.25); }
+.dark .user-message { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+.dark .section-label { color: #667085; }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

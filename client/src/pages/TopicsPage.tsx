@@ -50,11 +50,11 @@ function TopicsTab() {
                    style={{ height: 88, backgroundColor: topic.color }}>
                 <span className="text-4xl">{topic.icon}</span>
               </div>
-              <p className="text-[11px] font-semibold text-[#101828] text-center leading-tight"
+              <p className="text-[11px] font-semibold text-foreground text-center leading-tight"
                  style={{ fontFamily: "var(--font-display)" }}>
                 {topic.label}
               </p>
-              <p className="text-[10px] text-[#98A2B3] text-center">{topic.count} videos</p>
+              <p className="text-[10px] text-muted-foreground text-center">{topic.count} videos</p>
             </div>
           </Link>
         ))}
@@ -65,7 +65,7 @@ function TopicsTab() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="w-1 h-5 rounded-full" style={{ background: "#4DC820" }} />
-            <h2 className="text-base font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>Technical Analysis</h2>
+            <h2 className="text-base font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Technical Analysis</h2>
           </div>
           <Link href="/topics/technical-analysis">
             <span className="text-xs font-semibold flex items-center gap-1 cc-gradient-text">See all <ChevronRight size={12} /></span>
@@ -81,7 +81,7 @@ function TopicsTab() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="w-1 h-5 rounded-full" style={{ background: "#00AEEF" }} />
-            <h2 className="text-base font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>Options & Flow</h2>
+            <h2 className="text-base font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Options & Flow</h2>
           </div>
           <Link href="/topics/options">
             <span className="text-xs font-semibold flex items-center gap-1 cc-gradient-text">See all <ChevronRight size={12} /></span>
@@ -112,8 +112,8 @@ function CreatorsTab() {
                      style={{ background: "#4DC820", color: "#101828" }}>✓</div>
               )}
             </div>
-            <p className="text-xs font-bold text-[#101828] truncate" style={{ fontFamily: "var(--font-display)" }}>{c.name}</p>
-            <p className="text-[10px] text-[#98A2B3] truncate mt-0.5">{c.videoCount} videos</p>
+            <p className="text-xs font-bold text-foreground truncate" style={{ fontFamily: "var(--font-display)" }}>{c.name}</p>
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">{c.videoCount} videos</p>
           </div>
         </Link>
       ))}
@@ -182,16 +182,16 @@ function SkillTab() {
                 <h3 className="font-bold text-lg text-[#101828]" style={{ fontFamily: "var(--font-display)", color: s.color }}>
                   {s.level}
                 </h3>
-                <p className="text-sm text-[#667085]">{s.description}</p>
+                <p className="text-sm text-muted-foreground">{s.description}</p>
               </div>
-              <span className="text-xs text-[#667085] bg-white px-2 py-1 rounded-full border border-[#EAECF0]">
+              <span className="text-xs text-muted-foreground bg-card px-2 py-1 rounded-full border border-border">
                 {s.videoCount} videos
               </span>
             </div>
             <div className="flex gap-2 flex-wrap">
               {s.paths.map(p => (
                 <Link key={p} href="/learn">
-                  <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-white border cursor-pointer hover:shadow-sm transition-shadow"
+                  <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-card border cursor-pointer hover:shadow-sm transition-shadow"
                         style={{ borderColor: s.border, color: s.color }}>
                     {p}
                   </span>
@@ -199,9 +199,9 @@ function SkillTab() {
               ))}
             </div>
           </div>
-          <div className="border-t px-5 py-3 bg-white/50 flex items-center justify-between"
+          <div className="border-t px-5 py-3 bg-card/50 flex items-center justify-between"
                style={{ borderColor: s.border }}>
-            <span className="text-xs text-[#667085]">Start with the learning path</span>
+            <span className="text-xs text-muted-foreground">Start with the learning path</span>
             <Link href="/learn">
               <span className="text-xs font-semibold flex items-center gap-1" style={{ color: s.color }}>
                 Start here <ChevronRight size={12} />
@@ -218,7 +218,7 @@ export default function TopicsPage() {
   const [activeTab, setActiveTab] = useState("topics");
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
@@ -237,7 +237,7 @@ export default function TopicsPage() {
         </div>
 
         {/* Tabs — sticky below nav */}
-        <div className="bg-white border-b border-[#EAECF0] sticky top-14 z-40">
+        <div className="bg-card border-b border-border sticky top-14 z-40">
           <div className="container mx-auto">
             <div className="flex gap-1">
               {TABS.map(tab => (
@@ -247,7 +247,7 @@ export default function TopicsPage() {
                   className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
                     activeTab === tab.id
                       ? "border-[#4DC820] text-[#4DC820]"
-                      : "border-transparent text-[#667085] hover:text-[#101828]"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {tab.icon}

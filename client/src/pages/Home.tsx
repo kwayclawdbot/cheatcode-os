@@ -83,7 +83,7 @@ function Shelf({ title, href, accent, children }: {
       <div className="flex items-center justify-between mb-3 px-0.5">
         <div className="flex items-center gap-2.5">
           {accent && <span className="w-1 h-5 rounded-full flex-shrink-0" style={{ background: accent }} />}
-          <h2 className="text-base font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
+          <h2 className="text-base font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>
             {title}
           </h2>
         </div>
@@ -100,9 +100,9 @@ function Shelf({ title, href, accent, children }: {
         {/* Left scroll button */}
         <button
           onClick={() => scroll("left")}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/shelf:opacity-100 transition-opacity border border-[#EAECF0]"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-8 h-8 bg-card rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/shelf:opacity-100 transition-opacity border border-border"
         >
-          <ChevronLeft size={14} className="text-[#475467]" />
+          <ChevronLeft size={14} className="text-muted-foreground" />
         </button>
 
         <div ref={ref} className="scroll-row pb-1">
@@ -112,9 +112,9 @@ function Shelf({ title, href, accent, children }: {
         {/* Right scroll button */}
         <button
           onClick={() => scroll("right")}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/shelf:opacity-100 transition-opacity border border-[#EAECF0]"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-8 h-8 bg-card rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/shelf:opacity-100 transition-opacity border border-border"
         >
-          <ChevronRight size={14} className="text-[#475467]" />
+          <ChevronRight size={14} className="text-muted-foreground" />
         </button>
       </div>
     </section>
@@ -122,7 +122,8 @@ function Shelf({ title, href, accent, children }: {
 }
 
 // ─── Featured Hero Card (Netflix "featured title" style) ──────────────────────
-function FeaturedCard({ video }: { video: typeof todaysPicks[0] }) {
+type VideoItem = { id: string; type: string; title: string; creator: { name: string; avatar: string; color: string }; thumbnail: string; duration: string; quickTake: string; tags: string[]; relevanceBadge: string; tickers: string[]; convergenceScore: number; publishedAt: string };
+function FeaturedCard({ video }: { video: VideoItem }) {
   return (
     <Link href={`/video/${video.id}`}>
       <div className="relative rounded-2xl overflow-hidden cursor-pointer group"
@@ -183,7 +184,8 @@ function FeaturedCard({ video }: { video: typeof todaysPicks[0] }) {
 }
 
 // ─── Theme Pill (compact, visual) ─────────────────────────────────────────────
-function ThemePill({ theme }: { theme: typeof hotThemes[0] }) {
+type ThemeItem = { id: string; label: string; status: string; level: number; tickers: string[]; score: number; color: string };
+function ThemePill({ theme }: { theme: ThemeItem }) {
   return (
     <Link href={`/themes/${theme.id}`}>
       <div className="flex-shrink-0 cursor-pointer group/pill"
@@ -228,7 +230,8 @@ function ThemePill({ theme }: { theme: typeof hotThemes[0] }) {
 }
 
 // ─── Topic Tile (visual grid) ──────────────────────────────────────────────────
-function TopicTile({ topic }: { topic: typeof topicGrid[0] }) {
+type TopicItem = { id: string; label: string; icon: string; count: number; color: string };
+function TopicTile({ topic }: { topic: TopicItem }) {
   return (
     <Link href={`/topics/${topic.id}`}>
       <div className="flex-shrink-0 w-28 cursor-pointer group/tile">
@@ -247,9 +250,10 @@ function TopicTile({ topic }: { topic: typeof topicGrid[0] }) {
 }
 
 // ─── Radar Sidebar ─────────────────────────────────────────────────────────────
-function RadarSidebar() {
+type RadarTicker = { ticker: string; score: number; direction: string; timeframe: string; confidence?: string; change: string };
+function RadarSidebar({ tickers }: { tickers: RadarTicker[] }) {
   return (
-    <div className="bg-white rounded-xl border border-[#EAECF0] overflow-hidden">
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
       <div className="px-4 py-3 flex items-center justify-between"
            style={{ background: "linear-gradient(90deg, #2B3245 0%, #1a2035 100%)" }}>
         <div className="flex items-center gap-2">
@@ -264,10 +268,10 @@ function RadarSidebar() {
           </span>
         </Link>
       </div>
-      <div className="divide-y divide-[#F2F4F7]">
-        {radarTickers.map(t => (
+      <div className="divide-y divide-border">
+        {tickers.map(t => (
           <Link key={t.ticker} href={`/intelligence?ticker=${t.ticker}`}>
-            <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#F9FAFB] transition-colors">
+            <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors">
               <div className="relative w-8 h-8 flex-shrink-0">
                 {(() => {
                   const color = t.score >= 80 ? "#4DC820" : t.score >= 60 ? "#C8D400" : "#E8193C";
@@ -281,14 +285,14 @@ function RadarSidebar() {
                     </svg>
                   );
                 })()}
-                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#101828]"
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-foreground"
                       style={{ fontFamily: "var(--font-mono)" }}>
                   {t.score}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="ticker-mono text-xs font-bold text-[#101828]">{t.ticker}</span>
+                  <span className="ticker-mono text-xs font-bold text-foreground">{t.ticker}</span>
                   <span className="text-[9px] font-semibold px-1 py-0.5 rounded"
                         style={{
                           color: t.direction === "Bullish" ? "#2E7A10" : "#A8001F",
@@ -297,7 +301,7 @@ function RadarSidebar() {
                     {t.direction}
                   </span>
                 </div>
-                <div className="text-[10px] text-[#98A2B3]">{t.timeframe}</div>
+                <div className="text-[10px] text-muted-foreground">{t.timeframe}</div>
               </div>
               <div className="text-xs font-bold flex-shrink-0"
                    style={{ color: t.change.startsWith("+") ? "#4DC820" : "#E8193C" }}>
@@ -319,12 +323,12 @@ export default function Home() {
   const featured = todaysPicks[2]; // tastytrade options flow — highest visual impact
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
         {/* Compact market bar — just one line */}
-        <div className="border-b border-[#EAECF0] bg-white">
+        <div className="border-b border-border bg-card">
           <div className="container mx-auto py-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm">
               {marketSentiment.type === "bullish"
@@ -332,11 +336,11 @@ export default function Home() {
                 : marketSentiment.type === "bearish"
                 ? <TrendingDown size={14} style={{ color: "#E8193C" }} />
                 : <Minus size={14} style={{ color: "#C8D400" }} />}
-              <span className="font-semibold text-[#101828]">{marketSentiment.label}</span>
-              <span className="text-[#667085] hidden sm:inline">— {marketSentiment.description}</span>
+              <span className="font-semibold text-foreground">{marketSentiment.label}</span>
+              <span className="text-muted-foreground hidden sm:inline">— {marketSentiment.description}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-[#98A2B3]">{marketSentiment.date}</span>
+              <span className="text-xs text-muted-foreground">{marketSentiment.date}</span>
               <Link href="/newsletter">
                 <span className="text-xs font-semibold cc-gradient-text">Daily Brief →</span>
               </Link>
@@ -383,7 +387,7 @@ export default function Home() {
                            style={{ backgroundColor: c.color }}>
                         {c.avatar}
                       </div>
-                      <p className="text-xs font-semibold text-[#101828] truncate" style={{ fontFamily: "var(--font-display)" }}>
+                      <p className="text-xs font-semibold text-foreground truncate" style={{ fontFamily: "var(--font-display)" }}>
                         {c.name}
                       </p>
                       <p className="text-[10px] text-[#98A2B3] truncate">{c.specialty}</p>
@@ -395,7 +399,7 @@ export default function Home() {
 
             {/* Sidebar — 1/3 width */}
             <div className="space-y-5">
-              <RadarSidebar />
+              <RadarSidebar tickers={radarTickers} />
 
               {/* Quick links */}
               <div className="grid grid-cols-2 gap-3">

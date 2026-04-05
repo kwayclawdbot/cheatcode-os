@@ -132,12 +132,12 @@ export function VideoCard({
           </div>
           <div className="flex-1 min-w-0">
             {/* Title */}
-            <h3 className={`font-semibold text-[#101828] leading-snug line-clamp-2 ${compact ? "text-[11px]" : "text-[13px]"}`}
+            <h3 className={`font-semibold text-foreground leading-snug line-clamp-2 ${compact ? "text-[11px]" : "text-[13px]"}`}
                 style={{ fontFamily: "var(--font-display)" }}>
               {title}
             </h3>
             {/* Creator + time */}
-            <p className="text-[11px] text-[#98A2B3] mt-0.5 truncate">
+            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
               {creator.name} · {publishedAt}
             </p>
           </div>
