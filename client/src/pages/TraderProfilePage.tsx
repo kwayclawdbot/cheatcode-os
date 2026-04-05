@@ -53,7 +53,7 @@ const BADGE_DEFS = [
 
 // ─── Mock Profile Data ────────────────────────────────────────────────────────
 
-const MOCK_PROFILES: Record<string, {
+interface TraderProfile {
   name: string;
   handle: string;
   avatar: string;
@@ -75,7 +75,9 @@ const MOCK_PROFILES: Record<string, {
   topTickers: { ticker: string; sentiment: "bullish" | "bearish" | "neutral"; count: number }[];
   posts?: any[];
   badges?: string[];
-}> = {
+}
+
+const MOCK_PROFILES: Record<string, TraderProfile> = {
   minervini: {
     name: "Mark Minervini",
     handle: "@minervini",
@@ -221,7 +223,7 @@ function XPBar({ xp }: { xp: number }) {
 export default function TraderProfilePage() {
   const params = useParams<{ handle: string }>();
   const handle = params.handle || "minervini";
-  const [profile, setProfile] = useState(MOCK_PROFILES[handle.toLowerCase()] || DEFAULT_PROFILE);
+  const [profile, setProfile] = useState<TraderProfile>(MOCK_PROFILES[handle.toLowerCase()] || DEFAULT_PROFILE);
   const level = getLevel(profile.xp);
 
   const [isFollowing, setIsFollowing] = useState(false);

@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchRadar, fetchTicker, fetchContent, fetchContentByTicker } from "@/lib/api";
+import { SparklineChart } from "@/components/intelligence/SparklineChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -692,52 +693,66 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
   onTickerClick: (ticker: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Static fallback tickers by asset class
   const STATIC: Record<AssetClass, any[]> = {
-    all:     [{ symbol: "NVDA", score: 78, direction: "bullish" }, { symbol: "PLTR", score: 72, direction: "bullish" }, { symbol: "TSLA", score: 52, direction: "neutral" }, { symbol: "SPY", score: 45, direction: "bearish" }, { symbol: "BTC", score: 70, direction: "bullish" }, { symbol: "EUR/USD", score: 55, direction: "neutral" }, { symbol: "ES", score: 40, direction: "bearish" }, { symbol: "GLD", score: 68, direction: "bullish" }, { symbol: "AAPL", score: 63, direction: "bullish" }, { symbol: "QQQ", score: 48, direction: "neutral" }],
-    stocks:  [{ symbol: "NVDA", score: 78, direction: "bullish" }, { symbol: "PLTR", score: 72, direction: "bullish" }, { symbol: "TSLA", score: 52, direction: "neutral" }, { symbol: "AAPL", score: 63, direction: "bullish" }, { symbol: "AMZN", score: 61, direction: "bullish" }, { symbol: "SPY", score: 45, direction: "bearish" }, { symbol: "QQQ", score: 48, direction: "neutral" }, { symbol: "MSFT", score: 60, direction: "bullish" }],
-    forex:   [{ symbol: "EUR/USD", score: 55, direction: "neutral" }, { symbol: "GBP/USD", score: 48, direction: "bearish" }, { symbol: "USD/JPY", score: 62, direction: "bullish" }, { symbol: "AUD/USD", score: 44, direction: "bearish" }, { symbol: "USD/CAD", score: 58, direction: "bullish" }],
-    futures: [{ symbol: "ES", score: 40, direction: "bearish" }, { symbol: "NQ", score: 45, direction: "bearish" }, { symbol: "CL", score: 65, direction: "bullish" }, { symbol: "GC", score: 68, direction: "bullish" }, { symbol: "ZB", score: 52, direction: "neutral" }],
-    crypto:  [{ symbol: "BTC", score: 70, direction: "bullish" }, { symbol: "ETH", score: 65, direction: "bullish" }, { symbol: "SOL", score: 72, direction: "bullish" }, { symbol: "DOGE", score: 38, direction: "bearish" }, { symbol: "XRP", score: 55, direction: "neutral" }],
+    all:     [{ symbol: "NVDA", score: 78, direction: "bullish", price: 118.45, change_pct: 2.34 }, { symbol: "PLTR", score: 72, direction: "bullish", price: 24.18, change_pct: 1.87 }, { symbol: "TSLA", score: 52, direction: "neutral", price: 248.50, change_pct: -0.43 }, { symbol: "SPY", score: 45, direction: "bearish", price: 512.30, change_pct: -1.12 }, { symbol: "BTC", score: 70, direction: "bullish", price: 83200, change_pct: 1.55 }, { symbol: "EURUSD", score: 55, direction: "neutral", price: 1.0842, change_pct: 0.12 }, { symbol: "ES", score: 40, direction: "bearish", price: 5180, change_pct: -0.88 }, { symbol: "GLD", score: 68, direction: "bullish", price: 218.40, change_pct: 0.76 }, { symbol: "AAPL", score: 63, direction: "bullish", price: 172.80, change_pct: 0.94 }, { symbol: "QQQ", score: 48, direction: "neutral", price: 436.20, change_pct: -0.31 }],
+    stocks:  [{ symbol: "NVDA", score: 78, direction: "bullish", price: 118.45, change_pct: 2.34 }, { symbol: "PLTR", score: 72, direction: "bullish", price: 24.18, change_pct: 1.87 }, { symbol: "TSLA", score: 52, direction: "neutral", price: 248.50, change_pct: -0.43 }, { symbol: "AAPL", score: 63, direction: "bullish", price: 172.80, change_pct: 0.94 }, { symbol: "AMZN", score: 61, direction: "bullish", price: 186.20, change_pct: 1.22 }, { symbol: "SPY", score: 45, direction: "bearish", price: 512.30, change_pct: -1.12 }, { symbol: "QQQ", score: 48, direction: "neutral", price: 436.20, change_pct: -0.31 }, { symbol: "MSFT", score: 60, direction: "bullish", price: 384.50, change_pct: 0.67 }],
+    forex:   [{ symbol: "EURUSD", score: 55, direction: "neutral", price: 1.0842, change_pct: 0.12 }, { symbol: "GBPUSD", score: 48, direction: "bearish", price: 1.2634, change_pct: -0.34 }, { symbol: "USDJPY", score: 62, direction: "bullish", price: 151.42, change_pct: 0.28 }, { symbol: "AUDUSD", score: 44, direction: "bearish", price: 0.6521, change_pct: -0.51 }, { symbol: "USDCAD", score: 58, direction: "bullish", price: 1.3612, change_pct: 0.19 }],
+    futures: [{ symbol: "ES", score: 40, direction: "bearish", price: 5180, change_pct: -0.88 }, { symbol: "NQ", score: 45, direction: "bearish", price: 17840, change_pct: -1.04 }, { symbol: "CL", score: 65, direction: "bullish", price: 78.42, change_pct: 1.33 }, { symbol: "GC", score: 68, direction: "bullish", price: 2342.10, change_pct: 0.82 }, { symbol: "ZB", score: 52, direction: "neutral", price: 118.20, change_pct: -0.14 }],
+    crypto:  [{ symbol: "BTC", score: 70, direction: "bullish", price: 83200, change_pct: 1.55 }, { symbol: "ETH", score: 65, direction: "bullish", price: 3180, change_pct: 2.10 }, { symbol: "SOL", score: 72, direction: "bullish", price: 148.20, change_pct: 3.44 }, { symbol: "DOGE", score: 38, direction: "bearish", price: 0.1421, change_pct: -2.88 }, { symbol: "XRP", score: 55, direction: "neutral", price: 0.5820, change_pct: 0.44 }],
   };
-
-  const tickers = radarTickers.length > 0 && activeAsset === "all"
-    ? radarTickers
+  const staticMap = Object.values(STATIC).flat().reduce((acc: Record<string, any>, t) => { acc[t.symbol] = t; return acc; }, {});
+  const liveTickers = radarTickers.length > 0 && activeAsset === "all"
+    ? radarTickers.map((t: any) => ({ ...staticMap[t.symbol] || {}, ...t }))
     : STATIC[activeAsset];
 
   return (
     <div
       ref={scrollRef}
-      className="flex items-center gap-2 overflow-x-auto py-3 px-4 sm:px-6"
+      className="flex items-center gap-3 overflow-x-auto pb-3 pt-2 px-4 sm:px-6"
       style={{ scrollbarWidth: "none" }}
     >
-      {tickers.map((t: any) => {
+      {liveTickers.map((t: any) => {
         const isBull = t.direction?.toLowerCase() === "bullish";
         const isBear = t.direction?.toLowerCase() === "bearish";
         const color = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
         const isActive = activeTicker === t.symbol;
-
+        const changePct = t.change_pct ?? (isBull ? 1.2 : isBear ? -1.4 : 0.1);
+        const price = t.price;
+        const formattedPrice = price
+          ? price >= 1000 ? `$${(price / 1000).toFixed(1)}K`
+          : price >= 1 ? `$${price.toFixed(2)}`
+          : `$${price.toFixed(4)}`
+          : null;
         return (
           <button
             key={t.symbol}
             onClick={() => onTickerClick(isActive ? "" : t.symbol)}
-            className="flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-bold transition-all border"
+            className="flex-shrink-0 flex flex-col rounded-xl transition-all border overflow-hidden"
             style={{
-              background: isActive ? color + "18" : "var(--card)",
+              background: isActive ? color + "12" : "var(--card)",
               borderColor: isActive ? color : "var(--border)",
-              color: isActive ? color : "var(--foreground)",
-              boxShadow: isActive ? `0 0 0 1px ${color}40` : "none",
+              boxShadow: isActive ? `0 0 0 1.5px ${color}50` : "0 1px 3px rgba(0,0,0,0.06)",
+              width: 120,
             }}
           >
-            <span className="ticker-mono">{t.symbol}</span>
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-bold" style={{ color }}>
-                {isBull ? "↑" : isBear ? "↓" : "→"}
+            <div className="flex items-center justify-between px-3 pt-2.5 pb-0">
+              <span className="text-[13px] font-black tracking-tight" style={{ color: isActive ? color : "var(--foreground)" }}>
+                {t.symbol}
               </span>
-              {t.score && (
-                <span className="text-[9px] font-bold opacity-60">{Math.round(t.score)}</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: color + "20", color }}>
+                {Math.round(t.score ?? 50)}
+              </span>
+            </div>
+            <div className="px-1 py-1" style={{ height: 44 }}>
+              <SparklineChart symbol={t.symbol} color={color} height={40} />
+            </div>
+            <div className="flex items-center justify-between px-3 pb-2.5 pt-0">
+              {formattedPrice && (
+                <span className="text-[10px] font-bold text-muted-foreground">{formattedPrice}</span>
               )}
+              <span className="text-[10px] font-black" style={{ color }}>
+                {changePct >= 0 ? "↑" : "↓"} {Math.abs(changePct).toFixed(2)}%
+              </span>
             </div>
           </button>
         );
@@ -745,7 +760,6 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
     </div>
   );
 }
-
 // ─── Main Community Page ──────────────────────────────────────────────────────
 
 export default function CommunityPage() {
@@ -821,14 +835,15 @@ export default function CommunityPage() {
 
       {/* ── Trending Tickers Hero ── */}
       <div className="bg-card border-b border-border sticky top-14 z-30">
-        {/* Asset class toggle + ticker search */}
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-1 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-1">
+        {/* Single header row: Trending label + asset tabs + search + discover link */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-0 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mr-1">Trending</span>
+          <div className="flex items-center gap-0.5 flex-1">
             {ASSET_TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveAsset(tab.id)}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg transition-all"
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md transition-all"
                 style={{
                   background: activeAsset === tab.id ? "rgba(77,200,32,0.12)" : "transparent",
                   color: activeAsset === tab.id ? "#4DC820" : "var(--muted-foreground)",
@@ -839,20 +854,23 @@ export default function CommunityPage() {
               </button>
             ))}
           </div>
-          {/* Ticker search */}
           <form onSubmit={handleTickerSearch} className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={tickerSearch}
               onChange={e => setTickerSearch(e.target.value.toUpperCase())}
               placeholder="$TICKER"
-              className="pl-7 pr-3 py-1.5 text-xs bg-muted border border-border rounded-lg focus:outline-none focus:border-[#4DC820] transition-colors w-28 text-foreground placeholder:text-muted-foreground uppercase font-bold"
+              className="pl-6 pr-2.5 py-1.5 text-[11px] bg-muted border border-border rounded-lg focus:outline-none focus:border-[#4DC820] transition-colors w-24 text-foreground placeholder:text-muted-foreground uppercase font-bold"
             />
           </form>
+          <Link href="/discover">
+            <button className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-border hover:border-[#4DC820] hover:text-[#4DC820] transition-all text-muted-foreground">
+              <TrendingUp size={10} /> Discover
+            </button>
+          </Link>
         </div>
-
-        {/* Scrollable ticker strip */}
+        {/* Scrollable StockTwits-style ticker cards */}
         <TrendingTickerStrip
           radarTickers={radarTickers}
           activeAsset={activeAsset}

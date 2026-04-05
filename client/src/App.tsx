@@ -42,6 +42,7 @@ import CoachApplyPage from "./pages/CoachApplyPage";
 import CoachDashboard from "./pages/CoachDashboard";
 import CoachesCornerPage from "./pages/CoachesCornerPage";
 import CoachProfilePage from "./pages/CoachProfilePage";
+import DiscoverPage from "./pages/DiscoverPage";
 
 function Router() {
   return (
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/home" component={Home} />
       <Route path="/feed" component={SwipeFeedPage} />
       <Route path="/community" component={CommunityPage} />
+      <Route path="/discover" component={DiscoverPage} />
       <Route path="/intelligence" component={IntelligencePage} />
       <Route path="/topics" component={TopicsPage} />
       <Route path="/learn" component={LearnPage} />
