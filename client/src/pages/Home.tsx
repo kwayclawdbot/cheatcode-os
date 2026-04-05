@@ -19,6 +19,17 @@ import {
 import { fetchHome, fetchRadar, fetchCreators } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 
+function timeAgo(dateStr: string): string {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(ms / 3600000);
+  if (hours < 1) return "Just now";
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 // Transform API data to match existing component shapes
 function useHomeData() {
   const { data: home } = useApi(fetchHome, null);
@@ -31,20 +42,29 @@ function useHomeData() {
     date: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
   } : mockSentiment;
 
-  const todaysPicks = home?.todays_picks?.length ? home.todays_picks.map((p) => ({
-    id: p.id,
-    type: p.content_type as "video" | "podcast",
-    title: p.title,
-    creator: { name: p.creator_name || "Unknown", avatar: (p.creator_name || "??").slice(0, 2).toUpperCase(), color: "#667085" },
-    thumbnail: p.thumbnail_url || "",
-    duration: p.duration_seconds ? `${Math.floor(p.duration_seconds / 60)}:${String(p.duration_seconds % 60).padStart(2, "0")}` : "",
-    quickTake: p.quick_take || "",
-    tags: p.topics.map((t) => t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())),
-    relevanceBadge: p.relevance_score >= 0.8 ? "Critical" : p.relevance_score >= 0.6 ? "High Relevance" : "Watch",
-    tickers: [] as string[],
-    convergenceScore: Math.round(p.relevance_score * 100),
-    publishedAt: p.published_at ? new Date(p.published_at).toLocaleDateString() : "",
-  })) : mockPicks;
+  const todaysPicks = home?.todays_picks?.length ? home.todays_picks.map((p) => {
+    // Upgrade thumbnail to maxresdefault
+    let thumb = p.thumbnail_url || "";
+    if (thumb.includes("hqdefault")) thumb = thumb.replace("hqdefault", "maxresdefault");
+    // Extract video ID for fallback thumbnail
+    const vidMatch = p.external_url?.match(/[?&]v=([^&]+)/);
+    if (!thumb && vidMatch) thumb = `https://i.ytimg.com/vi/${vidMatch[1]}/maxresdefault.jpg`;
+
+    return {
+      id: p.id,
+      type: p.content_type as "video" | "podcast",
+      title: p.title,
+      creator: { name: p.creator_name || "Unknown", avatar: (p.creator_name || "??").slice(0, 2).toUpperCase(), color: "#667085" },
+      thumbnail: thumb,
+      duration: p.duration_seconds ? `${Math.floor(p.duration_seconds / 60)}:${String(p.duration_seconds % 60).padStart(2, "0")}` : "",
+      quickTake: p.quick_take || "",
+      tags: p.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
+      relevanceBadge: p.relevance_score >= 0.8 ? "Critical" : p.relevance_score >= 0.6 ? "High Relevance" : "Watch",
+      tickers: [] as string[],
+      convergenceScore: Math.round(p.relevance_score * 100),
+      publishedAt: p.published_at ? timeAgo(p.published_at) : "",
+    };
+  }) : mockPicks;
 
   const radarTickers = radar?.critical?.concat(radar.high_conviction || [], radar.watch || []).map((t) => ({
     ticker: t.symbol,

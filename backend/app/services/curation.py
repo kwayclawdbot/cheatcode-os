@@ -48,7 +48,7 @@ async def fetch_channel_uploads(channel_id: str, max_results: int = 10) -> list[
                 "video_id": vid_id,
                 "title": snippet["title"],
                 "description": snippet.get("description", ""),
-                "thumbnail_url": snippet.get("thumbnails", {}).get("high", {}).get("url"),
+                "thumbnail_url": snippet.get("thumbnails", {}).get("maxres", {}).get("url") or snippet.get("thumbnails", {}).get("high", {}).get("url"),
                 "published_at": snippet.get("publishedAt"),
                 "channel_title": snippet.get("channelTitle"),
             })
@@ -289,6 +289,12 @@ async def process_video(video: dict, creator: dict) -> dict | None:
     s = get_settings()
     video_id = video["video_id"]
 
+    # Skip shorts (under 3 minutes)
+    duration = video.get("duration_seconds", 0)
+    if duration and duration < 180:
+        log.info("Skipping short (%ds): %s", duration, video["title"][:60])
+        return None
+
     # Check if already curated
     existing = maybe_one(db.table("content").select("id").eq("external_id", video_id))
     if existing.data:
@@ -393,7 +399,7 @@ async def run_curation_cycle():
             continue
 
         try:
-            videos = await fetch_channel_uploads(creator["youtube_channel_id"], max_results=5)
+            videos = await fetch_channel_uploads(creator["youtube_channel_id"], max_results=15)
             for video in videos:
                 result = await process_video(video, creator)
                 if result:
