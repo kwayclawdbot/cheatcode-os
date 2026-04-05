@@ -197,7 +197,7 @@ export default function CreatorPage() {
     Promise.all([
       fetchCreatorDetail(id).catch(() => null),
       fetchCreators().catch(() => [] as Creator[]),
-      fetchContent({ topic: id }).catch(() => null),
+      fetchContent({ creator_slug: id }).catch(() => null),
     ]).then(([detail, allCreators, apiVideos]) => {
       if (detail) {
         setCreator(normalizeApiCreator(detail, allCreators));

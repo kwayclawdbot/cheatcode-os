@@ -142,6 +142,7 @@ export async function fetchContent(params?: {
   topic?: string;
   theme?: string;
   skill_level?: string;
+  creator_slug?: string;
   sort?: string;
   page?: number;
 }): Promise<ContentCard[]> {

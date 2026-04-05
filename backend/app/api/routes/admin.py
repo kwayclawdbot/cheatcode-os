@@ -12,6 +12,7 @@ from app.services.ingestion import ingest_all_pending, ingest_content
 from app.services.repurposing import repurpose_content, repurpose_all_pending, extract_clips, render_clip, post_clip
 from app.services.live_clipper import clip_content, find_clip_segments, render_live_clip
 from app.services.ticker_analysis import run_daily_analysis, analyze_ticker
+from app.services.discovery import seed_creators, discover_channels, add_creator
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -139,7 +140,30 @@ async def trigger_newsletter(user: dict = Depends(_require_admin)):
     return result
 
 
-# ── Creator Management ──────��────────────────────────────────────────────────
+# ── Creator Discovery ────────────────────────────────────────────────────────
+
+@router.post("/discovery/seed")
+async def trigger_seed(user: dict = Depends(_require_admin)):
+    """Seed all channels from the curated list."""
+    results = await seed_creators()
+    return {"added": len(results), "creators": [r["name"] for r in results]}
+
+
+@router.post("/discovery/search")
+async def trigger_discover(query: str = "trading education", max_results: int = 10, user: dict = Depends(_require_admin)):
+    """Search YouTube for new finance channels."""
+    results = await discover_channels(query, max_results)
+    return {"discovered": len(results), "creators": [r["name"] for r in results]}
+
+
+@router.post("/discovery/add")
+async def add_single_creator(name: str = "", handle: str = "", tags: str = "trading,finance", user: dict = Depends(_require_admin)):
+    """Add a single creator by YouTube handle."""
+    result = await add_creator(name or handle, handle, tags.split(","))
+    return result or {"error": "Failed to add creator"}
+
+
+# ── Creator Management ──────────────────────────────────────────────────────
 
 class CreatorCreate(BaseModel):
     name: str
