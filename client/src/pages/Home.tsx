@@ -213,13 +213,13 @@ function ThemePill({ theme }: { theme: ThemeItem }) {
             </span>
           </div>
         </div>
-        <p className="text-xs font-semibold text-[#101828] leading-snug line-clamp-2"
+        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2"
            style={{ fontFamily: "var(--font-display)" }}>
           {theme.label}
         </p>
         <div className="flex gap-1 mt-1 flex-wrap">
           {theme.tickers.slice(0, 2).map(t => (
-            <span key={t} className="text-[9px] font-bold text-[#667085]" style={{ fontFamily: "var(--font-mono)" }}>
+            <span key={t} className="text-[9px] font-bold text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>
               {t}
             </span>
           ))}
@@ -239,11 +239,11 @@ function TopicTile({ topic }: { topic: TopicItem }) {
              style={{ height: 80, backgroundColor: topic.color }}>
           <span className="text-3xl">{topic.icon}</span>
         </div>
-        <p className="text-[11px] font-semibold text-[#101828] text-center leading-tight"
+        <p className="text-[11px] font-semibold text-foreground text-center leading-tight"
            style={{ fontFamily: "var(--font-display)" }}>
           {topic.label}
         </p>
-        <p className="text-[10px] text-[#98A2B3] text-center">{topic.count}</p>
+        <p className="text-[10px] text-muted-foreground text-center">{topic.count}</p>
       </div>
     </Link>
   );
@@ -390,7 +390,7 @@ export default function Home() {
                       <p className="text-xs font-semibold text-foreground truncate" style={{ fontFamily: "var(--font-display)" }}>
                         {c.name}
                       </p>
-                      <p className="text-[10px] text-[#98A2B3] truncate">{c.specialty}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{c.specialty}</p>
                     </div>
                   </Link>
                 ))}

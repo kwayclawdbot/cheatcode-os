@@ -56,7 +56,7 @@ export function ScoreRing({ score, size = "md", showLabel = true }: ScoreRingPro
           {score}
         </span>
         {showLabel && (
-          <span className={`${labelSize} text-[#667085] font-medium mt-0.5`}>
+          <span className={`${labelSize} text-muted-foreground font-medium mt-0.5`}>
             {label}
           </span>
         )}

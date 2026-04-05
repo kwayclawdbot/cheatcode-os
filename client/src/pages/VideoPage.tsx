@@ -36,19 +36,19 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
   const data = tickerData[ticker];
   return (
     <Link href={`/intelligence?ticker=${ticker}`}>
-      <div className="content-card flex items-start gap-3 p-3 bg-white rounded-xl border border-[#EAECF0] cursor-pointer">
+      <div className="content-card flex items-start gap-3 p-3 bg-card rounded-xl border border-border cursor-pointer">
         <div className="flex-shrink-0">
           {data ? (
             <ScoreRing score={data.score} size="sm" />
           ) : (
-            <div className="w-11 h-11 rounded-full bg-[#F2F4F7] flex items-center justify-center">
-              <span className="ticker-mono text-xs text-[#667085]">{ticker}</span>
+            <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center">
+              <span className="ticker-mono text-xs text-muted-foreground">{ticker}</span>
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="ticker-mono text-sm font-bold text-[#101828]">{ticker}</span>
+            <span className="ticker-mono text-sm font-bold text-foreground">{ticker}</span>
             {data && (
               <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
                 data.direction === "Bullish" ? "text-[#2E7A10] bg-[#F0FDE8]" : "text-[#A8001F] bg-[#FFF0F3]"
@@ -57,7 +57,7 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
               </span>
             )}
           </div>
-          <p className="text-xs text-[#667085] leading-relaxed">{creatorNote}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{creatorNote}</p>
           {data && (
             <p className={`text-xs font-medium mt-1 ${isPaid ? "text-[#00AEEF]" : "gated-blur text-[#00AEEF]"}`}>
               {isPaid
@@ -77,18 +77,18 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
 function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#EAECF0] rounded-xl overflow-hidden">
+    <div className="border border-border rounded-xl overflow-hidden bg-card">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-[#F9FAFB] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted transition-colors"
       >
-        <span className="font-semibold text-sm text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
+        <span className="font-semibold text-sm text-foreground" style={{ fontFamily: "var(--font-display)" }}>
           {title}
         </span>
-        {open ? <ChevronUp size={16} className="text-[#667085]" /> : <ChevronDown size={16} className="text-[#667085]" />}
+        {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
       </button>
       {open && (
-        <div className="border-t border-[#EAECF0] bg-white">
+        <div className="border-t border-border bg-card">
           {children}
         </div>
       )}
@@ -100,13 +100,13 @@ export default function VideoPage() {
   const video = SAMPLE_VIDEO;
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter container mx-auto py-6">
         {/* Back nav */}
         <Link href="/">
-          <button className="flex items-center gap-2 text-sm text-[#667085] hover:text-[#101828] transition-colors mb-4">
+          <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
             <ArrowLeft size={14} />
             Back to Today's Picks
           </button>

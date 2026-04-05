@@ -140,7 +140,7 @@ function ThemesTab() {
               <div className="text-5xl font-black mb-1 leading-none" style={{ color: theme.color, fontFamily: "var(--font-mono)", opacity: 0.25 }}>
                 {theme.score}
               </div>
-              <h3 className="font-bold text-[#101828] text-sm leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+              <h3 className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "var(--font-display)" }}>
                 {theme.label}
               </h3>
               {/* Level bar */}
@@ -152,7 +152,7 @@ function ThemesTab() {
               </div>
             </div>
             {/* Ticker row */}
-            <div className="px-4 py-2.5 bg-white flex items-center justify-between">
+            <div className="px-4 py-2.5 bg-card flex items-center justify-between">
               <div className="flex gap-1">
                 {theme.tickers.map(t => (
                   <span key={t} className="text-[9px] font-bold px-1.5 py-0.5 rounded"
@@ -161,7 +161,7 @@ function ThemesTab() {
                   </span>
                 ))}
               </div>
-              <span className="text-[10px] text-[#98A2B3]">Level {theme.level}/5</span>
+              <span className="text-[10px] text-muted-foreground">Level {theme.level}/5</span>
             </div>
           </div>
         </Link>
@@ -179,7 +179,7 @@ function SkillTab() {
           <div className="p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="font-bold text-lg text-[#101828]" style={{ fontFamily: "var(--font-display)", color: s.color }}>
+                <h3 className="font-bold text-lg" style={{ fontFamily: "var(--font-display)", color: s.color }}>
                   {s.level}
                 </h3>
                 <p className="text-sm text-muted-foreground">{s.description}</p>
