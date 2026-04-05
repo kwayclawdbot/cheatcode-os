@@ -17,6 +17,7 @@ import LearnPage from "./pages/LearnPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import PricingPage from "./pages/PricingPage";
 import CreatorPage from "./pages/CreatorPage";
+import TerminalPage from "./pages/TerminalPage";
 
 function Router() {
   return (
@@ -28,6 +29,9 @@ function Router() {
       <Route path="/learn" component={LearnPage} />
       <Route path="/newsletter" component={NewsletterPage} />
       <Route path="/pricing" component={PricingPage} />
+
+      {/* Terminal */}
+      <Route path="/terminal" component={TerminalPage} />
 
       {/* Content detail pages */}
       <Route path="/video/:id" component={VideoPage} />
