@@ -29,6 +29,7 @@ import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchTicker, fetchRadar, trackEvent } from "@/lib/api";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -573,10 +574,7 @@ function RadarPill({ t, onClick }: { t: any; onClick: () => void }) {
   return (
     <button onClick={onClick}
             className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-full border border-border bg-card hover:border-[#4DC820]/60 hover:shadow-sm transition-all group">
-      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-            style={{ background: scoreColor }}>
-        {t.score}
-      </span>
+      <TickerLogo symbol={t.ticker} size={20} />
       <span className="ticker-mono text-xs font-bold text-foreground group-hover:text-[#4DC820] transition-colors">
         {t.ticker}
       </span>

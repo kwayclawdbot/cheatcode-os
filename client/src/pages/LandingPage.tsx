@@ -11,6 +11,7 @@ import {
   BookOpen, Play, Star, ChevronRight, Check, Flame
 } from "lucide-react";
 import { fetchRadar, fetchCreators } from "@/lib/api";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -33,6 +34,7 @@ function TickerMarquee({ tickers, isDark }: { tickers: { symbol: string; score: 
           return (
             <Link key={i} href={`/intelligence?ticker=${t.symbol}`}>
               <span className="inline-flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity">
+                <TickerLogo symbol={t.symbol} size={18} />
                 <span className="ticker-mono text-sm font-bold text-foreground">{t.symbol}</span>
                 <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: `${color}18`, color }}>

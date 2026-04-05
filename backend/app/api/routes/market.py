@@ -1,7 +1,7 @@
 """Market Data API — live quotes, market summary, ticker prices."""
 
 from fastapi import APIRouter, Query
-from app.services.market_data import fetch_bulk_quotes, get_market_summary, sync_ticker_prices
+from app.services.market_data import fetch_bulk_quotes, get_market_summary, sync_ticker_prices, fetch_price_history
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -28,3 +28,10 @@ async def get_single_quote(symbol: str):
     if not q:
         return {"error": f"No data for {symbol.upper()}"}
     return q
+
+
+@router.get("/sparkline/{symbol}")
+async def get_sparkline(symbol: str, days: int = Query(30, ge=5, le=90)):
+    """Get daily close prices for sparkline charts. Returns list of {t, v} objects."""
+    data = await fetch_price_history(symbol.upper(), days=days)
+    return data

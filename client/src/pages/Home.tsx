@@ -14,6 +14,7 @@ import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchHome, fetchRadar, fetchCreators, normalizeContentCard } from "@/lib/api";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useApi } from "@/hooks/useApi";
 import { syncCreatorRegistry, getCreatorAvatar, getCreatorColor, getAllCreators } from "@/lib/creatorRegistry";
 
@@ -350,24 +351,7 @@ function RadarSidebar({ tickers }: { tickers: RadarTicker[] }) {
         {tickers.map(t => (
           <Link key={t.ticker} href={`/intelligence?ticker=${t.ticker}`}>
             <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors">
-              <div className="relative w-8 h-8 flex-shrink-0">
-                {(() => {
-                  const color = t.score >= 80 ? "#4DC820" : t.score >= 60 ? "#C8D400" : "#E8193C";
-                  const r = 13, sw = 2.5, circ = 2 * Math.PI * r;
-                  const offset = circ - (t.score / 100) * circ;
-                  return (
-                    <svg width={32} height={32} style={{ transform: "rotate(-90deg)" }}>
-                      <circle cx={16} cy={16} r={r} stroke="#EAECF0" strokeWidth={sw} fill="none" />
-                      <circle cx={16} cy={16} r={r} stroke={color} strokeWidth={sw}
-                        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" fill="none" />
-                    </svg>
-                  );
-                })()}
-                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-foreground"
-                      style={{ fontFamily: "var(--font-mono)" }}>
-                  {t.score}
-                </span>
-              </div>
+              <TickerLogo symbol={t.ticker} size={28} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="ticker-mono text-xs font-bold text-foreground">{t.ticker}</span>

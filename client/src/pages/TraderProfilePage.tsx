@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ const BADGE_DEFS = [
 
 // ─── Mock Profile Data ────────────────────────────────────────────────────────
 
-const MOCK_PROFILES: Record<string, {
+interface TraderProfile {
   name: string;
   handle: string;
   avatar: string;
@@ -75,7 +76,9 @@ const MOCK_PROFILES: Record<string, {
   topTickers: { ticker: string; sentiment: "bullish" | "bearish" | "neutral"; count: number }[];
   posts?: any[];
   badges?: string[];
-}> = {
+}
+
+const MOCK_PROFILES: Record<string, TraderProfile> = {
   minervini: {
     name: "Mark Minervini",
     handle: "@minervini",
@@ -221,7 +224,7 @@ function XPBar({ xp }: { xp: number }) {
 export default function TraderProfilePage() {
   const params = useParams<{ handle: string }>();
   const handle = params.handle || "minervini";
-  const [profile, setProfile] = useState(MOCK_PROFILES[handle.toLowerCase()] || DEFAULT_PROFILE);
+  const [profile, setProfile] = useState<TraderProfile>(MOCK_PROFILES[handle.toLowerCase()] || DEFAULT_PROFILE);
   const level = getLevel(profile.xp);
 
   const [isFollowing, setIsFollowing] = useState(false);
@@ -454,6 +457,7 @@ export default function TraderProfilePage() {
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: post.typeBg, color: post.typeColor }}>
                     {post.type}
                   </span>
+                  <TickerLogo symbol={post.ticker} size={20} />
                   <span className="font-black text-sm" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
                     {post.ticker}
                   </span>
@@ -484,7 +488,8 @@ export default function TraderProfilePage() {
                 className="flex items-center gap-4 p-4 rounded-2xl border"
                 style={{ background: "var(--card)", borderColor: "var(--border)" }}
               >
-                <span className="font-black text-base w-16" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
+                <TickerLogo symbol={t.ticker} size={28} />
+                <span className="font-black text-base" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
                   {t.ticker}
                 </span>
                 <span
