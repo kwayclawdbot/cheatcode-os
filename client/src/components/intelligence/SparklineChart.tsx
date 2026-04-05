@@ -5,8 +5,8 @@
 //      intraday shape from open/high/low/close/prev_close data
 // KEY FIX: Y-axis domain is set to [dataMin * 0.998, dataMax * 1.002] so the
 //          chart zooms into the actual price range instead of starting at 0.
-// MOBILE FIX: Uses ResizeObserver to measure actual container width instead of
-//             hardcoded 112px, so sparklines render correctly on all screen sizes.
+// MOBILE FIX: Uses ResizeObserver on a STABLE outer div (always mounted) so
+//             width is measured correctly regardless of loading state.
 import { useEffect, useState, useRef } from "react";
 
 interface SparklineChartProps {
@@ -93,13 +93,13 @@ function SvgSparkline({ values, color, width, height }: {
   width: number;
   height: number;
 }) {
-  if (values.length < 2) return null;
+  if (values.length < 2 || width <= 0) return null;
 
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
 
-  // Add 10% padding top and bottom so the line doesn't touch the edges
+  // Add 15% padding top and bottom so the line doesn't touch the edges
   const pad = range * 0.15;
   const domainMin = min - pad;
   const domainMax = max + pad;
@@ -115,10 +115,11 @@ function SvgSparkline({ values, color, width, height }: {
   const linePath = values.map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
   const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
 
-  const gradId = `sg-${color.replace("#", "")}-${values.length}`;
+  const gradId = `sg-${color.replace("#", "")}-${Math.round(width)}`;
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
+         style={{ display: "block", overflow: "visible" }}>
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.25" />
@@ -143,22 +144,30 @@ function SvgSparkline({ values, color, width, height }: {
 export function SparklineChart({ symbol, color, height = 40 }: SparklineChartProps) {
   const [values, setValues] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
-  const [width, setWidth] = useState(112);
+  const [width, setWidth] = useState(0);
+  // CRITICAL: containerRef is on a STABLE outer div that is ALWAYS mounted.
+  // This ensures ResizeObserver always has a valid element to measure,
+  // regardless of whether we're in loading or data state.
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Measure actual container width so the SVG fills it on all screen sizes
+  // Measure actual container width — stable ref, always present
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(entries => {
-      const w = entries[0]?.contentRect.width;
-      if (w && w > 0) setWidth(Math.floor(w));
-    });
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setWidth(Math.floor(w));
+    };
+    // Initial measurement (may be 0 if not yet painted)
+    measure();
+    // Also measure after a short delay in case the card hasn't fully laid out
+    const timer = setTimeout(measure, 50);
+    const ro = new ResizeObserver(() => measure());
     ro.observe(el);
-    // Initial measurement
-    const initial = el.getBoundingClientRect().width;
-    if (initial > 0) setWidth(Math.floor(initial));
-    return () => ro.disconnect();
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -173,19 +182,18 @@ export function SparklineChart({ symbol, color, height = 40 }: SparklineChartPro
     return () => { cancelled = true; };
   }, [symbol]);
 
-  if (loading || values.length < 3) {
-    return (
-      <div
-        ref={containerRef}
-        style={{ height, width: "100%" }}
-        className={loading ? "animate-pulse bg-muted/40 rounded" : "bg-muted/20 rounded"}
-      />
-    );
-  }
-
   return (
-    <div ref={containerRef} style={{ width: "100%", height }}>
-      <SvgSparkline values={values} color={color} width={width || 112} height={height} />
+    // Stable outer div — ALWAYS mounted so ResizeObserver always has a target
+    <div ref={containerRef} style={{ width: "100%", height, position: "relative" }}>
+      {loading || values.length < 3 ? (
+        // Loading skeleton — inside the stable outer div
+        <div
+          style={{ width: "100%", height: "100%" }}
+          className={loading ? "animate-pulse bg-muted/40 rounded" : "bg-muted/20 rounded"}
+        />
+      ) : (
+        <SvgSparkline values={values} color={color} width={width || 104} height={height} />
+      )}
     </div>
   );
 }

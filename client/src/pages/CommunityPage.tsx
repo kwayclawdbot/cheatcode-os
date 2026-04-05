@@ -857,54 +857,78 @@ export default function CommunityPage() {
           boxShadow: "0 1px 8px rgba(0,0,0,0.08)",
         }}
       >
-        {/* Single header row: Trending label + asset tabs + search + discover + collapse toggle */}
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-0 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mr-1">Trending</span>
-          <div className="flex items-center gap-0.5 flex-1">
-            {ASSET_TABS.map(tab => (
+        {/* Header: Trending label + scrollable asset tabs + actions */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-2 pb-1">
+          {/* Row 1: Trending + scrollable tabs + collapse toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground flex-shrink-0">Trending</span>
+            {/* Scrollable tab strip — no wrapping */}
+            <div className="flex items-center gap-0.5 overflow-x-auto flex-1 min-w-0" style={{ scrollbarWidth: "none" }}>
+              {ASSET_TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveAsset(tab.id)}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md transition-all flex-shrink-0"
+                  style={{
+                    background: activeAsset === tab.id ? "rgba(77,200,32,0.12)" : "transparent",
+                    color: activeAsset === tab.id ? "#4DC820" : "var(--muted-foreground)",
+                    border: activeAsset === tab.id ? "1px solid rgba(77,200,32,0.3)" : "1px solid transparent",
+                  }}
+                >
+                  {tab.icon} {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Right actions — always visible, no wrapping */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <form onSubmit={handleTickerSearch} className="relative hidden sm:block">
+                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={tickerSearch}
+                  onChange={e => setTickerSearch(e.target.value.toUpperCase())}
+                  placeholder="$TICKER"
+                  className="pl-6 pr-2.5 py-1.5 text-[11px] bg-muted border border-border rounded-lg focus:outline-none focus:border-[#4DC820] transition-colors w-20 text-foreground placeholder:text-muted-foreground uppercase font-bold"
+                />
+              </form>
+              <Link href="/discover">
+                <button className="hidden sm:flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border border-border hover:border-[#4DC820] hover:text-[#4DC820] transition-all text-muted-foreground">
+                  <TrendingUp size={10} /> Discover
+                </button>
+              </Link>
               <button
-                key={tab.id}
-                onClick={() => setActiveAsset(tab.id)}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md transition-all"
+                onClick={() => setNavCollapsed(!navCollapsed)}
+                title={navCollapsed ? "Show navigation" : "Hide navigation"}
+                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition-all"
                 style={{
-                  background: activeAsset === tab.id ? "rgba(77,200,32,0.12)" : "transparent",
-                  color: activeAsset === tab.id ? "#4DC820" : "var(--muted-foreground)",
-                  border: activeAsset === tab.id ? "1px solid rgba(77,200,32,0.3)" : "1px solid transparent",
+                  borderColor: navCollapsed ? "#4DC820" : "var(--border)",
+                  color: navCollapsed ? "#4DC820" : "var(--muted-foreground)",
+                  background: navCollapsed ? "rgba(77,200,32,0.08)" : "transparent",
                 }}
               >
-                {tab.icon} {tab.label}
+                {navCollapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+                <span className="hidden md:inline">{navCollapsed ? "Nav" : "Nav"}</span>
               </button>
-            ))}
+            </div>
           </div>
-          <form onSubmit={handleTickerSearch} className="relative">
-            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={tickerSearch}
-              onChange={e => setTickerSearch(e.target.value.toUpperCase())}
-              placeholder="$TICKER"
-              className="pl-6 pr-2.5 py-1.5 text-[11px] bg-muted border border-border rounded-lg focus:outline-none focus:border-[#4DC820] transition-colors w-24 text-foreground placeholder:text-muted-foreground uppercase font-bold"
-            />
-          </form>
-          <Link href="/discover">
-            <button className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-border hover:border-[#4DC820] hover:text-[#4DC820] transition-all text-muted-foreground">
-              <TrendingUp size={10} /> Discover
-            </button>
-          </Link>
-          {/* Collapse/expand nav toggle */}
-          <button
-            onClick={() => setNavCollapsed(!navCollapsed)}
-            title={navCollapsed ? "Show navigation" : "Hide navigation"}
-            className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition-all"
-            style={{
-              borderColor: navCollapsed ? "#4DC820" : "var(--border)",
-              color: navCollapsed ? "#4DC820" : "var(--muted-foreground)",
-              background: navCollapsed ? "rgba(77,200,32,0.08)" : "transparent",
-            }}
-          >
-            {navCollapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
-            <span className="hidden sm:inline">{navCollapsed ? "Nav" : "Hide Nav"}</span>
-          </button>
+          {/* Mobile-only row 2: search + discover */}
+          <div className="flex items-center gap-2 mt-1.5 sm:hidden">
+            <form onSubmit={handleTickerSearch} className="relative flex-1">
+              <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={tickerSearch}
+                onChange={e => setTickerSearch(e.target.value.toUpperCase())}
+                placeholder="Search $TICKER"
+                className="pl-6 pr-2.5 py-1.5 text-[11px] bg-muted border border-border rounded-lg focus:outline-none focus:border-[#4DC820] transition-colors w-full text-foreground placeholder:text-muted-foreground uppercase font-bold"
+              />
+            </form>
+            <Link href="/discover">
+              <button className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-border hover:border-[#4DC820] hover:text-[#4DC820] transition-all text-muted-foreground flex-shrink-0">
+                <TrendingUp size={10} /> Discover
+              </button>
+            </Link>
+          </div>
         </div>
         {/* Scrollable StockTwits-style ticker cards */}
         <TrendingTickerStrip
