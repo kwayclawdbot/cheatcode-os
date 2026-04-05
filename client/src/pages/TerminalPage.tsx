@@ -947,7 +947,7 @@ export default function TerminalPage() {
 
           {/* Right panel: CheatCode ALGO signals + stats */}
           <div className="hidden lg:flex w-52 flex-shrink-0 border-l flex-col overflow-y-auto" style={{ borderColor: "#1e2a3a" }}>
-            <AlgoSignalPanel symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol} />
+            {/* <AlgoSignalPanel symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol} /> */}
 
             <div className="px-3 py-2 border-t flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
