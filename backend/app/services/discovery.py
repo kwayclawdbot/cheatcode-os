@@ -93,11 +93,34 @@ async def add_creator(name: str, handle: str, tags: list[str], quality: float = 
         log.info("Creator already exists: %s", name)
         return None
 
-    # Resolve YouTube channel ID
+    # Resolve YouTube channel ID + pull profile data
+    s = get_settings()
     channel_id = await resolve_channel_id(handle)
     if not channel_id:
         log.warning("Could not resolve channel for %s (@%s)", name, handle)
         return None
+
+    # Fetch avatar, description, banner from YouTube
+    avatar_url = None
+    yt_description = ""
+    banner_url = None
+    yt_handle = ""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://www.googleapis.com/youtube/v3/channels",
+                params={"part": "snippet,brandingSettings", "id": channel_id, "key": s.youtube_api_key},
+                timeout=10,
+            )
+            data = resp.json()
+            if data.get("items"):
+                snippet = data["items"][0].get("snippet", {})
+                avatar_url = snippet.get("thumbnails", {}).get("high", {}).get("url")
+                yt_description = snippet.get("description", "")[:500]
+                yt_handle = snippet.get("customUrl", "")
+                banner_url = data["items"][0].get("brandingSettings", {}).get("image", {}).get("bannerExternalUrl")
+    except Exception:
+        pass
 
     record = {
         "name": name,
@@ -106,8 +129,10 @@ async def add_creator(name: str, handle: str, tags: list[str], quality: float = 
         "youtube_channel_id": channel_id,
         "quality_score": quality,
         "tags": tags,
-        "description": f"Finance/trading content creator. YouTube: @{handle}",
+        "avatar_url": avatar_url,
+        "description": yt_description or f"Finance/trading content creator. YouTube: @{handle}",
         "is_active": True,
+        "metadata": {"banner_url": banner_url, "youtube_handle": yt_handle} if banner_url else {},
     }
 
     result = db.table("creators").insert(record).execute()

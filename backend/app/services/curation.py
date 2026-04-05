@@ -19,13 +19,30 @@ async def fetch_channel_uploads(channel_id: str, max_results: int = 10) -> list[
         # Get uploads playlist ID
         resp = await client.get(
             "https://www.googleapis.com/youtube/v3/channels",
-            params={"part": "contentDetails", "id": channel_id, "key": s.youtube_api_key},
+            params={"part": "contentDetails,snippet,brandingSettings", "id": channel_id, "key": s.youtube_api_key},
         )
         data = resp.json()
         items = data.get("items", [])
         if not items:
             return []
-        uploads_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+        channel_info = items[0]
+        uploads_id = channel_info["contentDetails"]["relatedPlaylists"]["uploads"]
+
+        # Auto-update creator avatar + description from YouTube
+        snippet = channel_info.get("snippet", {})
+        avatar_url = snippet.get("thumbnails", {}).get("high", {}).get("url") or snippet.get("thumbnails", {}).get("default", {}).get("url")
+        banner_url = channel_info.get("brandingSettings", {}).get("image", {}).get("bannerExternalUrl")
+        yt_description = snippet.get("description", "")
+
+        if avatar_url:
+            db = get_supabase()
+            updates = {"avatar_url": avatar_url}
+            if yt_description and len(yt_description) > 10:
+                updates["description"] = yt_description[:500]
+            if banner_url:
+                updates["metadata"] = {"banner_url": banner_url, "youtube_handle": snippet.get("customUrl", "")}
+            db.table("creators").update(updates).eq("youtube_channel_id", channel_id).execute()
 
         # Get recent videos from uploads playlist
         resp = await client.get(
