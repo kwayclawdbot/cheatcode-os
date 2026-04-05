@@ -770,14 +770,14 @@ function MobileTerminalTabs({ mode, onSelectSymbol, activeSymbol, isLoggedIn }: 
   activeSymbol: string;
   isLoggedIn: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<"watchlist" | "chat" | "order">("watchlist");
+  const [activeTab, setActiveTab] = useState<"watchlist" | "chat">("watchlist");
   const config = MARKET_MODES[mode];
 
   return (
     <div className="lg:hidden flex flex-col border-t" style={{ borderColor: "#1e2a3a", background: "#0d1117", maxHeight: "45vh" }}>
       {/* Tab bar */}
       <div className="flex border-b flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
-        {(["watchlist", "chat", "order"] as const).map(tab => (
+        {(["watchlist", "chat"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -788,7 +788,7 @@ function MobileTerminalTabs({ mode, onSelectSymbol, activeSymbol, isLoggedIn }: 
               background: "transparent",
             }}
           >
-            {tab === "watchlist" ? "📋 Watchlist" : tab === "chat" ? "💬 Chat" : "📊 Order"}
+            {tab === "watchlist" ? "📋 Watchlist" : "💬 Chat"}
           </button>
         ))}
       </div>
@@ -798,7 +798,6 @@ function MobileTerminalTabs({ mode, onSelectSymbol, activeSymbol, isLoggedIn }: 
           <WatchlistPanel mode={mode} onSelectSymbol={onSelectSymbol} activeSymbol={activeSymbol} />
         )}
         {activeTab === "chat" && <ChatSidebar mode={mode} />}
-        {activeTab === "order" && <OrderPanel mode={mode} isLoggedIn={isLoggedIn} />}
       </div>
     </div>
   );

@@ -1,13 +1,14 @@
-// CheatCode OS — Top Navigation v5
+// CheatCode OS — Top Navigation v6
 // Menu structure:
-//   Home | Ideas | Community | Analyze | Watch | Learn ▾ | Trade
+//   Home | Community ▾ | Analyze | Watch | Learn ▾ | Trade | Assist
+//   Community dropdown: Community Feed, Ideas
 //   Learn dropdown: Courses, Coaches
 // Mobile: hamburger slide-out drawer with same hierarchy
 // Dark mode: full support via useTheme
 
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy } from "lucide-react";
+import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -19,8 +20,25 @@ type NavItem =
 
 const NAV_ITEMS: NavItem[] = [
   { type: "link", href: "/home",        label: "Home",      emoji: "🏠" },
-  { type: "link", href: "/feed",        label: "Ideas",     emoji: "🃏" },
-  { type: "link", href: "/community",   label: "Community", emoji: "💬" },
+  {
+    type: "dropdown",
+    label: "Community",
+    emoji: "💬",
+    children: [
+      {
+        href: "/community",
+        label: "Community Feed",
+        description: "Discuss markets, share setups & connect with traders",
+        icon: <Users size={16} />,
+      },
+      {
+        href: "/feed",
+        label: "Ideas",
+        description: "Swipe through trade ideas & market calls",
+        icon: <Lightbulb size={16} />,
+      },
+    ],
+  },
   { type: "link", href: "/intelligence",label: "Analyze",   emoji: "🧠" },
   { type: "link", href: "/topics",      label: "Watch",     emoji: "🎬" },
   {
@@ -43,22 +61,24 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   { type: "link", href: "/terminal",    label: "Trade",     emoji: "📊" },
+  { type: "link", href: "/assist",      label: "Assist",    emoji: "✨" },
 ];
 
 // All links flattened for mobile drawer
 const ALL_MOBILE_LINKS = [
-  { href: "/home",          label: "Home",       emoji: "🏠" },
-  { href: "/feed",          label: "Ideas",      emoji: "🃏" },
-  { href: "/community",     label: "Community",  emoji: "💬" },
-  { href: "/intelligence",  label: "Analyze",    emoji: "🧠" },
-  { href: "/topics",        label: "Watch",      emoji: "🎬" },
-  { href: "/learn",         label: "Courses",    emoji: "📖", indent: true },
-  { href: "/coaches-corner",label: "Coaches",    emoji: "🏆", indent: true },
-  { href: "/terminal",      label: "Trade",      emoji: "📊" },
-  { href: "/journal",       label: "Journal",    emoji: "📓" },
-  { href: "/newsletter",    label: "Newsletter", emoji: "✉️" },
-  { href: "/pricing",       label: "Pricing",    emoji: "⚡" },
-  { href: "/admin",         label: "Admin",      emoji: "⚙️" },
+  { href: "/home",          label: "Home",            emoji: "🏠" },
+  { href: "/community",     label: "Community Feed",  emoji: "💬" },
+  { href: "/feed",          label: "Ideas",           emoji: "🃏", indent: true },
+  { href: "/intelligence",  label: "Analyze",         emoji: "🧠" },
+  { href: "/topics",        label: "Watch",           emoji: "🎬" },
+  { href: "/learn",         label: "Courses",         emoji: "📖", indent: true },
+  { href: "/coaches-corner",label: "Coaches",         emoji: "🏆", indent: true },
+  { href: "/terminal",      label: "Trade",           emoji: "📊" },
+  { href: "/assist",        label: "Assist",          emoji: "✨" },
+  { href: "/journal",       label: "Journal",         emoji: "📓" },
+  { href: "/newsletter",    label: "Newsletter",      emoji: "✉️" },
+  { href: "/pricing",       label: "Pricing",         emoji: "⚡" },
+  { href: "/admin",         label: "Admin",           emoji: "⚙️" },
 ];
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
