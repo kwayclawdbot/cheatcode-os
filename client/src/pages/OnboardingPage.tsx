@@ -720,9 +720,19 @@ export default function OnboardingPage() {
     }));
 
   const finish = () => {
-    // Save onboarding state to localStorage
+    // Save to localStorage as fallback
     localStorage.setItem("cc-onboarding-complete", "true");
     localStorage.setItem("cc-trader-profile", JSON.stringify(state));
+    // Save to API
+    import("@/lib/api").then(({ completeOnboarding }) => {
+      completeOnboarding({
+        assets: state.assets,
+        style: state.style,
+        experience: state.experience,
+        watchlist: state.watchlist,
+        following_creators: state.following,
+      }).catch(() => {});
+    });
     toast.success("Welcome to CheatCode! Your feed is ready. 🎉");
     navigate("/feed");
   };

@@ -1,9 +1,10 @@
 """Admin API — curation management, brain triggers, creator management."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from app.core.supabase import get_supabase
 from app.core.auth import require_user
+from app.core.config import get_settings
 from app.services.curation import run_curation_cycle, process_video, fetch_channel_uploads
 from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.newsletter import generate_daily_newsletter
@@ -242,3 +243,120 @@ async def get_stats(user: dict = Depends(_require_admin)):
         "tracked_tickers": ticker_count.count or 0,
         "active_predictions": prediction_count.count or 0,
     }
+
+
+# ── Member Management ───────────────────────────────────────────────────────
+
+
+@router.get("/members")
+async def list_members(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    tier: str | None = None,
+    user: dict = Depends(_require_admin),
+):
+    """List all user profiles with pagination."""
+    db = get_supabase()
+    offset = (page - 1) * per_page
+
+    # Get total count
+    count_q = db.table("profiles").select("id", count="exact")
+    if tier:
+        count_q = count_q.eq("tier", tier)
+    total = count_q.execute().count or 0
+
+    # Get page of results
+    q = db.table("profiles").select("*").order("created_at", desc=True).range(offset, offset + per_page - 1)
+    if tier:
+        q = q.eq("tier", tier)
+    result = q.execute()
+
+    return {
+        "members": result.data or [],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+class TierUpdate(BaseModel):
+    tier: str
+
+
+@router.put("/members/{user_id}/tier")
+async def update_member_tier(user_id: str, body: TierUpdate, user: dict = Depends(_require_admin)):
+    """Update a user's subscription tier."""
+    valid_tiers = ("free", "pro", "elite", "admin")
+    if body.tier not in valid_tiers:
+        raise HTTPException(400, f"Invalid tier. Must be one of: {', '.join(valid_tiers)}")
+
+    db = get_supabase()
+    result = db.table("profiles").update({"tier": body.tier}).eq("id", user_id).execute()
+    if not result.data:
+        raise HTTPException(404, "User not found")
+    return result.data[0]
+
+
+# ── Activity Feed ───────────────────────────────────────────────────────────
+
+
+@router.get("/activity")
+async def get_activity(limit: int = Query(100, ge=1, le=500), user: dict = Depends(_require_admin)):
+    """Recent user events (signups, upgrades, logins, etc.)."""
+    db = get_supabase()
+    result = (
+        db.table("events")
+        .select("*, profiles(display_name, email:id)")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+# ── Revenue Summary ─────────────────────────────────────────────────────────
+
+
+@router.get("/revenue")
+async def get_revenue(user: dict = Depends(_require_admin)):
+    """Stripe revenue summary — subscriber counts by tier."""
+    db = get_supabase()
+    s = get_settings()
+
+    # Count subscribers by tier
+    free_count = db.table("profiles").select("id", count="exact").eq("tier", "free").execute()
+    pro_count = db.table("profiles").select("id", count="exact").eq("tier", "pro").execute()
+    elite_count = db.table("profiles").select("id", count="exact").eq("tier", "elite").execute()
+
+    tiers = {
+        "free": {"count": free_count.count or 0, "mrr": 0},
+        "pro": {"count": pro_count.count or 0},
+        "elite": {"count": elite_count.count or 0},
+    }
+
+    # Try fetching Stripe data if key is available
+    stripe_key = getattr(s, "stripe_secret_key", None)
+    if stripe_key:
+        try:
+            import stripe
+            stripe.api_key = stripe_key
+
+            # Fetch active subscriptions
+            subs = stripe.Subscription.list(status="active", limit=100)
+            total_mrr = 0
+            for sub in subs.auto_paging_iter():
+                for item in sub["items"]["data"]:
+                    amount = item["price"]["unit_amount"] or 0
+                    interval = item["price"].get("recurring", {}).get("interval", "month")
+                    if interval == "year":
+                        total_mrr += amount / 12
+                    else:
+                        total_mrr += amount
+            tiers["stripe_mrr"] = round(total_mrr / 100, 2)  # cents to dollars
+        except Exception:
+            tiers["stripe_mrr"] = None
+            tiers["stripe_error"] = "Could not fetch Stripe data"
+    else:
+        tiers["stripe_mrr"] = None
+
+    return tiers

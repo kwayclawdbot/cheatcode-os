@@ -5,7 +5,7 @@
  * Route: /traders/:handle
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -219,11 +219,37 @@ function XPBar({ xp }: { xp: number }) {
 export default function TraderProfilePage() {
   const params = useParams<{ handle: string }>();
   const handle = params.handle || "minervini";
-  const profile = MOCK_PROFILES[handle.toLowerCase()] || DEFAULT_PROFILE;
+  const [profile, setProfile] = useState(MOCK_PROFILES[handle.toLowerCase()] || DEFAULT_PROFILE);
   const level = getLevel(profile.xp);
 
   const [isFollowing, setIsFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<"posts" | "trades" | "stats" | "badges">("posts");
+
+  // Fetch real profile from API
+  useEffect(() => {
+    import("@/lib/api").then(({ fetchTraderProfile }) => {
+      fetchTraderProfile(handle).then((data: any) => {
+        if (data && !data.detail) {
+          setProfile({
+            ...profile,
+            name: data.display_name || profile.name,
+            handle: `@${data.handle || handle}`,
+            avatar: data.avatar_url || profile.avatar,
+            style: data.trading_style || profile.style,
+            xp: data.xp || 0,
+            followers: data.follower_count || 0,
+            following: data.following_count || 0,
+            totalTrades: data.total_trades || 0,
+            winRate: data.win_rate || 0,
+            bio: data.bio || profile.bio,
+            posts: data.recent_posts || profile.posts,
+            badges: data.badges?.map((b: any) => b.badge_id) || [],
+          });
+          setIsFollowing(data.is_following || false);
+        }
+      }).catch(() => {});
+    });
+  }, [handle]);
 
   const PROFILE_TABS = [
     { id: "posts" as const, label: "Posts" },

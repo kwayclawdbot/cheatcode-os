@@ -8,7 +8,7 @@ import { ScoreRing } from "@/components/shared/ScoreRing";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { fetchTicker, fetchRadar, type TickerData, type RadarData } from "@/lib/api";
+import { fetchTicker, fetchRadar, trackEvent, type TickerData, type RadarData } from "@/lib/api";
 
 function useRadarTickers() {
   const [tickers, setTickers] = useState<any[]>([]);
@@ -109,6 +109,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
     if (!ticker) return;
     setLoading(true);
     setData(null);
+    trackEvent("ticker_lookup", { symbol: ticker.toUpperCase() });
     fetchTicker(ticker.toUpperCase())
       .then((d) => { setData(normalizeTicker(d)); setLoading(false); })
       .catch(() => { setData(null); setLoading(false); });

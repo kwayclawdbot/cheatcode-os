@@ -290,7 +290,47 @@ function WatchlistPanel({ mode, onSelectSymbol, activeSymbol }: {
 }) {
   const config = MARKET_MODES[mode];
   const [search, setSearch] = useState("");
-  const filtered = config.watchlist.filter(w =>
+  const [liveWatchlist, setLiveWatchlist] = useState(config.watchlist);
+
+  // Fetch live prices for stocks mode
+  useEffect(() => {
+    if (mode !== "stocks") { setLiveWatchlist(config.watchlist); return; }
+    const symbols = config.watchlist.map(w => w.symbol).join(",");
+    import("@/lib/api").then(({ fetchQuotes }) => {
+      fetchQuotes(symbols).then((quotes: any[]) => {
+        if (!quotes?.length) return;
+        const qmap = Object.fromEntries(quotes.map(q => [q.symbol, q]));
+        setLiveWatchlist(config.watchlist.map(w => {
+          const q = qmap[w.symbol];
+          if (!q) return w;
+          return {
+            ...w,
+            price: `$${q.price.toFixed(2)}`,
+            change: q.change >= 0 ? `+${q.change.toFixed(2)}` : q.change.toFixed(2),
+            pct: q.change_pct >= 0 ? `+${q.change_pct.toFixed(2)}%` : `${q.change_pct.toFixed(2)}%`,
+            up: q.change_pct >= 0,
+          };
+        }));
+      }).catch(() => {});
+    });
+    // Refresh every 30s
+    const interval = setInterval(() => {
+      import("@/lib/api").then(({ fetchQuotes }) => {
+        fetchQuotes(symbols).then((quotes: any[]) => {
+          if (!quotes?.length) return;
+          const qmap = Object.fromEntries(quotes.map(q => [q.symbol, q]));
+          setLiveWatchlist(prev => prev.map(w => {
+            const q = qmap[w.symbol];
+            if (!q) return w;
+            return { ...w, price: `$${q.price.toFixed(2)}`, change: q.change >= 0 ? `+${q.change.toFixed(2)}` : q.change.toFixed(2), pct: q.change_pct >= 0 ? `+${q.change_pct.toFixed(2)}%` : `${q.change_pct.toFixed(2)}%`, up: q.change_pct >= 0 };
+          }));
+        }).catch(() => {});
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [mode]);
+
+  const filtered = liveWatchlist.filter(w =>
     w.symbol.toLowerCase().includes(search.toLowerCase()) ||
     w.name.toLowerCase().includes(search.toLowerCase())
   );

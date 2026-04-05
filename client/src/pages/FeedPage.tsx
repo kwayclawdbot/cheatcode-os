@@ -5,7 +5,7 @@
  * Composer modal, feed tabs, XP toast on post.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -719,16 +719,52 @@ const FEED_TABS: { id: FeedTab; label: string; icon: React.ElementType }[] = [
 // ─── Main Feed Page ───────────────────────────────────────────────────────────
 
 export default function FeedPage() {
-  const [activeTab, setActiveTab] = useState<FeedTab>("following");
+  const [activeTab, setActiveTab] = useState<FeedTab>("discover");
   const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
   const [composerOpen, setComposerOpen] = useState(false);
 
+  // Fetch live feed, fallback to mock
+  useEffect(() => {
+    import("@/lib/api").then(({ fetchFeed }) => {
+      fetchFeed(activeTab).then((data: any[]) => {
+        if (data?.length) {
+          setPosts(data.map((p: any) => ({
+            id: p.id,
+            type: p.post_type || "market_take",
+            user: p.user || { name: "Trader", handle: "", avatar: "", style: "", level: "Rookie", levelColor: "#667085" },
+            timestamp: p.created_at ? new Date(p.created_at).toLocaleDateString() : "Just now",
+            sentiment: p.sentiment,
+            ticker: p.ticker,
+            timeframe: p.timeframe,
+            entry: p.entry_price,
+            target: p.target_price,
+            stop: p.stop_price,
+            thesis: p.thesis,
+            text: p.body,
+            image: p.image_url,
+            likes: p.likes_count || 0,
+            comments: p.comments_count || 0,
+            reposts: p.reposts_count || 0,
+            liked: p.user_liked || false,
+            bookmarked: p.user_bookmarked || false,
+          })));
+        }
+      }).catch(() => {});
+    });
+  }, [activeTab]);
+
   const handleLike = (id: string) => {
-    setPosts(ps => ps.map(p => p.id === id ? { ...p, liked: !p.liked } : p));
+    setPosts(ps => ps.map(p => p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p));
+    import("@/lib/api").then(({ likePost, unlikePost }) => {
+      const post = posts.find(p => p.id === id);
+      if (post?.liked) unlikePost(id).catch(() => {});
+      else likePost(id).catch(() => {});
+    });
   };
 
   const handleBookmark = (id: string) => {
     setPosts(ps => ps.map(p => p.id === id ? { ...p, bookmarked: !p.bookmarked } : p));
+    import("@/lib/api").then(({ bookmarkPost }) => bookmarkPost(id).catch(() => {}));
     toast.success("Saved to bookmarks");
   };
 

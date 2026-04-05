@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { fetchContentDetail, fetchContent, normalizeContentCard } from "@/lib/api";
+import { fetchContentDetail, fetchContent, normalizeContentCard, trackEvent } from "@/lib/api";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
 
 function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -74,6 +74,7 @@ export default function VideoPage() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
+    trackEvent("video_view", { content_id: id });
     fetchContentDetail(id)
       .then((detail) => {
         const n = normalizeContentCard(detail);

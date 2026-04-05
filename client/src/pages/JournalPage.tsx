@@ -5,7 +5,7 @@
  * Gated behind broker connection.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, TrendingUp, TrendingDown, Target, AlertTriangle,
@@ -570,6 +570,26 @@ export default function JournalPage() {
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [activeTab, setActiveTab] = useState<"log" | "stats" | "patterns">("log");
 
+  // Load real entries from API
+  useEffect(() => {
+    import("@/lib/api").then(({ fetchJournalEntries }) => {
+      fetchJournalEntries().then((data: any[]) => {
+        if (data?.length) {
+          setEntries(data.map((e: any) => ({
+            id: e.id, date: e.date, ticker: e.ticker, direction: e.direction,
+            entry: e.entry_price, exit: e.exit_price || 0, size: e.size || 0,
+            stopLoss: e.stop_loss || 0, target: e.target || 0,
+            outcome: e.outcome || "open", pnl: e.pnl || 0, rr: e.risk_reward || 0,
+            setup: e.setup || "", preNotes: e.pre_notes || "", postNotes: e.post_notes || "",
+            emotions: e.emotions || [], rulesFollowed: e.rules_followed ?? true,
+            ruleViolation: e.rule_violation, screenshot: e.screenshot_url, kaiAnalysis: e.kai_analysis,
+          })));
+          setBrokerUnlocked(true);
+        }
+      }).catch(() => {});
+    });
+  }, []);
+
   // Stats
   const wins = entries.filter(e => e.outcome === "win").length;
   const losses = entries.filter(e => e.outcome === "loss").length;
@@ -599,6 +619,16 @@ export default function JournalPage() {
       rulesFollowed: true,
     };
     setEntries(prev => [newEntry, ...prev]);
+    // Save to API
+    import("@/lib/api").then(({ createJournalEntry }) => {
+      createJournalEntry({
+        ticker: newEntry.ticker, direction: newEntry.direction,
+        entry_price: newEntry.entry, size: newEntry.size,
+        stop_loss: newEntry.stopLoss, target: newEntry.target,
+        setup: newEntry.setup, pre_notes: newEntry.preNotes,
+        emotions: newEntry.emotions,
+      }).catch(() => {});
+    });
   };
 
   if (!brokerUnlocked) {

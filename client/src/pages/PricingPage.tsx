@@ -128,19 +128,27 @@ export default function PricingPage() {
                   <p className="text-xs text-muted-foreground mb-5">{tier.description}</p>
 
                   {tier.ctaType === "gradient" && (
-                    <button className="w-full text-[#101828] text-sm font-bold py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2">
+                    <button onClick={() => {
+                      import("@/lib/api").then(({ createCheckout }) => {
+                        createCheckout(tier.id as "pro" | "elite").then(r => { if (r.url) window.location.href = r.url; }).catch(() => window.location.href = "/onboarding");
+                      });
+                    }} className="w-full text-[#101828] text-sm font-bold py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2">
                       <Zap size={13} />
                       {tier.cta}
                     </button>
                   )}
                   {tier.ctaType === "dark" && (
-                    <button className="w-full text-white text-sm font-bold py-2.5 rounded-xl hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2"
+                    <button onClick={() => {
+                      import("@/lib/api").then(({ createCheckout }) => {
+                        createCheckout(tier.id as "pro" | "elite").then(r => { if (r.url) window.location.href = r.url; }).catch(() => window.location.href = "/onboarding");
+                      });
+                    }} className="w-full text-white text-sm font-bold py-2.5 rounded-xl hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2"
                             style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
                       {tier.cta}
                     </button>
                   )}
                   {tier.ctaType === "outline" && (
-                    <button className="w-full text-muted-foreground text-sm font-semibold py-2.5 rounded-xl border border-border hover:bg-muted transition-colors mb-5">
+                    <button onClick={() => window.location.href = "/onboarding"} className="w-full text-muted-foreground text-sm font-semibold py-2.5 rounded-xl border border-border hover:bg-muted transition-colors mb-5">
                       {tier.cta}
                     </button>
                   )}
