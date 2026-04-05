@@ -73,6 +73,8 @@ const MOCK_PROFILES: Record<string, {
   brokerConnected: boolean;
   joinDate: string;
   topTickers: { ticker: string; sentiment: "bullish" | "bearish" | "neutral"; count: number }[];
+  posts?: any[];
+  badges?: string[];
 }> = {
   minervini: {
     name: "Mark Minervini",
@@ -242,8 +244,6 @@ export default function TraderProfilePage() {
             totalTrades: data.total_trades || 0,
             winRate: data.win_rate || 0,
             bio: data.bio || profile.bio,
-            posts: data.recent_posts || profile.posts,
-            badges: data.badges?.map((b: any) => b.badge_id) || [],
           });
           setIsFollowing(data.is_following || false);
         }

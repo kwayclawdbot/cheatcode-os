@@ -13,12 +13,13 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
-  { href: "/", label: "Home", emoji: "🏠" },
-  { href: "/feed", label: "Feed", emoji: "📡" },
+  { href: "/home", label: "Home", emoji: "🏠" },
+  { href: "/feed", label: "Swipe", emoji: "🃏" },
+  { href: "/community", label: "Community", emoji: "💬" },
   { href: "/intelligence", label: "Intelligence", emoji: "🧠" },
   { href: "/topics", label: "Browse", emoji: "🎬" },
   { href: "/learn", label: "Learn", emoji: "📚" },
-  { href: "/coaches-corner", label: "Coaches Corner", emoji: "🏆" },
+  { href: "/coaches-corner", label: "Coaches", emoji: "🏆" },
   { href: "/terminal", label: "Terminal", emoji: "📊" },
   { href: "/journal", label: "Journal", emoji: "📓" },
   { href: "/newsletter", label: "Newsletter", emoji: "✉️" },
