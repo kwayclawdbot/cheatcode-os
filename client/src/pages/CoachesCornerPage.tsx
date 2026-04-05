@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   Award, Star, Users, BookOpen, Calendar, Zap, ArrowRight,
   CheckCircle, Search, ChevronRight, Shield, TrendingUp, Play,
@@ -223,6 +224,8 @@ const STYLE_FILTERS = ["All", "Day Trading", "Swing Trading", "Position Trading"
 export default function CoachesCornerPage() {
   const [search, setSearch] = useState("");
   const [styleFilter, setStyleFilter] = useState("All");
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const filtered = COACHES.filter(c => {
     const q = search.toLowerCase();
@@ -241,7 +244,7 @@ export default function CoachesCornerPage() {
 
       <main className="page-enter">
         {/* ── Hero ── */}
-        <div className="border-b border-border" style={{ background: "linear-gradient(180deg, #F9FAFB 0%, #FFFFFF 100%)" }}>
+        <div className="border-b border-border" style={{ background: isDark ? "linear-gradient(180deg, #1a2035 0%, #2B3245 100%)" : "linear-gradient(180deg, #F9FAFB 0%, #FFFFFF 100%)" }}>
           <div className="container mx-auto py-10">
             <div className="max-w-3xl">
               <div className="flex items-center gap-2 mb-4">

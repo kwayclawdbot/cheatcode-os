@@ -327,7 +327,7 @@ export default function CoachProfilePage() {
   const params = useParams<{ id: string }>();
   const coach = getCoachById(params.id);
   const [selectedProduct, setSelectedProduct] = useState<CoachProduct | null>(null);
-  const [activeTab, setActiveTab] = useState<"products" | "about" | "reviews">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "about" | "reviews">("about");
 
   if (!coach) {
     return (
