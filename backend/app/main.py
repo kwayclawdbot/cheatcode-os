@@ -17,12 +17,12 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start background jobs
-    scheduler.add_job(run_curation_cycle, "interval", minutes=30, id="curation")
+    scheduler.add_job(run_curation_cycle, "cron", hour=6, minute=0, id="curation")  # Once daily at 6am UTC
     scheduler.add_job(run_brain_cycle, "interval", minutes=60, id="brain")
-    scheduler.add_job(generate_radar, "cron", hour=6, minute=0, id="radar_morning")  # 6am UTC
-    scheduler.add_job(generate_radar, "cron", hour=14, minute=0, id="radar_midday")  # 2pm UTC
-    scheduler.add_job(sync_ticker_prices, "interval", minutes=5, id="price_sync")  # Live prices every 5 min
-    scheduler.add_job(run_daily_analysis, "cron", hour=7, minute=30, id="daily_analysis")  # 7:30am UTC daily
+    scheduler.add_job(generate_radar, "cron", hour=6, minute=30, id="radar_morning")  # After curation
+    scheduler.add_job(generate_radar, "cron", hour=14, minute=0, id="radar_midday")
+    scheduler.add_job(sync_ticker_prices, "interval", minutes=60, id="price_sync")  # Hourly EODHD
+    scheduler.add_job(run_daily_analysis, "cron", hour=7, minute=30, id="daily_analysis")
     scheduler.start()
     yield
     scheduler.shutdown()
