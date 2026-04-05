@@ -9,6 +9,7 @@ from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.newsletter import generate_daily_newsletter
 from app.services.ingestion import ingest_all_pending, ingest_content
 from app.services.repurposing import repurpose_content, repurpose_all_pending, extract_clips, render_clip, post_clip
+from app.services.live_clipper import clip_content, find_clip_segments, render_live_clip
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -95,6 +96,22 @@ async def list_clips(status: str = None, user: dict = Depends(_require_admin)):
         q = q.eq("status", status)
     result = q.limit(100).execute()
     return result.data or []
+
+
+# ── Live Clips (cut from YouTube) ────────────────────────────���───────────────
+
+@router.post("/liveclip/{content_id}")
+async def trigger_live_clip(content_id: str, auto_render: bool = True, user: dict = Depends(_require_admin)):
+    """Find best segments and clip directly from YouTube video."""
+    result = await clip_content(content_id, auto_render=auto_render)
+    return result
+
+
+@router.post("/liveclip/render/{clip_id}")
+async def trigger_live_render(clip_id: str, user: dict = Depends(_require_admin)):
+    """Render a specific live clip."""
+    path = await render_live_clip(clip_id)
+    return {"render_path": path} if path else {"error": "Render failed"}
 
 
 @router.post("/newsletter/generate")
