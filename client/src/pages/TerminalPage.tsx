@@ -38,7 +38,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Stocks",
     icon: <TrendingUp size={14} />,
     color: "#4DC820",
-    defaultSymbol: "NVDA",
+    defaultSymbol: "NASDAQ:NVDA",
     watchlist: [
       { symbol: "NVDA", name: "NVIDIA Corp", price: "875.40", change: "+21.30", pct: "+2.49%", up: true },
       { symbol: "TSLA", name: "Tesla Inc", price: "182.63", change: "-4.21", pct: "-2.25%", up: false },
@@ -64,7 +64,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Futures",
     icon: <BarChart2 size={14} />,
     color: "#F79009",
-    defaultSymbol: "ES",
+    defaultSymbol: "CME_MINI:ES1!",
     watchlist: [
       { symbol: "ES1!", name: "S&P 500 E-mini", price: "5,248.50", change: "+12.25", pct: "+0.23%", up: true },
       { symbol: "NQ1!", name: "Nasdaq E-mini", price: "18,342.00", change: "-45.50", pct: "-0.25%", up: false },
@@ -90,7 +90,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Forex",
     icon: <Globe size={14} />,
     color: "#00AEEF",
-    defaultSymbol: "EURUSD",
+    defaultSymbol: "FX:EURUSD",
     watchlist: [
       { symbol: "EUR/USD", name: "Euro / US Dollar", price: "1.0842", change: "+0.0018", pct: "+0.17%", up: true },
       { symbol: "GBP/USD", name: "Pound / US Dollar", price: "1.2634", change: "-0.0024", pct: "-0.19%", up: false },
@@ -116,7 +116,7 @@ const MARKET_MODES: Record<MarketMode, {
     label: "Crypto",
     icon: <Bitcoin size={14} />,
     color: "#7B2FBE",
-    defaultSymbol: "BTC",
+    defaultSymbol: "BINANCE:BTCUSDT",
     watchlist: [
       { symbol: "BTC/USDT", name: "Bitcoin", price: "68,420.00", change: "+1,240.00", pct: "+1.85%", up: true },
       { symbol: "ETH/USDT", name: "Ethereum", price: "3,482.50", change: "-48.20", pct: "-1.37%", up: false },
@@ -188,6 +188,179 @@ const MOCK_MESSAGES: Record<string, { user: string; avatar: string; color: strin
     { user: "CryptoWhale", avatar: "CW", color: "#7B2FBE", time: "9:28 AM", text: "Key levels: 68k support, 70k resistance, 72k ATH. Clean range.", badge: "Elite" },
   ],
 };
+
+// ─── CheatCode ALGO Signal Panel ─────────────────────────────────────────────
+function AlgoSignalPanel({ symbol }: { symbol: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!symbol) return;
+    setLoading(true);
+    import("@/lib/api").then(({ fetchChartData }) => {
+      fetchChartData(symbol, "medium", "d", 100, "heatmap")
+        .then((d: any) => { setData(d); setLoading(false); })
+        .catch(() => setLoading(false));
+    });
+  }, [symbol]);
+
+  if (loading) {
+    return (
+      <div className="px-3 py-4 flex items-center justify-center">
+        <div className="w-6 h-6 rounded-full border-2 border-[#00AEEF] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (!data || data.error) {
+    return (
+      <div className="px-3 py-3">
+        <p className="text-[10px]" style={{ color: "#667085" }}>No algo data for {symbol}</p>
+      </div>
+    );
+  }
+
+  const meta = data.metadata || {};
+  const trade = data.active_trade;
+  const isBull = meta.current_trend === 1;
+  const signals = data.signals || [];
+  const lastSignal = signals[signals.length - 1];
+
+  return (
+    <div className="flex flex-col">
+      {/* Header */}
+      <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <div className="w-2 h-2 rounded-full" style={{ background: "#00AEEF" }} />
+          <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#00AEEF" }}>
+            CheatCode ALGO
+          </p>
+        </div>
+      </div>
+
+      {/* Signal badge */}
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#1e2a3a" }}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#667085" }}>Signal</span>
+          <span className="text-[11px] font-black px-2 py-0.5 rounded"
+                style={{
+                  background: isBull ? "#00FF0018" : "#FF000018",
+                  color: isBull ? "#00FF00" : "#FF0000",
+                  fontFamily: "var(--font-mono)",
+                }}>
+            {isBull ? "▲ BULL" : "▼ BEAR"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px]" style={{ color: "#667085" }}>RSI</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)" }}>
+            {meta.current_rsi}
+          </span>
+        </div>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[10px]" style={{ color: "#667085" }}>Signals</span>
+          <span className="text-[11px] font-semibold" style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)" }}>
+            {meta.total_signals}
+          </span>
+        </div>
+      </div>
+
+      {/* Active trade levels */}
+      {trade && (
+        <div className="px-3 py-2.5 border-b" style={{ borderColor: "#1e2a3a" }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "#667085" }}>
+            Active Trade
+          </p>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#00AEEF" }} />
+                <span style={{ color: "#667085" }}>Entry</span>
+              </span>
+              <span className="text-[11px] font-bold" style={{ color: "#00AEEF", fontFamily: "var(--font-mono)" }}>
+                ${trade.entry}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#FF0000" }} />
+                <span style={{ color: "#667085" }}>Stop Loss</span>
+              </span>
+              <span className="text-[11px] font-bold" style={{ color: "#FF0000", fontFamily: "var(--font-mono)" }}>
+                ${trade.sl}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#00FF00" }} />
+                <span style={{ color: "#667085" }}>TP1</span>
+              </span>
+              <span className="text-[11px] font-bold" style={{ color: "#00FF00", fontFamily: "var(--font-mono)" }}>
+                ${trade.tp1}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#00FF0088" }} />
+                <span style={{ color: "#667085" }}>TP2</span>
+              </span>
+              <span className="text-[11px] font-bold" style={{ color: "#00FF0088", fontFamily: "var(--font-mono)" }}>
+                ${trade.tp2}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#00FF0055" }} />
+                <span style={{ color: "#667085" }}>TP3</span>
+              </span>
+              <span className="text-[11px] font-bold" style={{ color: "#00FF0055", fontFamily: "var(--font-mono)" }}>
+                ${trade.tp3}
+              </span>
+            </div>
+          </div>
+
+          {/* R:R visual */}
+          <div className="mt-2 pt-2 border-t" style={{ borderColor: "#1e2a3a22" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px]" style={{ color: "#667085" }}>Direction</span>
+              <span className="text-[10px] font-bold" style={{ color: trade.direction === "long" ? "#00FF00" : "#FF0000" }}>
+                {trade.direction.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Last 3 signals */}
+      {signals.length > 0 && (
+        <div className="px-3 py-2.5" style={{ borderColor: "#1e2a3a" }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "#667085" }}>
+            Recent Signals
+          </p>
+          <div className="space-y-1">
+            {signals.slice(-3).reverse().map((sig: any, i: number) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-bold px-1 rounded"
+                        style={{
+                          background: sig.direction === "long" ? "#00FF0020" : "#FF000020",
+                          color: sig.direction === "long" ? "#00FF00" : "#FF0000",
+                        }}>
+                    {sig.direction === "long" ? "B" : "S"}
+                  </span>
+                  <span className="text-[10px]" style={{ color: "#667085" }}>{sig.time}</span>
+                </div>
+                <span className="text-[10px] font-semibold" style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)" }}>
+                  ${sig.entry}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── TradingView Chart (official JS widget) ──────────────────────────────────
 // TradingView blocks cross-origin iframes (X-Frame-Options: SAMEORIGIN).
@@ -679,7 +852,15 @@ export default function TerminalPage() {
   };
 
   const handleSelectSymbol = (sym: string) => {
-    setSymbol(sym);
+    const tvMap: Record<string, string> = {
+      "NVDA": "NASDAQ:NVDA", "TSLA": "NASDAQ:TSLA", "AMD": "NASDAQ:AMD",
+      "AAPL": "NASDAQ:AAPL", "META": "NASDAQ:META", "MSFT": "NASDAQ:MSFT",
+      "NFLX": "NASDAQ:NFLX", "SMCI": "NASDAQ:SMCI",
+      "ES1!": "CME_MINI:ES1!", "NQ1!": "CME_MINI:NQ1!", "CL1!": "NYMEX:CL1!",
+      "GC1!": "COMEX:GC1!", "BTC/USDT": "BINANCE:BTCUSDT", "ETH/USDT": "BINANCE:ETHUSDT",
+      "SOL/USDT": "BINANCE:SOLUSDT", "EUR/USD": "FX:EURUSD", "GBP/USD": "FX:GBPUSD",
+    };
+    setSymbol(tvMap[sym] || sym);
   };
 
   const modeIcons: Record<MarketMode, React.ReactNode> = {
@@ -780,22 +961,18 @@ export default function TerminalPage() {
             <WatchlistPanel mode={mode} onSelectSymbol={handleSelectSymbol} activeSymbol={symbol} />
           </div>
 
-          {/* Chart — CheatCode ALGO */}
+          {/* Chart — TradingView */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <CheatCodeChart
-              symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol}
-              height={typeof window !== "undefined" ? window.innerHeight - 120 : 600}
-              showEmaClouds={true}
-              showReversalBands={false}
-              showTradeLines={true}
-              colorScheme="heatmap"
-            />
+            <TradingViewChart symbol={symbol} mode={mode} />
           </div>
 
-          {/* Right panel: Order + Stats (hidden on mobile) */}
-          <div className="hidden lg:flex w-44 flex-shrink-0 border-l flex-col overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
+          {/* Right panel: CheatCode ALGO signals + stats */}
+          <div className="hidden lg:flex w-52 flex-shrink-0 border-l flex-col overflow-y-auto" style={{ borderColor: "#1e2a3a" }}>
+            {/* CheatCode ALGO panel */}
+            <AlgoSignalPanel symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol} />
+
             {/* Mini stats */}
-            <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
+            <div className="px-3 py-2 border-t flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
                 Market Stats
               </p>
