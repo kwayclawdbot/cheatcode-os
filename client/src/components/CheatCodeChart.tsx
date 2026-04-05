@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { createChart, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, type ISeriesApi, ColorType, CandlestickSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { fetchChartData } from "@/lib/api";
 
 interface CheatCodeChartProps {
@@ -95,7 +95,7 @@ export function CheatCodeChart({
     chartRef.current = chart;
 
     // 1. Candlestick series with RSI heatmap colors
-    const candleSeries = chart.addCandlestickSeries({
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#26a69a",
       downColor: "#ef5350",
       borderVisible: true,
@@ -117,7 +117,8 @@ export function CheatCodeChart({
 
     // Buy/sell markers
     if (data.markers?.length) {
-      candleSeries.setMarkers(
+      createSeriesMarkers(
+        candleSeries,
         data.markers.map((m: any) => ({
           time: m.time,
           position: m.position,
@@ -132,14 +133,14 @@ export function CheatCodeChart({
     // 2. SuperTrend line
     if (data.supertrend?.length) {
       // Split into bullish and bearish segments for different colors
-      const bullSeries = chart.addLineSeries({
+      const bullSeries = chart.addSeries(LineSeries, {
         color: "#00FF00",
         lineWidth: 2,
         lineStyle: 0,
         priceLineVisible: false,
         lastValueVisible: false,
       });
-      const bearSeries = chart.addLineSeries({
+      const bearSeries = chart.addSeries(LineSeries, {
         color: "#FF0000",
         lineWidth: 2,
         lineStyle: 0,
@@ -166,26 +167,26 @@ export function CheatCodeChart({
 
     // 3. EMA Clouds
     if (showEmaClouds && data.ema_clouds) {
-      const ema5Series = chart.addLineSeries({
+      const ema5Series = chart.addSeries(LineSeries, {
         color: "#2ecc71",
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
       });
-      const ema12Series = chart.addLineSeries({
+      const ema12Series = chart.addSeries(LineSeries, {
         color: "#2ecc71",
         lineWidth: 1,
         lineStyle: 2,
         priceLineVisible: false,
         lastValueVisible: false,
       });
-      const ema34Series = chart.addLineSeries({
+      const ema34Series = chart.addSeries(LineSeries, {
         color: "#e67e22",
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
       });
-      const ema50Series = chart.addLineSeries({
+      const ema50Series = chart.addSeries(LineSeries, {
         color: "#e67e22",
         lineWidth: 1,
         lineStyle: 2,
@@ -209,7 +210,7 @@ export function CheatCodeChart({
       };
       for (const [key, color] of Object.entries(bandColors)) {
         if (data.reversal_bands[key]?.length) {
-          const bandSeries = chart.addLineSeries({
+          const bandSeries = chart.addSeries(LineSeries, {
             color: color as string,
             lineWidth: 1,
             lineStyle: 2,
