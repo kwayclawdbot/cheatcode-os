@@ -18,6 +18,14 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
         raise HTTPException(status_code=404, detail=f"No data for {symbol.upper()}")
 
     data = t.data
+
+    # Enrich with live price from EODHD
+    from app.services.market_data import fetch_bulk_quotes
+    quotes = await fetch_bulk_quotes([symbol.upper()])
+    live = quotes.get(symbol.upper())
+    if live:
+        data["last_price"] = live["price"]
+        data["price_change_pct"] = live["change_pct"]
     is_pro = user and user.get("tier") in ("pro", "elite", "admin")
 
     if is_pro:
@@ -71,20 +79,39 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
 
 @router.get("/radar", response_model=RadarSnapshot)
 async def get_radar(date: str | None = None):
-    """Get radar snapshot. Defaults to today."""
+    """Get radar snapshot with live prices. Defaults to today."""
     db = get_supabase()
     target_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     r = maybe_one(db.table("radar_snapshots").select("*").eq("date", target_date))
     if not r.data:
         raise HTTPException(status_code=404, detail=f"No radar for {target_date}")
 
+    # Enrich radar tickers with live prices
+    from app.services.market_data import fetch_bulk_quotes
+    all_symbols = set()
+    for bucket in ["critical", "high_conviction", "watch", "contested"]:
+        for t in r.data.get(bucket, []):
+            all_symbols.add(t.get("symbol", ""))
+    all_symbols.discard("")
+
+    quotes = await fetch_bulk_quotes(list(all_symbols)) if all_symbols else {}
+
+    def enrich(tickers):
+        for t in tickers:
+            q = quotes.get(t.get("symbol", ""))
+            if q:
+                t["price"] = q["price"]
+                t["change"] = q["change"]
+                t["change_pct"] = q["change_pct"]
+        return tickers
+
     return RadarSnapshot(
         date=r.data["date"], market_sentiment=r.data["market_sentiment"],
         sentiment_summary=r.data.get("sentiment_summary"),
-        critical=r.data.get("critical", []),
-        high_conviction=r.data.get("high_conviction", []),
-        watch=r.data.get("watch", []),
-        contested=r.data.get("contested", []),
+        critical=enrich(r.data.get("critical", [])),
+        high_conviction=enrich(r.data.get("high_conviction", [])),
+        watch=enrich(r.data.get("watch", [])),
+        contested=enrich(r.data.get("contested", [])),
         theme_heatmap=r.data.get("theme_heatmap", []),
         sector_rotation=r.data.get("sector_rotation", {}),
     )

@@ -415,3 +415,39 @@ export async function fetchJournalStats(): Promise<any> {
 export async function requestKaiAnalysis(entryId: string): Promise<{ analysis: string }> {
   return apiFetch(`/journal/entries/${entryId}/kai-analysis`, { method: "POST" });
 }
+
+// ── Market Data (EODHD live) ────────────────────────────────────────────────
+
+export interface MarketQuote {
+  symbol: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  prev_close: number;
+  change: number;
+  change_pct: number;
+  volume: number;
+}
+
+export interface MarketSummary {
+  indices: { symbol: string; name: string; price: number; change: number; change_pct: number }[];
+  gainers: MarketQuote[];
+  losers: MarketQuote[];
+  sentiment: string;
+  timestamp: string;
+}
+
+export async function fetchMarketSummary(): Promise<MarketSummary> {
+  return apiFetch("/market/summary");
+}
+
+export async function fetchQuotes(symbols?: string): Promise<MarketQuote[]> {
+  const qs = symbols ? `?symbols=${symbols}` : "";
+  return apiFetch(`/market/quotes${qs}`);
+}
+
+export async function fetchQuote(symbol: string): Promise<MarketQuote> {
+  return apiFetch(`/market/quote/${symbol}`);
+}

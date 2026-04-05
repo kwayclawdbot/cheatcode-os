@@ -5,9 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import get_settings
-from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile
+from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market
 from app.services.curation import run_curation_cycle
 from app.services.intelligence import run_brain_cycle, generate_radar
+from app.services.market_data import sync_ticker_prices
 
 scheduler = AsyncIOScheduler()
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_brain_cycle, "interval", minutes=60, id="brain")
     scheduler.add_job(generate_radar, "cron", hour=6, minute=0, id="radar_morning")  # 6am UTC
     scheduler.add_job(generate_radar, "cron", hour=14, minute=0, id="radar_midday")  # 2pm UTC
+    scheduler.add_job(sync_ticker_prices, "interval", minutes=5, id="price_sync")  # Live prices every 5 min
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -52,6 +54,7 @@ app.include_router(events.router, prefix=s.api_prefix)
 app.include_router(social.router, prefix=s.api_prefix)
 app.include_router(journal.router, prefix=s.api_prefix)
 app.include_router(profile.router, prefix=s.api_prefix)
+app.include_router(market.router, prefix=s.api_prefix)
 
 
 @app.get("/health")
