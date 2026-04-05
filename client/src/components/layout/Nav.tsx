@@ -1,33 +1,68 @@
-// CheatCode OS — Top Navigation v4
-// Mobile-first: hamburger menu + slide-out drawer on small screens
-// Desktop: horizontal nav links
-// Logo: 4 colored circles (red, cyan, purple, green) + "cheat" white + "code" gradient
-// Primary CTA: cc-gradient-bg (green→yellow)
-// Active nav: CC Green (#4DC820)
-// Dark mode: sun/moon toggle via useTheme
+// CheatCode OS — Top Navigation v5
+// Menu structure:
+//   Home | Ideas | Community | Analyze | Watch | Learn ▾ | Trade
+//   Learn dropdown: Courses, Coaches
+// Mobile: hamburger slide-out drawer with same hierarchy
+// Dark mode: full support via useTheme
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Bell, Sun, Moon, Menu, X, ChevronRight } from "lucide-react";
+import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 
-const navLinks = [
-  { href: "/home", label: "Home", emoji: "🏠" },
-  { href: "/feed", label: "Swipe", emoji: "🃏" },
-  { href: "/community", label: "Community", emoji: "💬" },
-  { href: "/intelligence", label: "Intelligence", emoji: "🧠" },
-  { href: "/topics", label: "Browse", emoji: "🎬" },
-  { href: "/learn", label: "Learn", emoji: "📚" },
-  { href: "/coaches-corner", label: "Coaches", emoji: "🏆" },
-  { href: "/terminal", label: "Terminal", emoji: "📊" },
-  { href: "/journal", label: "Journal", emoji: "📓" },
-  { href: "/newsletter", label: "Newsletter", emoji: "✉️" },
-  { href: "/pricing", label: "Pricing", emoji: "⚡" },
-  { href: "/admin", label: "Admin", emoji: "⚙️" },
+// ─── Nav structure ────────────────────────────────────────────────────────────
+
+type NavItem =
+  | { type: "link"; href: string; label: string; emoji: string }
+  | { type: "dropdown"; label: string; emoji: string; children: { href: string; label: string; description: string; icon: React.ReactNode }[] };
+
+const NAV_ITEMS: NavItem[] = [
+  { type: "link", href: "/home",        label: "Home",      emoji: "🏠" },
+  { type: "link", href: "/feed",        label: "Ideas",     emoji: "🃏" },
+  { type: "link", href: "/community",   label: "Community", emoji: "💬" },
+  { type: "link", href: "/intelligence",label: "Analyze",   emoji: "🧠" },
+  { type: "link", href: "/topics",      label: "Watch",     emoji: "🎬" },
+  {
+    type: "dropdown",
+    label: "Learn",
+    emoji: "📚",
+    children: [
+      {
+        href: "/learn",
+        label: "Courses",
+        description: "Structured learning paths & skill tracks",
+        icon: <BookOpen size={16} />,
+      },
+      {
+        href: "/coaches-corner",
+        label: "Coaches",
+        description: "1-on-1 sessions, courses & coaching programs",
+        icon: <Trophy size={16} />,
+      },
+    ],
+  },
+  { type: "link", href: "/terminal",    label: "Trade",     emoji: "📊" },
 ];
 
-// The 4 logo circles — exact colors from the logo
+// All links flattened for mobile drawer
+const ALL_MOBILE_LINKS = [
+  { href: "/home",          label: "Home",       emoji: "🏠" },
+  { href: "/feed",          label: "Ideas",      emoji: "🃏" },
+  { href: "/community",     label: "Community",  emoji: "💬" },
+  { href: "/intelligence",  label: "Analyze",    emoji: "🧠" },
+  { href: "/topics",        label: "Watch",      emoji: "🎬" },
+  { href: "/learn",         label: "Courses",    emoji: "📖", indent: true },
+  { href: "/coaches-corner",label: "Coaches",    emoji: "🏆", indent: true },
+  { href: "/terminal",      label: "Trade",      emoji: "📊" },
+  { href: "/journal",       label: "Journal",    emoji: "📓" },
+  { href: "/newsletter",    label: "Newsletter", emoji: "✉️" },
+  { href: "/pricing",       label: "Pricing",    emoji: "⚡" },
+  { href: "/admin",         label: "Admin",      emoji: "⚙️" },
+];
+
+// ─── Logo ─────────────────────────────────────────────────────────────────────
+
 function LogoIcon({ size = 28 }: { size?: number }) {
   const r = size * 0.18;
   const cx = size / 2;
@@ -35,26 +70,21 @@ function LogoIcon({ size = 28 }: { size?: number }) {
   const offset = size * 0.22;
   const strokeW = size * 0.055;
   const diamondSize = size * 0.09;
-
   const circles = [
-    { cx: cx,          cy: cy - offset, color: "#E8193C" }, // top — red
-    { cx: cx - offset, cy: cy,          color: "#00AEEF" }, // left — cyan
-    { cx: cx + offset, cy: cy,          color: "#4DC820" }, // right — green
-    { cx: cx,          cy: cy + offset, color: "#7B2FBE" }, // bottom — purple
+    { cx: cx,          cy: cy - offset, color: "#E8193C" },
+    { cx: cx - offset, cy: cy,          color: "#00AEEF" },
+    { cx: cx + offset, cy: cy,          color: "#4DC820" },
+    { cx: cx,          cy: cy + offset, color: "#7B2FBE" },
   ];
-
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none">
       {circles.map((c, i) => (
         <g key={i}>
           <circle cx={c.cx} cy={c.cy} r={r} stroke={c.color} strokeWidth={strokeW} fill="none" />
           <rect
-            x={c.cx - diamondSize / 2}
-            y={c.cy - diamondSize / 2}
-            width={diamondSize}
-            height={diamondSize}
-            fill={c.color}
-            transform={`rotate(45 ${c.cx} ${c.cy})`}
+            x={c.cx - diamondSize / 2} y={c.cy - diamondSize / 2}
+            width={diamondSize} height={diamondSize}
+            fill={c.color} transform={`rotate(45 ${c.cx} ${c.cy})`}
           />
         </g>
       ))}
@@ -62,24 +92,123 @@ function LogoIcon({ size = 28 }: { size?: number }) {
   );
 }
 
+// ─── Learn Dropdown ───────────────────────────────────────────────────────────
+
+function LearnDropdown({
+  item, isDark, location
+}: {
+  item: Extract<NavItem, { type: "dropdown" }>;
+  isDark: boolean;
+  location: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isActive = item.children.some(c => location === c.href);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap"
+        style={
+          isActive || open
+            ? { color: "#4DC820", backgroundColor: isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8" }
+            : { color: isDark ? "#98A2B3" : "#475467" }
+        }
+      >
+        {item.label}
+        <ChevronDown
+          size={13}
+          className="transition-transform duration-200"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full left-0 mt-1.5 w-64 rounded-2xl shadow-xl border overflow-hidden z-50"
+            style={{
+              background: isDark ? "#1a2035" : "white",
+              borderColor: isDark ? "rgba(255,255,255,0.1)" : "#EAECF0",
+            }}
+          >
+            <div className="p-2">
+              {item.children.map(child => (
+                <Link key={child.href} href={child.href} onClick={() => setOpen(false)}>
+                  <div
+                    className="flex items-start gap-3 px-3 py-2.5 rounded-xl transition-colors cursor-pointer"
+                    style={{
+                      background: location === child.href
+                        ? isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8"
+                        : "transparent",
+                    }}
+                    onMouseEnter={e => {
+                      if (location !== child.href)
+                        (e.currentTarget as HTMLDivElement).style.background = isDark ? "rgba(255,255,255,0.05)" : "#F9FAFB";
+                    }}
+                    onMouseLeave={e => {
+                      if (location !== child.href)
+                        (e.currentTarget as HTMLDivElement).style.background = "transparent";
+                    }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{
+                        background: location === child.href
+                          ? isDark ? "rgba(77,200,32,0.2)" : "#D1FAE5"
+                          : isDark ? "rgba(255,255,255,0.06)" : "#F2F4F7",
+                        color: location === child.href ? "#4DC820" : isDark ? "#98A2B3" : "#667085",
+                      }}
+                    >
+                      {child.icon}
+                    </div>
+                    <div>
+                      <p
+                        className="text-sm font-bold"
+                        style={{ color: location === child.href ? "#4DC820" : isDark ? "#F9FAFB" : "#101828" }}
+                      >
+                        {child.label}
+                      </p>
+                      <p className="text-[11px] mt-0.5" style={{ color: isDark ? "#667085" : "#98A2B3" }}>
+                        {child.description}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Main Nav ─────────────────────────────────────────────────────────────────
+
 export function Nav() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Close drawer on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location]);
+  useEffect(() => { setMobileOpen(false); }, [location]);
 
-  // Prevent body scroll when drawer is open
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
@@ -95,58 +224,59 @@ export function Nav() {
       >
         <div className="container mx-auto">
           <div className="flex items-center h-14 gap-4">
-            {/* Logo */}
+
+            {/* Logo → landing page */}
             <Link href="/">
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer">
                 <LogoIcon size={28} />
                 <div className="flex items-baseline gap-0">
-                  <span
-                    className="font-bold text-[16px] tracking-tight transition-colors duration-200"
-                    style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}
-                  >
+                  <span className="font-bold text-[16px] tracking-tight transition-colors duration-200"
+                        style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}>
                     cheat
                   </span>
-                  <span
-                    className="font-bold text-[16px] tracking-tight cc-gradient-text"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
+                  <span className="font-bold text-[16px] tracking-tight cc-gradient-text"
+                        style={{ fontFamily: "var(--font-display)" }}>
                     code
                   </span>
                 </div>
-                <span
-                  className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md border tracking-wide transition-colors duration-200"
-                  style={{
-                    color: isDark ? "#98A2B3" : "#2B3245",
-                    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#F2F4F7",
-                    borderColor: isDark ? "rgba(255,255,255,0.1)" : "#EAECF0",
-                  }}
-                >
+                <span className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md border tracking-wide transition-colors duration-200"
+                      style={{
+                        color: isDark ? "#98A2B3" : "#2B3245",
+                        backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#F2F4F7",
+                        borderColor: isDark ? "rgba(255,255,255,0.1)" : "#EAECF0",
+                      }}>
                   OS
                 </span>
               </div>
             </Link>
 
-            {/* Desktop nav links */}
+            {/* Desktop nav */}
             <nav className="hidden lg:flex items-center gap-0.5 flex-1">
-              {navLinks.slice(0, 8).map(({ href, label }) => (
-                <Link key={href} href={href}>
-                  <span
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap"
-                    style={
-                      location === href
-                        ? { color: "#4DC820", backgroundColor: isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8" }
-                        : { color: isDark ? "#98A2B3" : "#475467" }
-                    }
-                  >
-                    {label}
-                  </span>
-                </Link>
-              ))}
+              {NAV_ITEMS.map((item) => {
+                if (item.type === "link") {
+                  return (
+                    <Link key={item.href} href={item.href}>
+                      <span
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap cursor-pointer"
+                        style={
+                          location === item.href
+                            ? { color: "#4DC820", backgroundColor: isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8" }
+                            : { color: isDark ? "#98A2B3" : "#475467" }
+                        }
+                      >
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                }
+                return (
+                  <LearnDropdown key={item.label} item={item} isDark={isDark} location={location} />
+                );
+              })}
             </nav>
 
             {/* Right side */}
             <div className="flex items-center gap-1.5 ml-auto">
-              {/* Search */}
               <button
                 className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors duration-150"
                 style={{ color: isDark ? "#98A2B3" : "#667085" }}
@@ -154,7 +284,6 @@ export function Nav() {
                 <Search size={17} />
               </button>
 
-              {/* Notifications — hidden on mobile to save space */}
               <button
                 className="hidden sm:flex w-9 h-9 items-center justify-center rounded-lg transition-colors duration-150 relative"
                 style={{ color: isDark ? "#98A2B3" : "#667085" }}
@@ -166,7 +295,6 @@ export function Nav() {
                 />
               </button>
 
-              {/* Dark / Light toggle */}
               <button
                 onClick={toggleTheme}
                 title={isDark ? "Switch to light mode" : "Switch to dark mode"}
@@ -179,14 +307,12 @@ export function Nav() {
                 {isDark ? <Sun size={17} /> : <Moon size={17} />}
               </button>
 
-              {/* Go Pro CTA — desktop only */}
               <Link href="/pricing">
                 <button className="hidden md:flex items-center gap-1.5 text-[#101828] text-sm font-bold px-3 py-1.5 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity">
                   Go Pro
                 </button>
               </Link>
 
-              {/* Avatar — desktop only */}
               <Link href="/traders/me">
                 <div
                   className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-xs font-bold text-white cursor-pointer hover:opacity-80 transition-opacity"
@@ -196,7 +322,6 @@ export function Nav() {
                 </div>
               </Link>
 
-              {/* Hamburger — mobile only */}
               <button
                 onClick={() => setMobileOpen(true)}
                 className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg transition-colors"
@@ -210,28 +335,21 @@ export function Nav() {
         </div>
       </header>
 
-      {/* Mobile drawer overlay */}
+      {/* Mobile drawer */}
       <AnimatePresence>
         {mobileOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 z-[60]"
               style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" }}
               onClick={() => setMobileOpen(false)}
             />
-
-            {/* Drawer */}
             <motion.div
               key="drawer"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
               className="fixed top-0 right-0 bottom-0 z-[70] w-72 flex flex-col"
               style={{
@@ -240,34 +358,26 @@ export function Nav() {
               }}
             >
               {/* Drawer header */}
-              <div
-                className="flex items-center justify-between px-5 py-4 border-b"
-                style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}
-              >
+              <div className="flex items-center justify-between px-5 py-4 border-b"
+                   style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
                 <div className="flex items-center gap-2">
                   <LogoIcon size={24} />
                   <span className="font-bold text-sm" style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}>
                     cheat<span className="cc-gradient-text">code</span>
                   </span>
                 </div>
-                <button
-                  onClick={() => setMobileOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg"
-                  style={{ color: isDark ? "#98A2B3" : "#667085" }}
-                >
+                <button onClick={() => setMobileOpen(false)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg"
+                        style={{ color: isDark ? "#98A2B3" : "#667085" }}>
                   <X size={20} />
                 </button>
               </div>
 
               {/* User row */}
-              <div
-                className="flex items-center gap-3 px-5 py-4 border-b"
-                style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}
-              >
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                  style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)" }}
-                >
+              <div className="flex items-center gap-3 px-5 py-4 border-b"
+                   style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                     style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)" }}>
                   U
                 </div>
                 <div className="flex-1 min-w-0">
@@ -281,57 +391,49 @@ export function Nav() {
 
               {/* Nav links */}
               <nav className="flex-1 overflow-y-auto px-3 py-3">
-                {navLinks.map(({ href, label, emoji }) => {
+                {/* Learn section header */}
+                {ALL_MOBILE_LINKS.map(({ href, label, emoji, indent }) => {
                   const isActive = location === href;
+                  const isLearnHeader = label === "Courses";
                   return (
-                    <Link key={href} href={href}>
-                      <div
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl mb-1 transition-all"
-                        style={{
-                          background: isActive
-                            ? isDark ? "rgba(77,200,32,0.15)" : "#F0FDE8"
-                            : "transparent",
-                          color: isActive ? "#4DC820" : isDark ? "#D0D5DD" : "#344054",
-                        }}
-                      >
-                        <span className="text-lg w-6 text-center">{emoji}</span>
-                        <span className="font-semibold text-sm flex-1">{label}</span>
-                        {isActive && <ChevronRight size={14} color="#4DC820" />}
-                      </div>
-                    </Link>
+                    <div key={href}>
+                      {isLearnHeader && (
+                        <p className="text-[10px] font-bold uppercase tracking-widest px-3 pt-3 pb-1"
+                           style={{ color: isDark ? "#475467" : "#98A2B3" }}>
+                          Learn
+                        </p>
+                      )}
+                      <Link href={href}>
+                        <div
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 transition-colors cursor-pointer"
+                          style={{
+                            background: isActive
+                              ? isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8"
+                              : "transparent",
+                            paddingLeft: indent ? "2rem" : undefined,
+                          }}
+                        >
+                          <span className="text-base">{emoji}</span>
+                          <span className="font-semibold text-sm flex-1"
+                                style={{ color: isActive ? "#4DC820" : isDark ? "#D0D5DD" : "#344054" }}>
+                            {label}
+                          </span>
+                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#4DC820]" />}
+                        </div>
+                      </Link>
+                    </div>
                   );
                 })}
               </nav>
 
-              {/* Bottom actions */}
-              <div
-                className="px-4 py-4 border-t flex flex-col gap-2"
-                style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}
-              >
-                {/* Go Pro CTA */}
+              {/* Bottom CTA */}
+              <div className="px-4 py-4 border-t"
+                   style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
                 <Link href="/pricing">
-                  <button className="w-full py-3 rounded-xl font-bold text-sm cc-gradient-bg text-[#101828] hover:opacity-90 transition-opacity">
-                    ⚡ Go Pro — Unlock Everything
+                  <button className="w-full py-2.5 rounded-xl cc-gradient-bg text-[#101828] font-bold text-sm hover:opacity-90 transition-opacity">
+                    Go Pro ⚡
                   </button>
                 </Link>
-
-                {/* Theme toggle row */}
-                <div className="flex items-center justify-between px-2 py-1">
-                  <span className="text-xs font-semibold" style={{ color: isDark ? "#98A2B3" : "#667085" }}>
-                    {isDark ? "Dark Mode" : "Light Mode"}
-                  </span>
-                  <button
-                    onClick={toggleTheme}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
-                    style={{
-                      background: isDark ? "rgba(200,212,0,0.1)" : "#F2F4F7",
-                      color: isDark ? "#C8D400" : "#667085",
-                    }}
-                  >
-                    {isDark ? <Sun size={13} /> : <Moon size={13} />}
-                    {isDark ? "Light" : "Dark"}
-                  </button>
-                </div>
               </div>
             </motion.div>
           </>
@@ -340,6 +442,3 @@ export function Nav() {
     </>
   );
 }
-
-// Keep default export for backward compatibility
-export default Nav;

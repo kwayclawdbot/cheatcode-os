@@ -1,32 +1,31 @@
-// CheatCode OS — Swipe Feed
-// Design: Full-screen card experience. Tinder-style horizontal swipe.
-// Card types: Video (dark overlay), Trade Idea (graphic card), Combo (video + trade overlay)
-// Swipe right = 🔥 like + XP to poster, swipe left = pass
-// Toggle at top: All / Videos / Trade Ideas
-// Framer Motion drag-to-dismiss with spring physics
+// CheatCode OS — Swipe Feed Page
+// Design: TikTok/Tinder-style horizontal card swipe. Video-first.
+// Card types: video (dark overlay), trade_idea (graphic card)
+// Swipe right = 🔥 like + XP, swipe left = pass
+// Toggle: All / Videos / Ideas
+// Fully theme-aware via semantic Tailwind tokens + useTheme for inline styles
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Minus, Play, Zap, X, Heart,
-  ChevronLeft, ChevronRight, Plus, BarChart2, Share2,
-  MessageCircle, Bookmark, ArrowLeft
+  ChevronLeft, ChevronRight, Plus, BarChart2,
+  MessageCircle, Bookmark
 } from "lucide-react";
-import { Link } from "wouter";
 import { toast } from "sonner";
 import { fetchContent, fetchRadar } from "@/lib/api";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
 import { Nav } from "@/components/layout/Nav";
+import { useTheme } from "@/contexts/ThemeContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type CardType = "video" | "trade_idea" | "combo";
+type CardType = "video" | "trade_idea";
 type SwipeFilter = "all" | "videos" | "trade_ideas";
 
 interface SwipeCard {
   id: string;
   type: CardType;
-  // Video fields
   title?: string;
   thumbnail?: string;
   duration?: string;
@@ -34,7 +33,6 @@ interface SwipeCard {
   creatorAvatar?: string;
   creatorColor?: string;
   youtubeId?: string;
-  // Trade idea fields
   ticker?: string;
   direction?: "bullish" | "bearish" | "neutral";
   score?: number;
@@ -43,19 +41,16 @@ interface SwipeCard {
   target?: string;
   stop?: string;
   timeframe?: string;
-  // User
   poster?: string;
   posterHandle?: string;
-  posterAvatar?: string;
   posterStyle?: string;
   posterLevel?: string;
-  // Engagement
   likes: number;
   comments: number;
   xpValue: number;
 }
 
-// ─── Seed trade idea cards from radar data ────────────────────────────────────
+// ─── Data converters ──────────────────────────────────────────────────────────
 
 function radarToCard(t: any, index: number): SwipeCard {
   const dir = (t.direction || "neutral").toLowerCase() as "bullish" | "bearish" | "neutral";
@@ -63,13 +58,12 @@ function radarToCard(t: any, index: number): SwipeCard {
   const styles = ["Swing Trader", "Day Trader", "Options", "Swing Trader", "Technical"];
   const levels = ["Expert", "Veteran", "Trader", "Elite", "Expert"];
   const theses = [
-    `Breaking out of consolidation with strong volume. Target is the prior high.`,
-    `Momentum setup with institutional accumulation. Risk/reward looks favorable here.`,
-    `Catalyst-driven move. Options flow has been unusually bullish this week.`,
-    `Technical breakout confirmed. Multiple timeframe alignment.`,
-    `High conviction setup. Macro tailwinds + strong relative strength.`,
+    "Breaking out of consolidation with strong volume. Target is the prior high.",
+    "Momentum setup with institutional accumulation. Risk/reward looks favorable here.",
+    "Catalyst-driven move. Options flow has been unusually bullish this week.",
+    "Technical breakout confirmed. Multiple timeframe alignment.",
+    "High conviction setup. Macro tailwinds + strong relative strength.",
   ];
-
   return {
     id: `radar-${t.symbol}-${index}`,
     type: "trade_idea",
@@ -80,7 +74,6 @@ function radarToCard(t: any, index: number): SwipeCard {
     timeframe: t.timeframe || "Swing",
     poster: ["Jordan Davis", "Alex Kim", "Sam Rivera", "Chris Lee", "Taylor Morgan"][index % 5],
     posterHandle: handles[index % handles.length],
-    posterAvatar: "",
     posterStyle: styles[index % styles.length],
     posterLevel: levels[index % levels.length],
     likes: Math.floor(Math.random() * 200) + 20,
@@ -103,7 +96,6 @@ function videoToCard(v: any): SwipeCard {
     youtubeId: v.youtube_id,
     poster: v.creator,
     posterHandle: `@${slug}`,
-    posterAvatar: getCreatorAvatar(slug) || "",
     posterStyle: "Educator",
     posterLevel: "Verified",
     likes: v.likes || Math.floor(Math.random() * 500) + 50,
@@ -112,12 +104,12 @@ function videoToCard(v: any): SwipeCard {
   };
 }
 
-// ─── Direction colors ─────────────────────────────────────────────────────────
+// ─── Direction config ─────────────────────────────────────────────────────────
 
 const DIR_CONFIG = {
-  bullish: { color: "#4DC820", bg: "#F0FDE8", icon: TrendingUp, label: "Bullish", arrow: "↑" },
-  bearish: { color: "#E8193C", bg: "#FFF0F3", icon: TrendingDown, label: "Bearish", arrow: "↓" },
-  neutral: { color: "#F79009", bg: "#FFFBEB", icon: Minus, label: "Neutral", arrow: "→" },
+  bullish: { color: "#4DC820", icon: TrendingUp, label: "Bullish", arrow: "↑" },
+  bearish: { color: "#E8193C", icon: TrendingDown, label: "Bearish", arrow: "↓" },
+  neutral: { color: "#F79009", icon: Minus, label: "Neutral", arrow: "→" },
 };
 
 // ─── Single Swipe Card ────────────────────────────────────────────────────────
@@ -128,9 +120,10 @@ interface SwipeCardProps {
   onSwipeLeft: () => void;
   isTop: boolean;
   stackIndex: number;
+  isDark: boolean;
 }
 
-function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: SwipeCardProps) {
+function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex, isDark }: SwipeCardProps) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-18, 0, 18]);
   const likeOpacity = useTransform(x, [20, 100], [0, 1]);
@@ -141,11 +134,8 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
   const isVideo = card.type === "video";
 
   const handleDragEnd = (_: any, info: any) => {
-    if (info.offset.x > 100) {
-      onSwipeRight();
-    } else if (info.offset.x < -100) {
-      onSwipeLeft();
-    }
+    if (info.offset.x > 100) onSwipeRight();
+    else if (info.offset.x < -100) onSwipeLeft();
   };
 
   const stackOffset = stackIndex * 6;
@@ -158,8 +148,8 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
         style={{
           transform: `translateY(${stackOffset}px) scale(${1 - stackIndex * 0.04}) rotate(${stackRotate}deg)`,
           zIndex: 10 - stackIndex,
-          background: isVideo ? "#1a2035" : "#FFFFFF",
-          border: "1px solid #EAECF0",
+          background: isVideo ? "#1a2035" : (isDark ? "#212840" : "#FFFFFF"),
+          border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#EAECF0"}`,
           boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
         }}
       />
@@ -169,12 +159,7 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
   return (
     <motion.div
       className="absolute inset-0 rounded-3xl overflow-hidden cursor-grab active:cursor-grabbing select-none"
-      style={{
-        x,
-        rotate,
-        zIndex: 20,
-        boxShadow: "0 8px 40px rgba(0,0,0,0.15)",
-      }}
+      style={{ x, rotate, zIndex: 20, boxShadow: "0 8px 40px rgba(0,0,0,0.15)" }}
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.8}
@@ -184,7 +169,7 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
       exit={{ opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      {/* Like / Pass overlays */}
+      {/* Overlays */}
       <motion.div
         className="absolute top-8 left-6 z-30 px-4 py-2 rounded-xl border-2 border-[#4DC820] rotate-[-12deg]"
         style={{ opacity: likeOpacity, background: "#F0FDE8" }}
@@ -201,7 +186,6 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
       {/* ── Video Card ── */}
       {isVideo && (
         <div className="w-full h-full relative" style={{ background: "#101828" }}>
-          {/* Thumbnail */}
           {card.thumbnail && !playing && (
             <img src={card.thumbnail} alt={card.title}
                  className="absolute inset-0 w-full h-full object-cover opacity-70" />
@@ -214,12 +198,9 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
               allowFullScreen
             />
           )}
-          {/* Dark gradient */}
           {!playing && (
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
           )}
-
-          {/* Play button */}
           {!playing && (
             <button
               onClick={e => { e.stopPropagation(); setPlaying(true); }}
@@ -230,8 +211,6 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
               </div>
             </button>
           )}
-
-          {/* Creator info */}
           <div className="absolute bottom-0 left-0 right-0 p-5 z-20">
             <div className="flex items-center gap-2.5 mb-3">
               <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/30 flex-shrink-0">
@@ -264,26 +243,27 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
 
       {/* ── Trade Idea Card ── */}
       {!isVideo && dir && (
-        <div className="w-full h-full flex flex-col" style={{ background: "#FFFFFF" }}>
-          {/* Header accent */}
+        <div className="w-full h-full flex flex-col"
+             style={{ background: isDark ? "#212840" : "#FFFFFF" }}>
           <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${dir.color}, ${dir.color}66)` }} />
-
-          {/* Card body */}
           <div className="flex-1 p-5 flex flex-col">
-            {/* Poster info */}
+            {/* Poster */}
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
                    style={{ background: dir.color }}>
                 {(card.poster || "?")[0]}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-[#101828] text-sm leading-tight">{card.poster}</p>
+                <p className="font-bold text-sm leading-tight"
+                   style={{ color: isDark ? "#F2F4F7" : "#101828" }}>{card.poster}</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
                         style={{ background: dir.color }}>
                     {card.posterStyle}
                   </span>
-                  <span className="text-[10px] text-[#667085]">{card.posterLevel}</span>
+                  <span className="text-[10px]" style={{ color: isDark ? "#98A2B3" : "#667085" }}>
+                    {card.posterLevel}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-1 text-[#F79009]">
@@ -307,15 +287,19 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
               </div>
               {card.score != null && (
                 <div className="flex items-center gap-1.5 mb-4">
-                  <div className="h-2 w-24 bg-[#F2F4F7] rounded-full overflow-hidden">
+                  <div className="h-2 w-24 rounded-full overflow-hidden"
+                       style={{ background: isDark ? "rgba(255,255,255,0.1)" : "#F2F4F7" }}>
                     <div className="h-full rounded-full transition-all"
                          style={{ width: `${card.score}%`, background: dir.color }} />
                   </div>
-                  <span className="text-xs font-bold text-[#667085]">{card.score}/100</span>
+                  <span className="text-xs font-bold" style={{ color: isDark ? "#98A2B3" : "#667085" }}>
+                    {card.score}/100
+                  </span>
                 </div>
               )}
               {card.thesis && (
-                <p className="text-sm text-[#344054] text-center leading-relaxed max-w-xs px-2">
+                <p className="text-sm text-center leading-relaxed max-w-xs px-2"
+                   style={{ color: isDark ? "#D0D5DD" : "#344054" }}>
                   {card.thesis}
                 </p>
               )}
@@ -325,27 +309,34 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
             {(card.entry || card.target || card.stop) && (
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {[
-                  { label: "Entry", value: card.entry, color: "#667085" },
+                  { label: "Entry", value: card.entry, color: isDark ? "#98A2B3" : "#667085" },
                   { label: "Target", value: card.target, color: "#4DC820" },
                   { label: "Stop", value: card.stop, color: "#E8193C" },
                 ].filter(k => k.value).map(k => (
-                  <div key={k.label} className="bg-[#F9FAFB] rounded-xl p-2.5 text-center border border-[#EAECF0]">
+                  <div key={k.label}
+                       className="rounded-xl p-2.5 text-center border"
+                       style={{
+                         background: isDark ? "rgba(255,255,255,0.04)" : "#F9FAFB",
+                         borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0",
+                       }}>
                     <p className="text-[10px] font-bold uppercase tracking-wide mb-0.5" style={{ color: k.color }}>{k.label}</p>
-                    <p className="ticker-mono text-sm font-bold text-[#101828]">{k.value}</p>
+                    <p className="ticker-mono text-sm font-bold" style={{ color: isDark ? "#F2F4F7" : "#101828" }}>{k.value}</p>
                   </div>
                 ))}
               </div>
             )}
 
             {/* Engagement */}
-            <div className="flex items-center justify-between pt-3 border-t border-[#EAECF0]">
-              <div className="flex items-center gap-3 text-[#667085] text-xs">
+            <div className="flex items-center justify-between pt-3 border-t"
+                 style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
+              <div className="flex items-center gap-3 text-xs"
+                   style={{ color: isDark ? "#98A2B3" : "#667085" }}>
                 <span className="flex items-center gap-1"><Heart size={12} /> {card.likes}</span>
                 <span className="flex items-center gap-1"><MessageCircle size={12} /> {card.comments}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[#667085]">{card.timeframe}</span>
-                <BarChart2 size={12} className="text-[#667085]" />
+              <div className="flex items-center gap-1.5" style={{ color: isDark ? "#98A2B3" : "#667085" }}>
+                <span className="text-[10px]">{card.timeframe}</span>
+                <BarChart2 size={12} />
               </div>
             </div>
           </div>
@@ -357,7 +348,7 @@ function SwipeCardView({ card, onSwipeRight, onSwipeLeft, isTop, stackIndex }: S
 
 // ─── XP Toast ─────────────────────────────────────────────────────────────────
 
-function showXPToast(xp: number, ticker?: string) {
+function showXPToast(xp: number, label?: string) {
   toast.custom(() => (
     <div className="flex items-center gap-3 bg-[#101828] text-white px-4 py-3 rounded-2xl shadow-xl border border-white/10">
       <div className="w-8 h-8 rounded-full cc-gradient-bg flex items-center justify-center flex-shrink-0">
@@ -365,15 +356,18 @@ function showXPToast(xp: number, ticker?: string) {
       </div>
       <div>
         <p className="font-bold text-sm">+{xp} XP earned!</p>
-        {ticker && <p className="text-xs text-white/60">You liked {ticker}</p>}
+        {label && <p className="text-xs text-white/60">You liked {label}</p>}
       </div>
     </div>
   ), { duration: 2000 });
 }
 
-// ─── Main Swipe Feed Page ─────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SwipeFeedPage() {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
   const [filter, setFilter] = useState<SwipeFilter>("all");
   const [allCards, setAllCards] = useState<SwipeCard[]>([]);
   const [queue, setQueue] = useState<SwipeCard[]>([]);
@@ -382,7 +376,6 @@ export default function SwipeFeedPage() {
   const [loading, setLoading] = useState(true);
   const [showCompose, setShowCompose] = useState(false);
 
-  // Load cards from live API
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -400,27 +393,24 @@ export default function SwipeFeedPage() {
         .slice(0, 15)
         .map((v: any) => videoToCard(v));
 
-      // Interleave: video, trade, video, trade...
       const interleaved: SwipeCard[] = [];
       const maxLen = Math.max(radarCards.length, videoCards.length);
       for (let i = 0; i < maxLen; i++) {
         if (videoCards[i]) interleaved.push(videoCards[i]);
         if (radarCards[i]) interleaved.push(radarCards[i]);
       }
-
       setAllCards(interleaved);
       setLoading(false);
     });
   }, []);
 
-  // Filter queue
   useEffect(() => {
     const filtered = allCards.filter(c => {
       if (filter === "videos") return c.type === "video";
       if (filter === "trade_ideas") return c.type === "trade_idea";
       return true;
     });
-    setQueue([...filtered].reverse()); // reverse so top of array = top of stack
+    setQueue([...filtered].reverse());
   }, [allCards, filter]);
 
   const currentCard = queue[queue.length - 1];
@@ -429,10 +419,9 @@ export default function SwipeFeedPage() {
 
   const handleSwipeRight = () => {
     if (!currentCard) return;
-    const xp = currentCard.xpValue;
-    setTotalXP(prev => prev + xp);
+    setTotalXP(prev => prev + currentCard.xpValue);
     setSwipeCount(prev => prev + 1);
-    showXPToast(xp, currentCard.ticker || currentCard.creator);
+    showXPToast(currentCard.xpValue, currentCard.ticker || currentCard.creator);
     setQueue(prev => prev.slice(0, -1));
   };
 
@@ -453,26 +442,26 @@ export default function SwipeFeedPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <Nav />
 
-      {/* ── Header ── */}
-      <div className="bg-white border-b border-[#EAECF0] px-4 py-3">
+      {/* Header */}
+      <div className="bg-card border-b border-border px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
-            <h1 className="font-black text-[#101828] text-base" style={{ fontFamily: "var(--font-display)" }}>
+            <h1 className="font-black text-foreground text-base" style={{ fontFamily: "var(--font-display)" }}>
               Swipe Feed
             </h1>
-            <p className="text-xs text-[#667085]">
+            <p className="text-xs text-muted-foreground">
               {queue.length} cards left · <span className="text-[#F79009] font-bold">{totalXP} XP earned</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
             {/* Filter toggle */}
-            <div className="flex bg-[#F2F4F7] rounded-xl p-1 gap-0.5">
+            <div className="flex rounded-xl p-1 gap-0.5 bg-muted">
               {([
-                { id: "all", label: "All" },
-                { id: "videos", label: "Videos" },
+                { id: "all",         label: "All" },
+                { id: "videos",      label: "Videos" },
                 { id: "trade_ideas", label: "Ideas" },
               ] as { id: SwipeFilter; label: string }[]).map(f => (
                 <button
@@ -480,8 +469,8 @@ export default function SwipeFeedPage() {
                   onClick={() => setFilter(f.id)}
                   className="text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all"
                   style={{
-                    background: filter === f.id ? "#FFFFFF" : "transparent",
-                    color: filter === f.id ? "#101828" : "#667085",
+                    background: filter === f.id ? (isDark ? "#2B3245" : "#FFFFFF") : "transparent",
+                    color: filter === f.id ? (isDark ? "#F2F4F7" : "#101828") : "var(--muted-foreground)",
                     boxShadow: filter === f.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
                   }}
                 >
@@ -489,7 +478,6 @@ export default function SwipeFeedPage() {
                 </button>
               ))}
             </div>
-            {/* Compose */}
             <button
               onClick={() => setShowCompose(true)}
               className="w-8 h-8 rounded-xl cc-gradient-bg flex items-center justify-center hover:opacity-90 transition-opacity"
@@ -500,22 +488,21 @@ export default function SwipeFeedPage() {
         </div>
       </div>
 
-      {/* ── Card Stack ── */}
+      {/* Card stack */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-6">
         <div className="w-full max-w-sm">
-
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
               <div className="w-10 h-10 rounded-full border-2 border-[#4DC820] border-t-transparent animate-spin" />
-              <p className="text-sm text-[#667085]">Loading your feed…</p>
+              <p className="text-sm text-muted-foreground">Loading your feed…</p>
             </div>
           ) : queue.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-5xl mb-4">🎉</div>
-              <h3 className="font-black text-[#101828] text-xl mb-2" style={{ fontFamily: "var(--font-display)" }}>
+              <h3 className="font-black text-foreground text-xl mb-2" style={{ fontFamily: "var(--font-display)" }}>
                 You're all caught up!
               </h3>
-              <p className="text-sm text-[#667085] mb-2">
+              <p className="text-sm text-muted-foreground mb-2">
                 You earned <span className="font-bold text-[#F79009]">{totalXP} XP</span> from {swipeCount} swipes.
               </p>
               <button
@@ -527,38 +514,16 @@ export default function SwipeFeedPage() {
             </div>
           ) : (
             <>
-              {/* Card stack — render bottom 3 */}
               <div className="relative" style={{ height: 520 }}>
                 <AnimatePresence>
                   {thirdCard && (
-                    <SwipeCardView
-                      key={thirdCard.id + "-3"}
-                      card={thirdCard}
-                      onSwipeRight={() => {}}
-                      onSwipeLeft={() => {}}
-                      isTop={false}
-                      stackIndex={2}
-                    />
+                    <SwipeCardView key={thirdCard.id + "-3"} card={thirdCard} onSwipeRight={() => {}} onSwipeLeft={() => {}} isTop={false} stackIndex={2} isDark={isDark} />
                   )}
                   {nextCard && (
-                    <SwipeCardView
-                      key={nextCard.id + "-2"}
-                      card={nextCard}
-                      onSwipeRight={() => {}}
-                      onSwipeLeft={() => {}}
-                      isTop={false}
-                      stackIndex={1}
-                    />
+                    <SwipeCardView key={nextCard.id + "-2"} card={nextCard} onSwipeRight={() => {}} onSwipeLeft={() => {}} isTop={false} stackIndex={1} isDark={isDark} />
                   )}
                   {currentCard && (
-                    <SwipeCardView
-                      key={currentCard.id}
-                      card={currentCard}
-                      onSwipeRight={handleSwipeRight}
-                      onSwipeLeft={handleSwipeLeft}
-                      isTop={true}
-                      stackIndex={0}
-                    />
+                    <SwipeCardView key={currentCard.id} card={currentCard} onSwipeRight={handleSwipeRight} onSwipeLeft={handleSwipeLeft} isTop={true} stackIndex={0} isDark={isDark} />
                   )}
                 </AnimatePresence>
               </div>
@@ -567,23 +532,19 @@ export default function SwipeFeedPage() {
               <div className="flex items-center justify-center gap-8 mt-6">
                 <button
                   onClick={handleSwipeLeft}
-                  className="w-14 h-14 rounded-full bg-white border-2 border-[#E8193C] flex items-center justify-center shadow-md hover:scale-110 transition-transform active:scale-95"
+                  className="w-14 h-14 rounded-full flex items-center justify-center shadow-md hover:scale-110 transition-transform active:scale-95 border-2 border-[#E8193C] bg-card"
                 >
                   <X size={22} className="text-[#E8193C]" />
                 </button>
                 <button
-                  onClick={() => {
-                    if (currentCard) {
-                      toast.info("Bookmarked!", { duration: 1500 });
-                    }
-                  }}
-                  className="w-10 h-10 rounded-full bg-white border border-[#EAECF0] flex items-center justify-center shadow-sm hover:scale-110 transition-transform"
+                  onClick={() => currentCard && toast.info("Bookmarked!", { duration: 1500 })}
+                  className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm bg-card border border-border hover:scale-110 transition-transform"
                 >
-                  <Bookmark size={16} className="text-[#667085]" />
+                  <Bookmark size={16} className="text-muted-foreground" />
                 </button>
                 <button
                   onClick={handleSwipeRight}
-                  className="w-14 h-14 rounded-full bg-white border-2 border-[#4DC820] flex items-center justify-center shadow-md hover:scale-110 transition-transform active:scale-95"
+                  className="w-14 h-14 rounded-full flex items-center justify-center shadow-md hover:scale-110 transition-transform active:scale-95 border-2 border-[#4DC820] bg-card"
                 >
                   <Heart size={22} className="text-[#4DC820]" />
                 </button>
@@ -591,14 +552,12 @@ export default function SwipeFeedPage() {
 
               {/* Hint */}
               <div className="flex items-center justify-between mt-4 px-2">
-                <div className="flex items-center gap-1.5 text-xs text-[#667085]">
-                  <ChevronLeft size={13} />
-                  <span>Pass</span>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ChevronLeft size={13} /> <span>Pass</span>
                 </div>
-                <p className="text-xs text-[#98A2B3]">Drag or tap buttons</p>
-                <div className="flex items-center gap-1.5 text-xs text-[#667085]">
-                  <span>Like +XP</span>
-                  <ChevronRight size={13} />
+                <p className="text-xs text-muted-foreground">Drag or tap buttons</p>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>Like +XP</span> <ChevronRight size={13} />
                 </div>
               </div>
             </>
@@ -606,43 +565,39 @@ export default function SwipeFeedPage() {
         </div>
       </div>
 
-      {/* ── Compose Modal ── */}
+      {/* Compose Modal */}
       <AnimatePresence>
         {showCompose && (
           <motion.div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCompose(false)} />
             <motion.div
-              className="relative w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl"
-              initial={{ y: 60, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 60, opacity: 0 }}
+              className="relative w-full max-w-md bg-card rounded-3xl overflow-hidden shadow-2xl border border-border"
+              initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }}
               transition={{ type: "spring", stiffness: 400, damping: 35 }}
             >
-              <div className="p-5 border-b border-[#EAECF0] flex items-center justify-between">
-                <h3 className="font-black text-[#101828] text-base" style={{ fontFamily: "var(--font-display)" }}>
+              <div className="p-5 border-b border-border flex items-center justify-between">
+                <h3 className="font-black text-foreground text-base" style={{ fontFamily: "var(--font-display)" }}>
                   Post a Trade Idea
                 </h3>
                 <button onClick={() => setShowCompose(false)}
-                        className="w-8 h-8 rounded-full bg-[#F2F4F7] flex items-center justify-center hover:bg-[#EAECF0] transition-colors">
-                  <X size={14} className="text-[#667085]" />
+                        className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-accent transition-colors">
+                  <X size={14} className="text-muted-foreground" />
                 </button>
               </div>
               <div className="p-5 space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-[#344054] uppercase tracking-wide mb-1.5 block">Ticker</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wide mb-1.5 block">Ticker</label>
                   <input
                     type="text"
                     placeholder="PLTR, NVDA, TSLA…"
-                    className="w-full px-3 py-2.5 rounded-xl border border-[#EAECF0] text-sm font-bold ticker-mono text-[#101828] focus:outline-none focus:border-[#4DC820] transition-colors bg-[#F9FAFB]"
+                    className="w-full px-3 py-2.5 rounded-xl border border-border text-sm font-bold ticker-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#4DC820] transition-colors bg-muted"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-[#344054] uppercase tracking-wide mb-1.5 block">Direction</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wide mb-1.5 block">Direction</label>
                   <div className="flex gap-2">
                     {[
                       { label: "↑ Bullish", color: "#4DC820", bg: "#F0FDE8" },
@@ -658,11 +613,11 @@ export default function SwipeFeedPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-[#344054] uppercase tracking-wide mb-1.5 block">Thesis</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wide mb-1.5 block">Thesis</label>
                   <textarea
                     placeholder="Why are you taking this trade? Keep it short and clear…"
                     rows={3}
-                    className="w-full px-3 py-2.5 rounded-xl border border-[#EAECF0] text-sm text-[#101828] focus:outline-none focus:border-[#4DC820] transition-colors bg-[#F9FAFB] resize-none"
+                    className="w-full px-3 py-2.5 rounded-xl border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#4DC820] transition-colors bg-muted resize-none"
                   />
                 </div>
                 <button
