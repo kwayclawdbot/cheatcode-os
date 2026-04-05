@@ -850,9 +850,9 @@ export default function CommunityPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Trending Tickers Hero — sticky below nav (or top-0 when nav is hidden) ── */}
+      {/* ── Trending Tickers Hero — fixed below nav (or top-0 when nav is hidden) ── */}
       <div
-        className="bg-card border-b border-border sticky z-40"
+        className="bg-card border-b border-border fixed left-0 right-0 z-40"
         style={{
           top: navCollapsed ? 0 : 56,
           boxShadow: "0 1px 8px rgba(0,0,0,0.08)",
@@ -917,7 +917,7 @@ export default function CommunityPage() {
       </div>
 
       {/* ── Main Layout ── */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5" style={{ paddingTop: navCollapsed ? 96 : 40 }}>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5">
 
           {/* Left: Ticker Hub or Feed */}
