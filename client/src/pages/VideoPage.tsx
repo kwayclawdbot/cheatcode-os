@@ -258,16 +258,24 @@ export default function VideoPage() {
               <div className="space-y-3">
                 {todaysPicks.slice(0, 3).map(v => (
                   <Link key={v.id} href={`/video/${v.id}`}>
-                    <div className="content-card flex gap-3 bg-white rounded-xl border border-[#EAECF0] p-3 cursor-pointer">
-                      <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={v.thumbnail} alt={v.title} className="w-full h-full object-cover" />
+                    <div className="flex gap-3 cursor-pointer group/wn">
+                      {/* Thumbnail */}
+                      <div className="relative w-28 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-[#1a2035]">
+                        <img src={v.thumbnail} alt={v.title} className="w-full h-full object-cover transition-transform duration-200 group-hover/wn:scale-105" />
+                        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%)" }} />
+                        <span className="absolute bottom-1 left-1.5 text-[9px] font-semibold text-white bg-black/60 px-1 py-0.5 rounded">{v.duration}</span>
+                        {/* Score mini */}
+                        <span className="absolute top-1 right-1 text-[9px] font-bold px-1 py-0.5 rounded"
+                              style={{ background: v.convergenceScore >= 80 ? "rgba(77,200,32,0.85)" : "rgba(200,212,0,0.85)", color: "#101828" }}>
+                          {v.convergenceScore}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 py-0.5">
                         <p className="text-xs font-semibold text-[#101828] line-clamp-2 leading-snug"
                            style={{ fontFamily: "var(--font-display)" }}>
                           {v.title}
                         </p>
-                        <p className="text-[10px] text-[#98A2B3] mt-1">{v.creator.name} · {v.duration}</p>
+                        <p className="text-[10px] text-[#98A2B3] mt-1">{v.creator.name}</p>
                       </div>
                     </div>
                   </Link>

@@ -41,38 +41,54 @@ const SKILL_LEVELS = [
 function TopicsTab() {
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      {/* Visual topic tiles — 2 rows, scrollable */}
+      <div className="scroll-row pb-2">
         {topicGrid.map(topic => (
           <Link key={topic.id} href={`/topics/${topic.id}`}>
-            <div className="content-card rounded-2xl border border-[#EAECF0] p-5 text-center cursor-pointer"
-                 style={{ backgroundColor: topic.color }}>
-              <div className="text-3xl mb-2">{topic.icon}</div>
-              <div className="font-bold text-sm text-[#101828] leading-tight mb-1"
-                   style={{ fontFamily: "var(--font-display)" }}>
-                {topic.label}
+            <div className="flex-shrink-0 w-32 cursor-pointer group/tile">
+              <div className="rounded-xl overflow-hidden mb-1.5 flex flex-col items-center justify-center transition-transform duration-200 group-hover/tile:scale-105"
+                   style={{ height: 88, backgroundColor: topic.color }}>
+                <span className="text-4xl">{topic.icon}</span>
               </div>
-              <div className="text-xs text-[#667085]">{topic.count} videos</div>
+              <p className="text-[11px] font-semibold text-[#101828] text-center leading-tight"
+                 style={{ fontFamily: "var(--font-display)" }}>
+                {topic.label}
+              </p>
+              <p className="text-[10px] text-[#98A2B3] text-center">{topic.count} videos</p>
             </div>
           </Link>
         ))}
       </div>
 
-      {/* Featured topic: Technical Analysis */}
+      {/* Netflix shelf: Technical Analysis */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
-            📈 Technical Analysis — Latest
-          </h2>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-5 rounded-full" style={{ background: "#4DC820" }} />
+            <h2 className="text-base font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>Technical Analysis</h2>
+          </div>
           <Link href="/topics/technical-analysis">
-            <span className="text-sm font-semibold flex items-center gap-1 cc-gradient-text">
-              See all <ChevronRight size={14} />
-            </span>
+            <span className="text-xs font-semibold flex items-center gap-1 cc-gradient-text">See all <ChevronRight size={12} /></span>
           </Link>
         </div>
         <div className="scroll-row">
-          {todaysPicks.slice(0, 4).map(v => (
-            <VideoCard key={v.id} {...v} />
-          ))}
+          {todaysPicks.slice(0, 4).map(v => <VideoCard key={v.id} {...v} />)}
+        </div>
+      </div>
+
+      {/* Netflix shelf: Options */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-5 rounded-full" style={{ background: "#00AEEF" }} />
+            <h2 className="text-base font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>Options & Flow</h2>
+          </div>
+          <Link href="/topics/options">
+            <span className="text-xs font-semibold flex items-center gap-1 cc-gradient-text">See all <ChevronRight size={12} /></span>
+          </Link>
+        </div>
+        <div className="scroll-row">
+          {[...todaysPicks].reverse().slice(0, 4).map(v => <VideoCard key={v.id} {...v} />)}
         </div>
       </div>
     </div>
@@ -81,36 +97,23 @@ function TopicsTab() {
 
 function CreatorsTab() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
       {creators.map(c => (
         <Link key={c.id} href={`/creators/${c.id}`}>
-          <div className="content-card bg-white rounded-2xl border border-[#EAECF0] p-5 cursor-pointer">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold flex-shrink-0"
+          <div className="cursor-pointer text-center group/creator">
+            {/* Avatar — big, visual */}
+            <div className="relative mx-auto mb-2.5" style={{ width: 80, height: 80 }}>
+              <div className="w-full h-full rounded-full flex items-center justify-center text-white text-2xl font-bold transition-transform duration-200 group-hover/creator:scale-110"
                    style={{ backgroundColor: c.color }}>
                 {c.avatar}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-[#101828] text-sm" style={{ fontFamily: "var(--font-display)" }}>
-                    {c.name}
-                  </h3>
-                  {c.verified && (
-                    <span className="text-[10px] font-semibold text-[#027A48] bg-[#ECFDF3] px-1.5 py-0.5 rounded-full border border-[#A9EFC5]">
-                      ✓ Curated
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-[#667085] mt-0.5">{c.handle}</p>
-              </div>
+              {c.verified && (
+                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold"
+                     style={{ background: "#4DC820", color: "#101828" }}>✓</div>
+              )}
             </div>
-            <p className="text-xs text-[#475467] mb-3">{c.specialty}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[#98A2B3]">{c.videoCount} curated videos</span>
-              <span className="text-xs font-semibold flex items-center gap-1 cc-gradient-text">
-                View profile <ChevronRight size={12} />
-              </span>
-            </div>
+            <p className="text-xs font-bold text-[#101828] truncate" style={{ fontFamily: "var(--font-display)" }}>{c.name}</p>
+            <p className="text-[10px] text-[#98A2B3] truncate mt-0.5">{c.videoCount} videos</p>
           </div>
         </Link>
       ))}
@@ -120,53 +123,49 @@ function CreatorsTab() {
 
 function ThemesTab() {
   return (
-    <div className="space-y-4">
-      {hotThemes.map(theme => {
-        const statusColors: Record<string, string> = {
-          "Escalating": "text-[#A8001F] bg-[#FFF0F3] border-[#F8A3B1]",
-          "Active": "text-[#2E7A10] bg-[#F0FDE8] border-[#B6F08A]",
-          "Watch": "text-[#7A6800] bg-[#FAFDE8] border-[#E8F08A]",
-          "New": "text-[#005F8A] bg-[#E8F8FF] border-[#7FDBF8]",
-        };
-        return (
-          <Link key={theme.id} href={`/themes/${theme.id}`}>
-            <div className="content-card bg-white rounded-2xl border border-[#EAECF0] p-5 cursor-pointer">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${statusColors[theme.status]}`}>
-                      {theme.status}
-                    </span>
-                    <span className="text-xs text-[#98A2B3]">Level {theme.level}/5</span>
-                  </div>
-                  <h3 className="font-bold text-[#101828] text-base mb-2" style={{ fontFamily: "var(--font-display)" }}>
-                    {theme.label}
-                  </h3>
-                  <div className="flex gap-2 flex-wrap">
-                    {theme.tickers.map(t => (
-                      <span key={t} className="ticker-mono text-xs bg-[#F9FAFB] border border-[#EAECF0] px-2 py-0.5 rounded text-[#475467]">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="score-number text-2xl font-bold" style={{ color: theme.color }}>
-                    {theme.score}
-                  </div>
-                  <div className="text-xs text-[#98A2B3]">convergence</div>
-                  <div className="flex gap-0.5 mt-2 justify-end">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className={`h-1.5 w-4 rounded-full`}
-                           style={{ backgroundColor: i < theme.level ? theme.color : "#EAECF0" }} />
-                    ))}
-                  </div>
-                </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {hotThemes.map(theme => (
+        <Link key={theme.id} href={`/themes/${theme.id}`}>
+          <div className="cursor-pointer rounded-2xl overflow-hidden group/theme" style={{ border: `1px solid ${theme.color}33` }}>
+            {/* Visual header */}
+            <div className="relative p-5 pb-4"
+                 style={{ background: `linear-gradient(135deg, ${theme.color}18 0%, ${theme.color}30 100%)` }}>
+              <div className="absolute top-3 right-3">
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${theme.color}25`, color: theme.color }}>
+                  {theme.status}
+                </span>
+              </div>
+              {/* Big score */}
+              <div className="text-5xl font-black mb-1 leading-none" style={{ color: theme.color, fontFamily: "var(--font-mono)", opacity: 0.25 }}>
+                {theme.score}
+              </div>
+              <h3 className="font-bold text-[#101828] text-sm leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+                {theme.label}
+              </h3>
+              {/* Level bar */}
+              <div className="flex gap-0.5 mt-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-1 flex-1 rounded-full"
+                       style={{ backgroundColor: i < theme.level ? theme.color : `${theme.color}22` }} />
+                ))}
               </div>
             </div>
-          </Link>
-        );
-      })}
+            {/* Ticker row */}
+            <div className="px-4 py-2.5 bg-white flex items-center justify-between">
+              <div className="flex gap-1">
+                {theme.tickers.map(t => (
+                  <span key={t} className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{ background: `${theme.color}15`, color: theme.color, fontFamily: "var(--font-mono)" }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-[#98A2B3]">Level {theme.level}/5</span>
+            </div>
+          </div>
+        </Link>
+      ))}
     </div>
   );
 }
