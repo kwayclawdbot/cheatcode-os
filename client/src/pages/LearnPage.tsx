@@ -18,7 +18,7 @@ const LEVEL_STYLES: Record<string, { bg: string; text: string; border: string; a
 function PathCard({ path }: { path: typeof learningPaths[0] }) {
   const s = LEVEL_STYLES[path.level];
   return (
-    <div className="content-card bg-white rounded-2xl border border-[#EAECF0] overflow-hidden">
+    <div className="content-card bg-card rounded-2xl border border-border overflow-hidden">
       <div className="h-1 w-full" style={{ background: s.accent }} />
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
@@ -37,19 +37,19 @@ function PathCard({ path }: { path: typeof learningPaths[0] }) {
           {!path.free && <Lock size={14} className="text-[#98A2B3] flex-shrink-0 mt-0.5" />}
         </div>
 
-        <h3 className="font-bold text-[#101828] text-base mb-2 leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+        <h3 className="font-bold text-foreground text-base mb-2 leading-snug" style={{ fontFamily: "var(--font-display)" }}>
           {path.title}
         </h3>
-        <p className="text-sm text-[#667085] leading-relaxed mb-4">{path.description}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-4">{path.description}</p>
 
-        <div className="flex items-center gap-4 text-xs text-[#98A2B3] mb-4">
+        <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
           <span className="flex items-center gap-1"><BookOpen size={11} />{path.lessonCount} lessons</span>
           <span className="flex items-center gap-1"><Clock size={11} />{path.duration}</span>
         </div>
 
         <div className="space-y-1.5 mb-4">
           {path.topics.map((topic, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs text-[#475467]">
+            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
               <CheckCircle size={12} className="flex-shrink-0" style={{ color: s.accent }} />
               {topic}
             </div>
@@ -80,7 +80,7 @@ export default function LearnPage() {
   const paidPaths = learningPaths.filter(p => !p.free);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
@@ -122,10 +122,10 @@ export default function LearnPage() {
           <section>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="text-xl font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
+                <h2 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>
                   Free Learning Paths
                 </h2>
-                <p className="text-sm text-[#667085] mt-0.5">Available to all users. No account required.</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Available to all users. No account required.</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -137,10 +137,10 @@ export default function LearnPage() {
           <section>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="text-xl font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
+                <h2 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>
                   Pro & Elite Courses
                 </h2>
-                <p className="text-sm text-[#667085] mt-0.5">Advanced content from FTA, Teen Trading Academy, and expert workshops.</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Advanced content from FTA, Teen Trading Academy, and expert workshops.</p>
               </div>
               <span className="text-xs font-semibold px-3 py-1 rounded-full border"
                     style={{ background: "#FAFDE8", color: "#7A6800", borderColor: "#E8F08A" }}>

@@ -36,19 +36,19 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
   const data = tickerData[ticker];
   return (
     <Link href={`/intelligence?ticker=${ticker}`}>
-      <div className="content-card flex items-start gap-3 p-3 bg-white rounded-xl border border-[#EAECF0] cursor-pointer">
+      <div className="content-card flex items-start gap-3 p-3 bg-card rounded-xl border border-border cursor-pointer">
         <div className="flex-shrink-0">
           {data ? (
             <ScoreRing score={data.score} size="sm" />
           ) : (
-            <div className="w-11 h-11 rounded-full bg-[#F2F4F7] flex items-center justify-center">
-              <span className="ticker-mono text-xs text-[#667085]">{ticker}</span>
+            <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center">
+              <span className="ticker-mono text-xs text-muted-foreground">{ticker}</span>
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="ticker-mono text-sm font-bold text-[#101828]">{ticker}</span>
+            <span className="ticker-mono text-sm font-bold text-foreground">{ticker}</span>
             {data && (
               <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
                 data.direction === "Bullish" ? "text-[#2E7A10] bg-[#F0FDE8]" : "text-[#A8001F] bg-[#FFF0F3]"
@@ -57,7 +57,7 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
               </span>
             )}
           </div>
-          <p className="text-xs text-[#667085] leading-relaxed">{creatorNote}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{creatorNote}</p>
           {data && (
             <p className={`text-xs font-medium mt-1 ${isPaid ? "text-[#00AEEF]" : "gated-blur text-[#00AEEF]"}`}>
               {isPaid
@@ -77,18 +77,18 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
 function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#EAECF0] rounded-xl overflow-hidden">
+    <div className="border border-border rounded-xl overflow-hidden bg-card">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-[#F9FAFB] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted transition-colors"
       >
-        <span className="font-semibold text-sm text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
+        <span className="font-semibold text-sm text-foreground" style={{ fontFamily: "var(--font-display)" }}>
           {title}
         </span>
-        {open ? <ChevronUp size={16} className="text-[#667085]" /> : <ChevronDown size={16} className="text-[#667085]" />}
+        {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
       </button>
       {open && (
-        <div className="border-t border-[#EAECF0] bg-white">
+        <div className="border-t border-border bg-card">
           {children}
         </div>
       )}
@@ -100,13 +100,13 @@ export default function VideoPage() {
   const video = SAMPLE_VIDEO;
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter container mx-auto py-6">
         {/* Back nav */}
         <Link href="/">
-          <button className="flex items-center gap-2 text-sm text-[#667085] hover:text-[#101828] transition-colors mb-4">
+          <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
             <ArrowLeft size={14} />
             Back to Today's Picks
           </button>
@@ -132,14 +132,14 @@ export default function VideoPage() {
             {/* Title + meta */}
             <div>
               <div className="flex items-start justify-between gap-4">
-                <h1 className="text-xl font-bold text-[#101828] leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+                <h1 className="text-xl font-bold text-foreground leading-snug" style={{ fontFamily: "var(--font-display)" }}>
                   {video.title}
                 </h1>
                 <div className="flex gap-2 flex-shrink-0">
-                  <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#EAECF0] text-[#667085] hover:bg-[#F9FAFB] transition-colors">
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors">
                     <Bookmark size={14} />
                   </button>
-                  <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#EAECF0] text-[#667085] hover:bg-[#F9FAFB] transition-colors">
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors">
                     <Share2 size={14} />
                   </button>
                 </div>
@@ -150,19 +150,19 @@ export default function VideoPage() {
                        style={{ backgroundColor: video.creator.color }}>
                     {video.creator.avatar}
                   </div>
-                  <span className="text-sm font-medium text-[#475467]">{video.creator.name}</span>
+                  <span className="text-sm font-medium text-muted-foreground">{video.creator.name}</span>
                 </div>
-                <span className="text-[#EAECF0]">·</span>
-                <span className="text-sm text-[#98A2B3] flex items-center gap-1"><Clock size={12} />{video.publishedAt}</span>
-                <span className="text-[#EAECF0]">·</span>
-                <span className="text-sm text-[#98A2B3]">{video.duration}</span>
+                <span className="text-border">·</span>
+                <span className="text-sm text-muted-foreground flex items-center gap-1"><Clock size={12} />{video.publishedAt}</span>
+                <span className="text-border">·</span>
+                <span className="text-sm text-muted-foreground">{video.duration}</span>
                 <a href="#" className="ml-auto text-xs text-[#00AEEF] flex items-center gap-1 hover:underline">
                   Watch on YouTube <ExternalLink size={10} />
                 </a>
               </div>
               <div className="flex gap-2 mt-2">
                 {video.tags.map(t => (
-                  <span key={t} className="text-xs text-[#667085] bg-[#F2F4F7] px-2.5 py-1 rounded-full border border-[#EAECF0]">
+                  <span key={t} className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full border border-border">
                     {t}
                   </span>
                 ))}
@@ -177,25 +177,25 @@ export default function VideoPage() {
             </div>
 
             {/* Quick Take — always visible */}
-            <div className="bg-gradient-to-r from-[#E8F8FF] to-[#F0FDE8] rounded-xl p-4 border border-[#7FDBF8]">
+            <div className="rounded-xl p-4 border border-border" style={{ background: "linear-gradient(to right, rgba(0,174,239,0.08), rgba(77,200,32,0.06))" }}>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#00AEEF" }}>
                   <span className="text-white text-[9px] font-bold">K</span>
                 </div>
                 <span className="text-xs font-semibold" style={{ color: "#005F8A" }}>Kai's Quick Take</span>
               </div>
-              <p className="text-sm text-[#101828] leading-relaxed">{video.quickTake}</p>
+              <p className="text-sm text-foreground leading-relaxed">{video.quickTake}</p>
             </div>
 
             {/* Key Insights */}
             <CollapsibleSection title="Key Insights" defaultOpen>
-              <ul className="divide-y divide-[#F2F4F7]">
+              <ul className="divide-y divide-border">
                 {KEY_INSIGHTS.map((insight, i) => (
                   <li key={i} className="flex gap-3 px-4 py-3">
                     <span className="w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#F0FDE8", color: "#2E7A10" }}>
                       {i + 1}
                     </span>
-                    <p className="text-sm text-[#475467] leading-relaxed">{insight}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{insight}</p>
                   </li>
                 ))}
               </ul>
@@ -206,17 +206,17 @@ export default function VideoPage() {
               <div className="p-4 space-y-3">
                 <TickerMention ticker="KKR" creatorNote="Supply zone at $92 based on demand theory. Key level to watch for breakdown confirmation." />
                 <TickerMention ticker="NVDA" creatorNote="Mentioned as counterexample — AI infrastructure demand offsetting credit stress concerns." isPaid />
-                <div className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-xl border border-[#EAECF0]">
-                  <div className="w-11 h-11 rounded-full bg-[#F2F4F7] flex items-center justify-center flex-shrink-0">
-                    <span className="ticker-mono text-xs text-[#667085]">ARCC</span>
+                <div className="flex items-center gap-3 p-3 bg-muted rounded-xl border border-border">
+                  <div className="w-11 h-11 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
+                    <span className="ticker-mono text-xs text-muted-foreground">ARCC</span>
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="ticker-mono text-sm font-bold text-[#101828]">ARCC</span>
+                      <span className="ticker-mono text-sm font-bold text-foreground">ARCC</span>
                       <Lock size={12} className="text-[#98A2B3]" />
                     </div>
-                    <p className="text-xs text-[#667085]">Ares Capital — diverging from KKR. Potential pair trade.</p>
-                    <p className="text-xs text-[#98A2B3] mt-1">Kai's analysis available for Pro members.</p>
+                    <p className="text-xs text-muted-foreground">Ares Capital — diverging from KKR. Potential pair trade.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Kai's analysis available for Pro members.</p>
                   </div>
                 </div>
               </div>
@@ -224,11 +224,11 @@ export default function VideoPage() {
 
             {/* Timestamps */}
             <CollapsibleSection title="Timestamps">
-              <div className="divide-y divide-[#F2F4F7]">
+              <div className="divide-y divide-border">
                 {TIMESTAMPS.map((ts, i) => (
-                  <button key={i} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F9FAFB] transition-colors text-left">
+                  <button key={i} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors text-left">
                     <span className="ticker-mono text-xs w-10 flex-shrink-0" style={{ color: "#4DC820" }}>{ts.time}</span>
-                    <span className="text-sm text-[#475467]">{ts.label}</span>
+                    <span className="text-sm text-muted-foreground">{ts.label}</span>
                   </button>
                 ))}
               </div>
@@ -238,11 +238,11 @@ export default function VideoPage() {
           {/* Sidebar */}
           <div className="space-y-5">
             {/* Convergence score callout */}
-            <div className="bg-white rounded-xl border border-[#EAECF0] p-5 text-center">
+            <div className="bg-card rounded-xl border border-border p-5 text-center">
               <p className="section-label mb-3">KKR Convergence Score</p>
               <ScoreRing score={88} size="lg" />
               <p className="text-sm font-semibold mt-3" style={{ color: "#E8193C" }}>Bearish Setup</p>
-              <p className="text-xs text-[#667085] mt-1">Swing Trade · High Conviction</p>
+              <p className="text-xs text-muted-foreground mt-1">Swing Trade · High Conviction</p>
               <Link href="/intelligence?ticker=KKR">
                 <button className="w-full mt-4 text-[#101828] text-sm font-bold py-2 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity">
                   Full Intelligence Breakdown
@@ -252,7 +252,7 @@ export default function VideoPage() {
 
             {/* Related videos */}
             <div>
-              <h3 className="font-bold text-sm text-[#101828] mb-3" style={{ fontFamily: "var(--font-display)" }}>
+              <h3 className="font-bold text-sm text-foreground mb-3" style={{ fontFamily: "var(--font-display)" }}>
                 Watch Next
               </h3>
               <div className="space-y-3">
@@ -271,11 +271,11 @@ export default function VideoPage() {
                         </span>
                       </div>
                       <div className="flex-1 min-w-0 py-0.5">
-                        <p className="text-xs font-semibold text-[#101828] line-clamp-2 leading-snug"
+                        <p className="text-xs font-semibold text-foreground line-clamp-2 leading-snug"
                            style={{ fontFamily: "var(--font-display)" }}>
                           {v.title}
                         </p>
-                        <p className="text-[10px] text-[#98A2B3] mt-1">{v.creator.name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">{v.creator.name}</p>
                       </div>
                     </div>
                   </Link>

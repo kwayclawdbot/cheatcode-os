@@ -79,7 +79,7 @@ const TIERS = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
@@ -101,10 +101,10 @@ export default function PricingPage() {
         <div className="container mx-auto py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {TIERS.map(tier => (
-              <div key={tier.id} className={`relative bg-white rounded-2xl overflow-hidden ${
+              <div key={tier.id} className={`relative bg-card rounded-2xl overflow-hidden ${
                 tier.popular
                   ? "border-2 shadow-xl shadow-green-100/50"
-                  : "border border-[#EAECF0]"
+                  : "border border-border"
               }`}
                 style={tier.popular ? { borderColor: "#4DC820" } : {}}>
                 {/* Top accent bar */}
@@ -118,14 +118,14 @@ export default function PricingPage() {
                   </div>
                 )}
                 <div className="p-6">
-                  <h2 className="font-bold text-lg text-[#101828] mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                  <h2 className="font-bold text-lg text-foreground mb-1" style={{ fontFamily: "var(--font-display)" }}>
                     {tier.name}
                   </h2>
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-3xl font-bold text-[#101828]">{tier.price}</span>
-                    <span className="text-sm text-[#98A2B3]">/{tier.period}</span>
+                    <span className="text-3xl font-bold text-foreground">{tier.price}</span>
+                    <span className="text-sm text-muted-foreground">/{tier.period}</span>
                   </div>
-                  <p className="text-xs text-[#667085] mb-5">{tier.description}</p>
+                  <p className="text-xs text-muted-foreground mb-5">{tier.description}</p>
 
                   {tier.ctaType === "gradient" && (
                     <button className="w-full text-[#101828] text-sm font-bold py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2">
@@ -140,7 +140,7 @@ export default function PricingPage() {
                     </button>
                   )}
                   {tier.ctaType === "outline" && (
-                    <button className="w-full text-[#475467] text-sm font-semibold py-2.5 rounded-xl border border-[#EAECF0] hover:bg-[#F9FAFB] transition-colors mb-5">
+                    <button className="w-full text-muted-foreground text-sm font-semibold py-2.5 rounded-xl border border-border hover:bg-muted transition-colors mb-5">
                       {tier.cta}
                     </button>
                   )}
@@ -149,13 +149,13 @@ export default function PricingPage() {
                     {tier.features.map((f, i) => (
                       <div key={i} className="flex items-start gap-2">
                         <Check size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#4DC820" }} />
-                        <span className="text-xs text-[#475467] leading-relaxed">{f}</span>
+                        <span className="text-xs text-muted-foreground leading-relaxed">{f}</span>
                       </div>
                     ))}
                     {tier.locked.map((f, i) => (
                       <div key={i} className="flex items-start gap-2 opacity-40">
-                        <Lock size={14} className="text-[#98A2B3] flex-shrink-0 mt-0.5" />
-                        <span className="text-xs text-[#98A2B3] leading-relaxed">{f}</span>
+                        <Lock size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <span className="text-xs text-muted-foreground leading-relaxed">{f}</span>
                       </div>
                     ))}
                   </div>
@@ -165,7 +165,7 @@ export default function PricingPage() {
           </div>
 
           <div className="max-w-2xl mx-auto mt-12 text-center">
-            <p className="text-sm text-[#667085]">
+            <p className="text-sm text-muted-foreground">
               All plans include a 7-day free trial. No credit card required for Free.{" "}
               <Link href="/"><span className="font-semibold cc-gradient-text underline">Start exploring →</span></Link>
             </p>

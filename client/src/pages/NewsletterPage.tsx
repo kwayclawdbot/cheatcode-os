@@ -33,7 +33,7 @@ export default function NewsletterPage() {
   const [subscribed, setSubscribed] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
+    <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
@@ -55,7 +55,7 @@ export default function NewsletterPage() {
               {/* Subscribe form */}
               {!subscribed ? (
                 <div className="flex-shrink-0">
-                  <p className="text-xs font-semibold text-[#475467] mb-2">Get it in your inbox</p>
+                  <p className="text-xs font-semibold text-white/70 mb-2">Get it in your inbox</p>
                   <div className="flex gap-2">
                     <div className="relative">
                       <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
@@ -75,7 +75,7 @@ export default function NewsletterPage() {
                       <ArrowRight size={13} />
                     </button>
                   </div>
-                  <p className="text-[10px] text-[#98A2B3] mt-1.5">Free. Unsubscribe anytime.</p>
+                  <p className="text-[10px] text-white/50 mt-1.5">Free. Unsubscribe anytime.</p>
                 </div>
               ) : (
                 <div className="flex-shrink-0 rounded-xl px-5 py-3 text-center" style={{ background: "#F0FDE8", border: "1px solid #B6F08A" }}>
@@ -91,33 +91,33 @@ export default function NewsletterPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Archive list */}
             <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-lg font-bold text-[#101828]" style={{ fontFamily: "var(--font-display)" }}>
+              <h2 className="text-lg font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>
                 Archive
               </h2>
               {newsletterArchive.map(issue => (
-                <div key={issue.id} className="content-card bg-white rounded-2xl border border-[#EAECF0] p-5 cursor-pointer">
+                <div key={issue.id} className="content-card bg-card rounded-2xl border border-border p-5 cursor-pointer">
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-[#98A2B3]">{issue.date}</span>
+                        <span className="text-xs text-muted-foreground">{issue.date}</span>
                         <SentimentBadge sentiment={issue.sentiment} />
                       </div>
-                      <h3 className="font-bold text-[#101828] text-base leading-snug"
+                      <h3 className="font-bold text-foreground text-base leading-snug"
                           style={{ fontFamily: "var(--font-display)" }}>
                         {issue.subject}
                       </h3>
                     </div>
-                    <ChevronRight size={16} className="text-[#98A2B3] flex-shrink-0 mt-1" />
+                    <ChevronRight size={16} className="text-muted-foreground flex-shrink-0 mt-1" />
                   </div>
 
-                  <p className="text-sm text-[#667085] leading-relaxed mb-4">{issue.previewText}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4">{issue.previewText}</p>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="section-label mb-1.5">Top Videos</p>
                       <ul className="space-y-1">
                         {issue.topVideos.map((v, i) => (
-                          <li key={i} className="text-xs text-[#475467] flex items-center gap-1.5">
+                          <li key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#4DC820" }} />
                             {v}
                           </li>
@@ -128,7 +128,7 @@ export default function NewsletterPage() {
                       <p className="section-label mb-1.5">Theme Changes</p>
                       <ul className="space-y-1">
                         {issue.themeChanges.map((t, i) => (
-                          <li key={i} className="text-xs text-[#475467] flex items-center gap-1.5">
+                          <li key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#C8D400" }} />
                             {t}
                           </li>
@@ -141,7 +141,7 @@ export default function NewsletterPage() {
 
               {/* Load more placeholder */}
               <div className="text-center py-4">
-                <button className="text-sm text-[#667085] border border-[#EAECF0] px-5 py-2 rounded-xl hover:bg-[#F9FAFB] transition-colors">
+                <button className="text-sm text-muted-foreground border border-border px-5 py-2 rounded-xl hover:bg-muted transition-colors">
                   Load more issues
                 </button>
               </div>
@@ -150,8 +150,8 @@ export default function NewsletterPage() {
             {/* Sidebar */}
             <div className="space-y-5">
               {/* What's in every brief */}
-              <div className="bg-white rounded-xl border border-[#EAECF0] p-5">
-                <h3 className="font-bold text-sm text-[#101828] mb-4" style={{ fontFamily: "var(--font-display)" }}>
+              <div className="bg-card rounded-xl border border-border p-5">
+                <h3 className="font-bold text-sm text-foreground mb-4" style={{ fontFamily: "var(--font-display)" }}>
                   What's in every brief
                 </h3>
                 <div className="space-y-3">
@@ -164,8 +164,8 @@ export default function NewsletterPage() {
                     <div key={i} className="flex gap-3">
                       <span className="text-lg">{item.icon}</span>
                       <div>
-                        <p className="text-sm font-semibold text-[#101828]">{item.label}</p>
-                        <p className="text-xs text-[#667085]">{item.desc}</p>
+                        <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.desc}</p>
                       </div>
                     </div>
                   ))}
@@ -177,7 +177,7 @@ export default function NewsletterPage() {
                 <h3 className="font-bold text-sm mb-2" style={{ fontFamily: "var(--font-display)" }}>
                   Get real-time alerts
                 </h3>
-                <p className="text-xs text-[#98A2B3] mb-4 leading-relaxed">
+                <p className="text-xs text-white/60 mb-4 leading-relaxed">
                   Pro members get push alerts when a ticker hits 90+ convergence. Don't wait for the morning brief.
                 </p>
                 <Link href="/pricing">
