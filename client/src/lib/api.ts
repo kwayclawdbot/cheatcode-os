@@ -216,3 +216,130 @@ export async function bookmarkContent(id: string): Promise<void> {
 export async function removeBookmark(id: string): Promise<void> {
   await apiFetch(`/content/${id}/bookmark`, { method: "DELETE" });
 }
+
+// ── Event Tracking ──────────────────────────────────────────────────────────
+
+let eventBuffer: { event_type: string; payload: Record<string, unknown> }[] = [];
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function trackEvent(eventType: string, payload: Record<string, unknown> = {}) {
+  eventBuffer.push({ event_type: eventType, payload });
+  if (!flushTimer) {
+    flushTimer = setTimeout(flushEvents, 10000); // Flush every 10s
+  }
+}
+
+async function flushEvents() {
+  flushTimer = null;
+  if (!eventBuffer.length) return;
+  const batch = [...eventBuffer];
+  eventBuffer = [];
+  try {
+    await apiFetch("/events/track", {
+      method: "POST",
+      body: JSON.stringify({ events: batch }),
+    });
+  } catch {
+    // Re-queue on failure
+    eventBuffer = [...batch, ...eventBuffer];
+  }
+}
+
+// Flush on page unload
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    if (eventBuffer.length) {
+      navigator.sendBeacon?.(
+        `${API_BASE}/events/track`,
+        JSON.stringify({ events: eventBuffer }),
+      );
+    }
+  });
+}
+
+// ── Social Feed ─────────────────────────────────────────────────────────────
+
+export async function fetchFeed(tab = "discover", page = 1): Promise<any[]> {
+  return apiFetch(`/social/feed?tab=${tab}&page=${page}`);
+}
+
+export async function createPost(data: Record<string, unknown>): Promise<any> {
+  return apiFetch("/social/posts", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function likePost(postId: string): Promise<void> {
+  await apiFetch(`/social/posts/${postId}/like`, { method: "POST" });
+}
+
+export async function unlikePost(postId: string): Promise<void> {
+  await apiFetch(`/social/posts/${postId}/like`, { method: "DELETE" });
+}
+
+export async function bookmarkPost(postId: string): Promise<void> {
+  await apiFetch(`/social/posts/${postId}/bookmark`, { method: "POST" });
+}
+
+export async function repostPost(postId: string): Promise<void> {
+  await apiFetch(`/social/posts/${postId}/repost`, { method: "POST" });
+}
+
+export async function fetchComments(postId: string): Promise<any[]> {
+  return apiFetch(`/social/posts/${postId}/comments`);
+}
+
+export async function createComment(postId: string, body: string, parentId?: string): Promise<any> {
+  return apiFetch(`/social/posts/${postId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body, parent_id: parentId }),
+  });
+}
+
+export async function followUser(userId: string): Promise<void> {
+  await apiFetch(`/social/follow/${userId}`, { method: "POST" });
+}
+
+export async function unfollowUser(userId: string): Promise<void> {
+  await apiFetch(`/social/follow/${userId}`, { method: "DELETE" });
+}
+
+// ── Profile ─────────────────────────────────────────────────────────────────
+
+export async function fetchMyProfile(): Promise<any> {
+  return apiFetch("/profile/me");
+}
+
+export async function updateMyProfile(updates: Record<string, unknown>): Promise<void> {
+  await apiFetch("/profile/me", { method: "PUT", body: JSON.stringify(updates) });
+}
+
+export async function completeOnboarding(data: Record<string, unknown>): Promise<void> {
+  await apiFetch("/profile/onboarding", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function fetchTraderProfile(handle: string): Promise<any> {
+  return apiFetch(`/profile/traders/${handle}`);
+}
+
+export async function fetchLeaderboard(sort = "xp"): Promise<any[]> {
+  return apiFetch(`/profile/leaderboard?sort=${sort}`);
+}
+
+// ── Journal ─────────────────────────────────────────────────────────────────
+
+export async function fetchJournalEntries(params?: { ticker?: string; outcome?: string; page?: number }): Promise<any[]> {
+  const qs = new URLSearchParams();
+  if (params) Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, String(v)); });
+  return apiFetch(`/journal/entries?${qs}`);
+}
+
+export async function createJournalEntry(data: Record<string, unknown>): Promise<any> {
+  return apiFetch("/journal/entries", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function fetchJournalStats(): Promise<any> {
+  return apiFetch("/journal/stats");
+}
+
+export async function requestKaiAnalysis(entryId: string): Promise<{ analysis: string }> {
+  return apiFetch(`/journal/entries/${entryId}/kai-analysis`, { method: "POST" });
+}

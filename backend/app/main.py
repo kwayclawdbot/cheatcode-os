@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import get_settings
-from app.api.routes import home, content, intelligence, kai, payments, admin
+from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile
 from app.services.curation import run_curation_cycle
 from app.services.intelligence import run_brain_cycle, generate_radar
 
@@ -48,6 +48,10 @@ app.include_router(intelligence.router, prefix=s.api_prefix)
 app.include_router(kai.router, prefix=s.api_prefix)
 app.include_router(payments.router, prefix=s.api_prefix)
 app.include_router(admin.router, prefix=s.api_prefix)
+app.include_router(events.router, prefix=s.api_prefix)
+app.include_router(social.router, prefix=s.api_prefix)
+app.include_router(journal.router, prefix=s.api_prefix)
+app.include_router(profile.router, prefix=s.api_prefix)
 
 
 @app.get("/health")
