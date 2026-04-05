@@ -169,9 +169,10 @@ function PostCard({ post, onReact, onTickerClick }: {
           {post.ticker && (
             <button
               onClick={() => onTickerClick(post.ticker!)}
-              className="ticker-mono text-[11px] font-black px-2 py-0.5 rounded-lg transition-colors hover:bg-muted"
+              className="flex items-center gap-1 ticker-mono text-[11px] font-black px-1.5 py-0.5 rounded-lg transition-colors hover:bg-muted"
               style={{ color: sentColor }}
             >
+              <TickerLogo symbol={post.ticker} size={16} />
               ${post.ticker}
             </button>
           )}
@@ -432,10 +433,7 @@ function TickerHub({ ticker, radarTickers, onClose }: {
       <div className="p-4 border-b border-border" style={{ background: scoreColor + "08" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm"
-                 style={{ background: scoreColor + "20", border: `2px solid ${scoreColor}`, color: scoreColor }}>
-              {ticker.slice(0, 2)}
-            </div>
+            <TickerLogo symbol={ticker} size={44} className="rounded-xl" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="ticker-mono font-black text-foreground text-xl">${ticker}</span>
