@@ -284,14 +284,52 @@ function MessageBubble({
   );
 }
 
+// ─── localStorage helpers ────────────────────────────────────────────────────
+
+const LS_CONVS_KEY = "kai-assist-conversations";
+const LS_ACTIVE_KEY = "kai-assist-active-conv";
+
+/** Revive Date strings back to Date objects after JSON.parse */
+function reviveConversations(raw: unknown): Conversation[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Conversation[]).map(c => ({
+    ...c,
+    createdAt: new Date(c.createdAt),
+    updatedAt: new Date(c.updatedAt),
+    messages: c.messages.map(m => ({
+      ...m,
+      timestamp: new Date(m.timestamp),
+    })),
+  }));
+}
+
+function loadConversations(): Conversation[] {
+  try {
+    const raw = localStorage.getItem(LS_CONVS_KEY);
+    if (!raw) return [];
+    return reviveConversations(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+function loadActiveConvId(): string | null {
+  try {
+    return localStorage.getItem(LS_ACTIVE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function KaiAssistPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  // Initialize from localStorage on first render
+  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations());
+  const [activeConvId, setActiveConvId] = useState<string | null>(() => loadActiveConvId());
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -299,6 +337,28 @@ export default function KaiAssistPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const activeConv = conversations.find(c => c.id === activeConvId) ?? null;
+
+  // Persist conversations to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_CONVS_KEY, JSON.stringify(conversations));
+    } catch {
+      // Storage quota exceeded — silently ignore
+    }
+  }, [conversations]);
+
+  // Persist active conversation ID
+  useEffect(() => {
+    try {
+      if (activeConvId) {
+        localStorage.setItem(LS_ACTIVE_KEY, activeConvId);
+      } else {
+        localStorage.removeItem(LS_ACTIVE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeConvId]);
 
   // Auto-scroll to bottom
   useEffect(() => {
