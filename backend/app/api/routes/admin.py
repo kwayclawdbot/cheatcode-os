@@ -8,6 +8,7 @@ from app.services.curation import run_curation_cycle, process_video, fetch_chann
 from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.newsletter import generate_daily_newsletter
 from app.services.ingestion import ingest_all_pending, ingest_content
+from app.services.repurposing import repurpose_content, repurpose_all_pending, extract_clips, render_clip, post_clip
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -53,6 +54,47 @@ async def trigger_single_ingest(content_id: str, user: dict = Depends(_require_a
     """Ingest a single content item."""
     result = await ingest_content(content_id)
     return result or {"error": "Not found or already ingested"}
+
+
+# ── Repurposing ──────────────────────────────────────────────────────────────
+
+@router.post("/repurpose/run")
+async def trigger_repurpose_all(auto_render: bool = False, user: dict = Depends(_require_admin)):
+    """Extract clips from all un-clipped content."""
+    result = await repurpose_all_pending(auto_render=auto_render)
+    return result
+
+
+@router.post("/repurpose/{content_id}")
+async def trigger_repurpose(content_id: str, auto_render: bool = False, user: dict = Depends(_require_admin)):
+    """Repurpose a single content item into clips."""
+    result = await repurpose_content(content_id, auto_render=auto_render)
+    return result
+
+
+@router.post("/repurpose/clip/{clip_id}/render")
+async def trigger_render(clip_id: str, user: dict = Depends(_require_admin)):
+    """Render a specific clip."""
+    path = await render_clip(clip_id)
+    return {"render_path": path} if path else {"error": "Render failed"}
+
+
+@router.post("/repurpose/clip/{clip_id}/post")
+async def trigger_post(clip_id: str, platforms: str = "instagram,tiktok,youtube,twitter", user: dict = Depends(_require_admin)):
+    """Post a rendered clip to social platforms."""
+    result = await post_clip(clip_id, platforms.split(","))
+    return result
+
+
+@router.get("/repurpose/clips")
+async def list_clips(status: str = None, user: dict = Depends(_require_admin)):
+    """List all repurposed clips."""
+    db = get_supabase()
+    q = db.table("repurposed_clips").select("*, content(title, creator_id)").order("created_at", desc=True)
+    if status:
+        q = q.eq("status", status)
+    result = q.limit(100).execute()
+    return result.data or []
 
 
 @router.post("/newsletter/generate")
