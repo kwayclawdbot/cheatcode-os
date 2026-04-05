@@ -13,11 +13,12 @@ import {
   TrendingUp, TrendingDown, Minus, MessageCircle, Repeat2,
   Bookmark, Share2, Flame, Search, X, ChevronRight,
   Zap, Users, Clock, BarChart2, ArrowUpRight,
-  Globe, DollarSign, Activity, Bitcoin, ChevronDown,
-  ThumbsUp, ThumbsDown, Eye, Pencil, Play
+  Globe, DollarSign, Activity, Bitcoin, ChevronDown, ChevronUp,
+  ThumbsUp, ThumbsDown, Eye, Pencil, Play, LayoutGrid
 } from "lucide-react";
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
+import { useTheme } from "@/contexts/ThemeContext";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchRadar, fetchTicker, fetchContent, fetchContentByTicker } from "@/lib/api";
 import { SparklineChart } from "@/components/intelligence/SparklineChart";
@@ -769,6 +770,9 @@ export default function CommunityPage() {
   const [posts, setPosts] = useState<Post[]>(SEED_POSTS);
   const [radarTickers, setRadarTickers] = useState<any[]>([]);
   const [tickerSearch, setTickerSearch] = useState("");
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   useEffect(() => {
     fetchRadar().then(r => {
@@ -831,11 +835,30 @@ export default function CommunityPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Nav />
+      {/* Nav — hidden when collapsed for more screen real estate */}
+      <AnimatePresence>
+        {!navCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <Nav />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* ── Trending Tickers Hero ── */}
-      <div className="bg-card border-b border-border sticky top-14 z-30">
-        {/* Single header row: Trending label + asset tabs + search + discover link */}
+      {/* ── Trending Tickers Hero — sticky below nav (or top-0 when nav is hidden) ── */}
+      <div
+        className="bg-card border-b border-border sticky z-40"
+        style={{
+          top: navCollapsed ? 0 : 56,
+          boxShadow: "0 1px 8px rgba(0,0,0,0.08)",
+        }}
+      >
+        {/* Single header row: Trending label + asset tabs + search + discover + collapse toggle */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-0 flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mr-1">Trending</span>
           <div className="flex items-center gap-0.5 flex-1">
@@ -869,6 +892,20 @@ export default function CommunityPage() {
               <TrendingUp size={10} /> Discover
             </button>
           </Link>
+          {/* Collapse/expand nav toggle */}
+          <button
+            onClick={() => setNavCollapsed(!navCollapsed)}
+            title={navCollapsed ? "Show navigation" : "Hide navigation"}
+            className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition-all"
+            style={{
+              borderColor: navCollapsed ? "#4DC820" : "var(--border)",
+              color: navCollapsed ? "#4DC820" : "var(--muted-foreground)",
+              background: navCollapsed ? "rgba(77,200,32,0.08)" : "transparent",
+            }}
+          >
+            {navCollapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+            <span className="hidden sm:inline">{navCollapsed ? "Nav" : "Hide Nav"}</span>
+          </button>
         </div>
         {/* Scrollable StockTwits-style ticker cards */}
         <TrendingTickerStrip

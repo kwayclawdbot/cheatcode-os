@@ -174,3 +174,65 @@ async def sync_ticker_prices():
 
     log.info("Synced prices for %d tickers", updated)
     return updated
+
+
+# In-memory cache for sparkline data (5-minute TTL)
+_sparkline_cache: dict = {}
+_SPARKLINE_TTL = 5 * 60  # 5 minutes
+
+
+async def fetch_price_history(symbol: str, days: int = 30) -> list[dict]:
+    """Fetch daily close prices from EODHD for sparkline charts.
+    Returns list of {t: timestamp_ms, v: close_price} objects.
+    Falls back to empty list if EODHD key is missing or request fails.
+    """
+    cache_key = f"{symbol}:{days}"
+    now = time.time()
+    cached = _sparkline_cache.get(cache_key)
+    if cached and now < cached["expires"]:
+        return cached["data"]
+
+    s = get_settings()
+    if not s.eodhd_api_key:
+        log.warning("EODHD key missing — cannot fetch price history for %s", symbol)
+        return []
+
+    # EODHD uses .US suffix for US equities; crypto/forex already have suffix
+    suffix = "" if any(c in symbol for c in ["-", "."]) else ".US"
+    ticker_code = f"{symbol}{suffix}"
+
+    from datetime import timedelta
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt - timedelta(days=days + 14)  # extra buffer for weekends/holidays
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://eodhistoricaldata.com/api/eod/{ticker_code}",
+                params={
+                    "api_token": s.eodhd_api_key,
+                    "fmt": "json",
+                    "from": start_dt.strftime("%Y-%m-%d"),
+                    "to": end_dt.strftime("%Y-%m-%d"),
+                    "period": "d",
+                },
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                log.warning("EODHD history returned %d for %s", resp.status_code, symbol)
+                return []
+            raw = resp.json()
+            if not isinstance(raw, list) or len(raw) < 3:
+                return []
+            # Return last `days` data points as {t, v}
+            data = [
+                {"t": int(datetime.strptime(r["date"], "%Y-%m-%d").timestamp() * 1000), "v": float(r["close"])}
+                for r in raw
+                if r.get("close") is not None
+            ]
+            data = data[-days:]  # trim to requested window
+            _sparkline_cache[cache_key] = {"data": data, "expires": now + _SPARKLINE_TTL}
+            return data
+    except Exception as exc:
+        log.warning("EODHD price history error for %s: %s", symbol, exc)
+        return []
