@@ -1,23 +1,34 @@
-// CheatCode OS — Home Page v3: YouTube x Netflix
+// CheatCode OS — Home Page
 // Design: Visual-first. Big thumbnails. Netflix shelf rows.
 // - Featured "Hero Card" at top (like Netflix featured title)
 // - Horizontal scroll shelves per category
 // - Minimal text — everything is in the thumbnail or on hover
 // - Kai's Radar sidebar stays data-dense (it's meant to be)
+// NO MOCK DATA — all content from live Railway API + creator registry
 
 import { Link } from "wouter";
 import { TrendingUp, TrendingDown, Minus, ChevronRight, ChevronLeft, Flame, Play } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useEffect, useState } from "react";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import {
-  marketSentiment as mockSentiment, todaysPicks as mockPicks, topicGrid as mockTopicGrid,
-  hotThemes as mockThemes, radarTickers as mockRadar, creators as mockCreators
-} from "@/lib/mockData";
 import { fetchHome, fetchRadar, fetchCreators, normalizeContentCard } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
+import { syncCreatorRegistry, getCreatorAvatar, getCreatorColor, getAllCreators } from "@/lib/creatorRegistry";
+
+// ─── Topic grid (static — these are browse categories, not content) ───────────
+const TOPIC_GRID = [
+  { id: "technical-analysis", label: "Technical Analysis", icon: "📈", color: "#ECFDF3" },
+  { id: "options", label: "Options", icon: "⚡", color: "#EFF8FF" },
+  { id: "swing-trading", label: "Swing Trading", icon: "🎯", color: "#FFFAEB" },
+  { id: "day-trading", label: "Day Trading", icon: "⏱️", color: "#FEF3F2" },
+  { id: "macro", label: "Macro", icon: "🌍", color: "#F5F3FF" },
+  { id: "sectors", label: "Sectors", icon: "🏭", color: "#FFF7ED" },
+  { id: "crypto", label: "Crypto", icon: "₿", color: "#ECFDF3" },
+  { id: "fundamentals", label: "Fundamentals", icon: "📊", color: "#EFF8FF" },
+  { id: "psychology", label: "Psychology", icon: "🧠", color: "#FFFAEB" },
+];
 
 function timeAgo(dateStr: string): string {
   const ms = Date.now() - new Date(dateStr).getTime();
@@ -30,27 +41,39 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 7)}w ago`;
 }
 
-// Transform API data to match existing component shapes
+// ─── Data hooks ───────────────────────────────────────────────────────────────
 function useHomeData() {
   const { data: home } = useApi(fetchHome, null);
   const { data: radar } = useApi(fetchRadar, null);
+  const { data: apiCreators } = useApi(fetchCreators, []);
+
+  // Sync creator registry whenever API creators load
+  useEffect(() => {
+    syncCreatorRegistry();
+  }, []);
 
   const marketSentiment = home ? {
     label: home.market_sentiment.charAt(0).toUpperCase() + home.market_sentiment.slice(1),
     description: home.sentiment_summary || "",
     type: home.market_sentiment as "bullish" | "bearish" | "choppy" | "neutral",
     date: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
-  } : mockSentiment;
+  } : { label: "Loading...", description: "", type: "neutral" as const, date: "" };
 
   const todaysPicks = home?.todays_picks?.length ? home.todays_picks.map((p) => {
     const n = normalizeContentCard(p);
+    const slug = n.creator_slug || "";
     return {
       id: n.id,
       type: n.content_type as "video" | "podcast",
       youtubeId: n.youtubeId || "",
       title: n.title,
-      creatorId: n.creator_slug || "",
-      creator: { name: n.creator_name || "Unknown", avatar: (n.creator_name || "??").slice(0, 2).toUpperCase(), avatarUrl: mockCreators.find(c => c.id === n.creator_slug)?.avatarUrl || "", color: mockCreators.find(c => c.id === n.creator_slug)?.color || "#667085" },
+      creatorId: slug,
+      creator: {
+        name: n.creator_name || "Unknown",
+        avatar: (n.creator_name || "??").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+        avatarUrl: getCreatorAvatar(slug),
+        color: getCreatorColor(slug),
+      },
       thumbnail: n.thumbnailUrl || "",
       duration: n.durationLabel || "",
       quickTake: n.quick_take || "",
@@ -60,7 +83,7 @@ function useHomeData() {
       convergenceScore: Math.round(n.relevance_score * 100),
       publishedAt: n.publishedLabel || "",
     };
-  }) : mockPicks;
+  }) : [];
 
   const radarTickers = radar?.critical?.concat(radar.high_conviction || [], radar.watch || []).map((t) => ({
     ticker: t.symbol,
@@ -69,7 +92,7 @@ function useHomeData() {
     timeframe: t.timeframe ? t.timeframe.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Swing",
     confidence: t.confidence ? t.confidence.charAt(0).toUpperCase() + t.confidence.slice(1).replace(/_/g, " ") : "Watch",
     change: "",
-  })) || mockRadar;
+  })) || [];
 
   const hotThemes = home?.themes?.length ? home.themes.map((t) => ({
     id: t.slug,
@@ -79,25 +102,23 @@ function useHomeData() {
     tickers: [] as string[],
     score: Math.round(t.score),
     color: t.status === "escalating" ? "#F04438" : t.status === "active" ? "#12B76A" : "#F79009",
-  })) : mockThemes;
+  })) : [];
 
-  const { data: apiCreators } = useApi(fetchCreators, []);
+  const creators = apiCreators?.length ? apiCreators.map((c, i) => {
+    const COLORS = ["#12B76A", "#2E90FA", "#F79009", "#F04438", "#7C3AED", "#0EA5E9", "#E8193C", "#00AEEF", "#4DC820", "#667085", "#D946EF", "#EC4899", "#14B8A6"];
+    return {
+      id: c.slug,
+      name: c.name,
+      slug: c.slug,
+      avatar: c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+      avatarUrl: getCreatorAvatar(c.slug),
+      color: getCreatorColor(c.slug) || COLORS[i % COLORS.length],
+      specialty: c.tags.slice(0, 2).map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())).join(", "),
+      videoCount: c.content_count,
+    };
+  }) : [];
 
-  const CREATOR_COLORS = ["#12B76A", "#2E90FA", "#F79009", "#F04438", "#7C3AED", "#0EA5E9", "#E8193C", "#00AEEF", "#4DC820", "#667085", "#D946EF", "#EC4899", "#14B8A6"];
-
-  const creators = apiCreators?.length ? apiCreators.map((c, i) => ({
-    id: c.slug,
-    name: c.name,
-    handle: `@${c.slug}`,
-    specialty: c.tags.map(t => t.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())).join(", "),
-    videoCount: c.content_count,
-    avatar: c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
-    avatarUrl: mockCreators.find(mc => mc.id === c.slug)?.avatarUrl || "",
-    color: mockCreators.find(mc => mc.id === c.slug)?.color || CREATOR_COLORS[i % CREATOR_COLORS.length],
-    verified: true,
-  })) : mockCreators;
-
-  return { marketSentiment, todaysPicks, topicGrid: mockTopicGrid, hotThemes, radarTickers, creators };
+  return { marketSentiment, todaysPicks, topicGrid: TOPIC_GRID, hotThemes, radarTickers, creators };
 }
 
 
@@ -129,7 +150,6 @@ function Shelf({ title, href, accent, children }: {
       </div>
 
       <div className="relative">
-        {/* Left scroll button */}
         <button
           onClick={() => scroll("left")}
           className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-8 h-8 bg-card rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/shelf:opacity-100 transition-opacity border border-border"
@@ -141,7 +161,6 @@ function Shelf({ title, href, accent, children }: {
           {children}
         </div>
 
-        {/* Right scroll button */}
         <button
           onClick={() => scroll("right")}
           className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-8 h-8 bg-card rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/shelf:opacity-100 transition-opacity border border-border"
@@ -153,9 +172,17 @@ function Shelf({ title, href, accent, children }: {
   );
 }
 
-// ─── Featured Hero Card (Netflix "featured title" style) ──────────────────────
-type VideoItem = { id: string; type: string; title: string; creator: { name: string; avatar: string; color: string }; thumbnail: string; duration: string; quickTake: string; tags: string[]; relevanceBadge: string; tickers: string[]; convergenceScore: number; publishedAt: string };
+// ─── Featured Hero Card ────────────────────────────────────────────────────────
+type VideoItem = {
+  id: string; type: string; title: string;
+  creator: { name: string; avatar: string; avatarUrl?: string; color: string };
+  thumbnail: string; duration: string; quickTake: string;
+  tags: string[]; relevanceBadge: string; tickers: string[];
+  convergenceScore: number; publishedAt: string;
+};
+
 function FeaturedCard({ video }: { video: VideoItem }) {
+  const [imgFailed, setImgFailed] = useState(false);
   return (
     <Link href={`/video/${video.id}`}>
       <div className="relative rounded-2xl overflow-hidden cursor-pointer group"
@@ -164,11 +191,10 @@ function FeaturedCard({ video }: { video: VideoItem }) {
           src={video.thumbnail}
           alt={video.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1280&q=80"; }}
         />
-        {/* Gradient overlay */}
         <div className="absolute inset-0"
              style={{ background: "linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)" }} />
-        {/* Content */}
         <div className="absolute inset-0 flex flex-col justify-end p-6 md:justify-center md:pb-0">
           <div className="max-w-sm">
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full mb-2 inline-block"
@@ -198,15 +224,23 @@ function FeaturedCard({ video }: { video: VideoItem }) {
             </div>
           </div>
         </div>
-        {/* Score ring — top right */}
         <div className="absolute top-4 right-4">
           <ScoreRing score={video.convergenceScore} size="md" showLabel={false} />
         </div>
-        {/* Creator — top left */}
+        {/* Creator avatar top-left */}
         <div className="absolute top-4 left-4 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+          <div className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
                style={{ backgroundColor: video.creator.color }}>
-            {video.creator.avatar}
+            {video.creator.avatarUrl && !imgFailed ? (
+              <img
+                src={video.creator.avatarUrl}
+                alt={video.creator.name}
+                className="w-full h-full object-cover"
+                onError={() => setImgFailed(true)}
+              />
+            ) : (
+              video.creator.avatar
+            )}
           </div>
           <span className="text-xs font-semibold text-white/80">{video.creator.name}</span>
         </div>
@@ -215,14 +249,12 @@ function FeaturedCard({ video }: { video: VideoItem }) {
   );
 }
 
-// ─── Theme Pill (compact, visual) ─────────────────────────────────────────────
+// ─── Theme Pill ────────────────────────────────────────────────────────────────
 type ThemeItem = { id: string; label: string; status: string; level: number; tickers: string[]; score: number; color: string };
 function ThemePill({ theme }: { theme: ThemeItem }) {
   return (
     <Link href={`/themes/${theme.id}`}>
-      <div className="flex-shrink-0 cursor-pointer group/pill"
-           style={{ width: 180 }}>
-        {/* Visual bar */}
+      <div className="flex-shrink-0 cursor-pointer group/pill" style={{ width: 180 }}>
         <div className="rounded-xl overflow-hidden mb-2 relative"
              style={{ height: 90, background: `linear-gradient(135deg, ${theme.color}22 0%, ${theme.color}44 100%)`, border: `1px solid ${theme.color}33` }}>
           <div className="absolute inset-0 flex items-center justify-center">
@@ -261,8 +293,8 @@ function ThemePill({ theme }: { theme: ThemeItem }) {
   );
 }
 
-// ─── Topic Tile (visual grid) ──────────────────────────────────────────────────
-type TopicItem = { id: string; label: string; icon: string; count: number; color: string };
+// ─── Topic Tile ────────────────────────────────────────────────────────────────
+type TopicItem = { id: string; label: string; icon: string; count?: number; color: string };
 function TopicTile({ topic }: { topic: TopicItem }) {
   return (
     <Link href={`/topics/${topic.id}`}>
@@ -275,7 +307,6 @@ function TopicTile({ topic }: { topic: TopicItem }) {
            style={{ fontFamily: "var(--font-display)" }}>
           {topic.label}
         </p>
-        <p className="text-[10px] text-muted-foreground text-center">{topic.count}</p>
       </div>
     </Link>
   );
@@ -284,6 +315,21 @@ function TopicTile({ topic }: { topic: TopicItem }) {
 // ─── Radar Sidebar ─────────────────────────────────────────────────────────────
 type RadarTicker = { ticker: string; score: number; direction: string; timeframe: string; confidence?: string; change: string };
 function RadarSidebar({ tickers }: { tickers: RadarTicker[] }) {
+  if (!tickers.length) {
+    return (
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-3 flex items-center gap-2"
+             style={{ background: "linear-gradient(90deg, #2B3245 0%, #1a2035 100%)" }}>
+          <Flame size={14} className="text-[#C8D400]" />
+          <span className="font-bold text-sm text-white" style={{ fontFamily: "var(--font-display)" }}>Kai's Radar</span>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-widest"
+                style={{ background: "rgba(77,200,32,0.2)", color: "#4DC820" }}>LIVE</span>
+        </div>
+        <div className="p-4 text-center text-sm text-muted-foreground">Loading radar...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden">
       <div className="px-4 py-3 flex items-center justify-between"
@@ -336,8 +382,8 @@ function RadarSidebar({ tickers }: { tickers: RadarTicker[] }) {
                 <div className="text-[10px] text-muted-foreground">{t.timeframe}</div>
               </div>
               <div className="text-xs font-bold flex-shrink-0"
-                   style={{ color: t.change.startsWith("+") ? "#4DC820" : "#E8193C" }}>
-                {t.change}
+                   style={{ color: t.change.startsWith("+") ? "#4DC820" : t.change.startsWith("-") ? "#E8193C" : "#667085" }}>
+                {t.change || "—"}
               </div>
             </div>
           </Link>
@@ -352,14 +398,14 @@ export default function Home() {
   const { marketSentiment, todaysPicks, topicGrid, hotThemes, radarTickers, creators } = useHomeData();
   const videos = todaysPicks.filter(p => p.type === "video");
   const podcasts = todaysPicks.filter(p => p.type === "podcast");
-  const featured = todaysPicks[2]; // tastytrade options flow — highest visual impact
+  const featured = todaysPicks[0];
 
   return (
     <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
-        {/* Compact market bar — just one line */}
+        {/* Compact market bar */}
         <div className="border-b border-border bg-card">
           <div className="container mx-auto py-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm">
@@ -369,10 +415,14 @@ export default function Home() {
                 ? <TrendingDown size={14} style={{ color: "#E8193C" }} />
                 : <Minus size={14} style={{ color: "#C8D400" }} />}
               <span className="font-semibold text-foreground">{marketSentiment.label}</span>
-              <span className="text-muted-foreground hidden sm:inline">— {marketSentiment.description}</span>
+              {marketSentiment.description && (
+                <span className="text-muted-foreground hidden sm:inline">— {marketSentiment.description}</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{marketSentiment.date}</span>
+              {marketSentiment.date && (
+                <span className="text-xs text-muted-foreground">{marketSentiment.date}</span>
+              )}
               <Link href="/newsletter">
                 <span className="text-xs font-semibold cc-gradient-text">Daily Brief →</span>
               </Link>
@@ -386,24 +436,30 @@ export default function Home() {
             <div className="lg:col-span-2 space-y-8">
 
               {/* Featured hero card */}
-              <FeaturedCard video={featured} />
+              {featured && <FeaturedCard video={featured} />}
 
               {/* Today's Picks shelf */}
-              <Shelf title="Today's Picks" href="/topics" accent="#4DC820">
-                {videos.map(v => <VideoCard key={v.id} {...v} />)}
-                {podcasts.slice(0, 2).map(p => <VideoCard key={`p-${p.id}`} {...p} />)}
-              </Shelf>
+              {todaysPicks.length > 0 && (
+                <Shelf title="Today's Picks" href="/topics" accent="#4DC820">
+                  {videos.map(v => <VideoCard key={v.id} {...v} />)}
+                  {podcasts.slice(0, 2).map(p => <VideoCard key={`p-${p.id}`} {...p} />)}
+                </Shelf>
+              )}
 
               {/* Hot Themes shelf */}
-              <Shelf title="Hot Themes" href="/topics" accent="#E8193C">
-                {hotThemes.map(t => <ThemePill key={t.id} theme={t} />)}
-              </Shelf>
+              {hotThemes.length > 0 && (
+                <Shelf title="Hot Themes" href="/topics" accent="#E8193C">
+                  {hotThemes.map(t => <ThemePill key={t.id} theme={t} />)}
+                </Shelf>
+              )}
 
               {/* Podcasts shelf */}
-              <Shelf title="Podcasts Worth Your Time" href="/podcasts" accent="#00AEEF">
-                {podcasts.map(p => <VideoCard key={p.id} {...p} wide />)}
-                {videos.slice(0, 2).map(v => <VideoCard key={`pod-${v.id}`} {...v} type="podcast" wide />)}
-              </Shelf>
+              {podcasts.length > 0 && (
+                <Shelf title="Podcasts Worth Your Time" href="/podcasts" accent="#00AEEF">
+                  {podcasts.map(p => <VideoCard key={p.id} {...p} wide />)}
+                  {videos.slice(0, 2).map(v => <VideoCard key={`pod-${v.id}`} {...v} type="podcast" wide />)}
+                </Shelf>
+              )}
 
               {/* Browse by Topic */}
               <Shelf title="Browse by Topic" href="/topics" accent="#7B2FBE">
@@ -411,28 +467,35 @@ export default function Home() {
               </Shelf>
 
               {/* Top Creators shelf */}
-              <Shelf title="Top Creators" href="/creators" accent="#C8D400">
-                {creators.map(c => (
-                  <Link key={c.id} href={`/creators/${c.id}`}>
-                    <div className="flex-shrink-0 w-36 cursor-pointer group/creator text-center">
-                      <div className="w-16 h-16 rounded-full overflow-hidden mx-auto mb-2 transition-transform duration-200 group-hover/creator:scale-110"
-                           style={{ backgroundColor: c.color }}>
-                        {c.avatarUrl ? (
-                          <img src={c.avatarUrl} alt={c.name} className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-white text-xl font-bold">
-                            {c.avatar}
-                          </div>
-                        )}
+              {creators.length > 0 && (
+                <Shelf title="Top Creators" href="/creators" accent="#C8D400">
+                  {creators.map(c => (
+                    <Link key={c.id} href={`/creators/${c.id}`}>
+                      <div className="flex-shrink-0 w-36 cursor-pointer group/creator text-center">
+                        <div className="w-16 h-16 rounded-full overflow-hidden mx-auto mb-2 transition-transform duration-200 group-hover/creator:scale-110"
+                             style={{ backgroundColor: c.color }}>
+                          {c.avatarUrl ? (
+                            <img
+                              src={c.avatarUrl}
+                              alt={c.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white text-xl font-bold">
+                              {c.avatar}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold text-foreground truncate" style={{ fontFamily: "var(--font-display)" }}>
+                          {c.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">{c.specialty}</p>
                       </div>
-                      <p className="text-xs font-semibold text-foreground truncate" style={{ fontFamily: "var(--font-display)" }}>
-                        {c.name}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground truncate">{c.specialty}</p>
-                    </div>
-                  </Link>
-                ))}
-              </Shelf>
+                    </Link>
+                  ))}
+                </Shelf>
+              )}
             </div>
 
             {/* Sidebar — 1/3 width */}

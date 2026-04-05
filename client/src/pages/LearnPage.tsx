@@ -1,11 +1,11 @@
-// CheatCode OS — Learn Page v2
+// CheatCode OS — Learn Page
+// NO MOCK DATA — learning paths are curated static content (not from backend)
 // Brand: CC Green for free paths, CC Yellow for Pro, CC Dark gradient for upsell banner
 
 import { Link } from "wouter";
 import { Lock, Play, CheckCircle, Zap, BookOpen, Clock } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { learningPaths } from "@/lib/mockData";
 
 const LEARN_HERO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663185570724/QgiApnmXYRXSMA2KNkFFkL/learn-hero-mfUmm5nf8TSU9SwnnR5ZY7.webp";
 
@@ -15,7 +15,70 @@ const LEVEL_STYLES: Record<string, { bg: string; text: string; border: string; a
   Advanced:     { bg: "#F5EEFF", text: "#5B1FA0", border: "#C4A0F0", accent: "#7B2FBE" },
 };
 
-function PathCard({ path }: { path: typeof learningPaths[0] }) {
+const LEARNING_PATHS = [
+  {
+    id: "stock-market-101",
+    level: "Beginner",
+    free: true,
+    title: "Stock Market 101",
+    description: "Learn the fundamentals of the stock market — how it works, how to read charts, and how to think about risk.",
+    lessonCount: 8,
+    duration: "4h 30m",
+    topics: ["How markets work", "Reading price charts", "Understanding risk/reward", "Your first trade"],
+  },
+  {
+    id: "technical-analysis-basics",
+    level: "Beginner",
+    free: true,
+    title: "Technical Analysis Basics",
+    description: "Master the core patterns and indicators that professional traders use every day — from moving averages to support/resistance.",
+    lessonCount: 10,
+    duration: "5h 15m",
+    topics: ["Support & resistance", "Moving averages", "Volume analysis", "Candlestick patterns"],
+  },
+  {
+    id: "options-fundamentals",
+    level: "Intermediate",
+    free: true,
+    title: "Options Fundamentals",
+    description: "Understand calls, puts, and the Greeks. Learn how tastytrade and SMB Capital approach options trading with a probability edge.",
+    lessonCount: 12,
+    duration: "6h 00m",
+    topics: ["Calls & puts explained", "The Greeks (delta, theta, vega)", "Selling premium strategies", "Risk management"],
+  },
+  {
+    id: "swing-trading-vcp",
+    level: "Intermediate",
+    free: false,
+    title: "Swing Trading & VCP Setups",
+    description: "Learn Mark Minervini's Volatility Contraction Pattern (VCP) — the setup behind some of the biggest stock market winners.",
+    lessonCount: 14,
+    duration: "7h 30m",
+    topics: ["VCP pattern identification", "Entry & exit timing", "Position sizing", "Managing drawdowns"],
+  },
+  {
+    id: "macro-investing",
+    level: "Advanced",
+    free: false,
+    title: "Macro Investing Framework",
+    description: "Think like an institutional investor. Learn how macro forces — rates, inflation, geopolitics — drive sector rotation and asset allocation.",
+    lessonCount: 16,
+    duration: "9h 00m",
+    topics: ["Interest rate cycles", "Sector rotation playbook", "Currency & commodity signals", "Building a macro thesis"],
+  },
+  {
+    id: "day-trading-momentum",
+    level: "Advanced",
+    free: false,
+    title: "Day Trading Momentum Strategies",
+    description: "Advanced day trading techniques from Warrior Trading and Humbled Trader — momentum scanning, tape reading, and real-time execution.",
+    lessonCount: 18,
+    duration: "10h 00m",
+    topics: ["Pre-market scanning", "Level 2 & tape reading", "Momentum entry patterns", "Risk & position management"],
+  },
+];
+
+function PathCard({ path }: { path: typeof LEARNING_PATHS[0] }) {
   const s = LEVEL_STYLES[path.level];
   return (
     <div className="content-card bg-card rounded-2xl border border-border overflow-hidden">
@@ -76,15 +139,15 @@ function PathCard({ path }: { path: typeof learningPaths[0] }) {
 }
 
 export default function LearnPage() {
-  const freePaths = learningPaths.filter(p => p.free);
-  const paidPaths = learningPaths.filter(p => !p.free);
+  const freePaths = LEARNING_PATHS.filter(p => p.free);
+  const paidPaths = LEARNING_PATHS.filter(p => !p.free);
 
   return (
     <div className="min-h-screen bg-background">
       <Nav />
 
       <main className="page-enter">
-        {/* Hero — dark gradient */}
+        {/* Hero */}
         <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
           <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
           <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 hidden lg:block">
@@ -140,7 +203,7 @@ export default function LearnPage() {
                 <h2 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>
                   Pro & Elite Courses
                 </h2>
-                <p className="text-sm text-muted-foreground mt-0.5">Advanced content from FTA, Teen Trading Academy, and expert workshops.</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Advanced content from top curated creators and expert workshops.</p>
               </div>
               <span className="text-xs font-semibold px-3 py-1 rounded-full border"
                     style={{ background: "#FAFDE8", color: "#7A6800", borderColor: "#E8F08A" }}>
