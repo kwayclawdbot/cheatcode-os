@@ -16,9 +16,9 @@ log = logging.getLogger("ingestion")
 
 VAULT_ROOT = Path.home() / ".openclaw" / "vault"
 CHEATCODE_KB = VAULT_ROOT / "06 - Knowledge Base" / "CheatCode OS"
-FRAMEWORK_DIR = VAULT_ROOT / "06 - Knowledge Base" / "Framework Guides"
-TICKER_DIR = VAULT_ROOT / "Kai" / "Tickers"
-THEME_DIR = VAULT_ROOT / "Kai" / "Themes"
+FRAMEWORK_DIR = CHEATCODE_KB / "Frameworks"
+TICKER_DIR = CHEATCODE_KB / "Tickers"
+THEME_DIR = CHEATCODE_KB / "Themes"
 CREATOR_DIR = CHEATCODE_KB / "Creators"
 
 
