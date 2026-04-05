@@ -73,6 +73,11 @@ class TickerLookup(BaseModel):
     confidence: str | None
     last_price: float | None
     price_change_pct: float | None
+    daily_analysis: str | None = None
+    analysis_date: str | None = None
+    key_levels: dict | None = None
+    catalysts: list[str] | None = None
+    risks: list[str] | None = None
 
 
 class TickerDetail(TickerLookup):

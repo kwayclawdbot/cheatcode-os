@@ -72,13 +72,18 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
             risks=data.get("risks"),
         )
     else:
-        # Free: score + direction only
+        # Free: score + direction + analysis (evidence chain is pro-gated)
         return TickerLookup(
             symbol=data["symbol"], name=data.get("name"),
             convergence_score=data["convergence_score"],
             direction=data.get("direction"), timeframe=data.get("timeframe"),
             confidence=data.get("confidence"),
             last_price=data.get("last_price"), price_change_pct=data.get("price_change_pct"),
+            daily_analysis=data.get("daily_analysis"),
+            analysis_date=data.get("analysis_date"),
+            key_levels=data.get("key_levels"),
+            catalysts=data.get("catalysts"),
+            risks=data.get("risks"),
         )
 
 
