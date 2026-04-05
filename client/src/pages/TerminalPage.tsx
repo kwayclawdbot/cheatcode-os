@@ -187,92 +187,79 @@ const MOCK_MESSAGES: Record<string, { user: string; avatar: string; color: strin
   ],
 };
 
-// ─── TradingView Chart (full authenticated session) ──────────────────────────
-// We load the full TradingView.com chart page inside an iframe so the user's
-// own account, saved layouts, indicators, and watchlists are all preserved.
-// TradingView allows this — the user just needs to be logged in to tradingview.com
-// in their browser. Their session cookie is shared with the iframe automatically.
-function TradingViewChart({ symbol, mode, tvLoggedIn, onLoginConfirmed }: {
+// ─── TradingView Chart (official JS widget) ──────────────────────────────────
+// TradingView blocks cross-origin iframes (X-Frame-Options: SAMEORIGIN).
+// The correct approach is their official "Advanced Chart" JS widget which
+// injects its own sandboxed iframe via their CDN script — this always works.
+function TradingViewChart({ symbol, mode }: {
   symbol: string;
   mode: MarketMode;
-  tvLoggedIn: boolean;
-  onLoginConfirmed: () => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetRef = useRef<unknown>(null);
   const config = MARKET_MODES[mode];
+  const containerId = "tv_advanced_chart";
 
-  // Full TradingView chart URL — loads the user's own authenticated session
-  // The symbol is passed as a path segment so TV picks it up on load
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Remove any previous widget
+    containerRef.current.innerHTML = "";
+
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/tv.js";
+    script.async = true;
+    script.onload = () => {
+      // @ts-ignore — TradingView widget is loaded dynamically
+      if (typeof window.TradingView !== "undefined") {
+        // @ts-ignore
+        widgetRef.current = new window.TradingView.widget({
+          autosize: true,
+          symbol: symbol,
+          interval: config.tvInterval,
+          timezone: "exchange",
+          theme: "dark",
+          style: "1",
+          locale: "en",
+          toolbar_bg: "#0d1117",
+          enable_publishing: false,
+          allow_symbol_change: true,
+          save_image: true,
+          container_id: containerId,
+          hide_side_toolbar: false,
+          studies: [],
+          show_popup_button: true,
+          popup_width: "1000",
+          popup_height: "650",
+        });
+      }
+    };
+    containerRef.current.appendChild(script);
+
+    return () => {
+      // Cleanup on unmount / symbol change
+      if (containerRef.current) containerRef.current.innerHTML = "";
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, mode]);
+
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}&interval=${config.tvInterval}&theme=dark`;
-
-  if (!tvLoggedIn) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-6 px-8 text-center"
-           style={{ background: "#0d1117" }}>
-        {/* TradingView logo mark */}
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-             style={{ background: "#1a2035", border: "1px solid #1e2a3a" }}>
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <path d="M4 24L12 14L18 20L24 10L28 14" stroke="#2962FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="28" cy="14" r="2" fill="#2962FF"/>
-          </svg>
-        </div>
-
-        <div className="max-w-xs">
-          <h3 className="text-lg font-black text-white mb-2" style={{ fontFamily: "var(--font-display)" }}>
-            Connect Your TradingView Account
-          </h3>
-          <p className="text-sm leading-relaxed" style={{ color: "#667085" }}>
-            Sign in to TradingView to load your own charts, saved layouts, custom indicators, and watchlists directly inside CheatCode.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 w-full max-w-xs">
-          {/* Primary: open TV in new tab to login */}
-          <a
-            href="https://www.tradingview.com/accounts/signin/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 text-sm font-bold px-5 py-3 rounded-xl w-full transition-opacity hover:opacity-90"
-            style={{ background: "#2962FF", color: "#fff" }}
-          >
-            <LogIn size={15} />
-            Sign in to TradingView
-          </a>
-
-          {/* Secondary: already logged in — load the chart */}
-          <button
-            onClick={onLoginConfirmed}
-            className="flex items-center justify-center gap-2 text-sm font-bold px-5 py-3 rounded-xl w-full transition-opacity hover:opacity-90"
-            style={{ background: "#1a2035", color: "#e2e8f0", border: "1px solid #1e2a3a" }}
-          >
-            <BarChart2 size={15} />
-            I'm already logged in — Load Chart
-          </button>
-        </div>
-
-        <p className="text-[11px] max-w-xs leading-relaxed" style={{ color: "#3d4f6a" }}>
-          Your TradingView session is shared automatically via browser cookies. CheatCode never stores your credentials.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full h-full min-h-0 relative" style={{ background: "#0d1117" }}>
-      <iframe
-        key={`${mode}-${symbol}`}
-        src={tvChartUrl}
-        className="w-full h-full border-0"
-        allow="clipboard-write; fullscreen"
-        title="TradingView Chart"
-        // sandbox is intentionally omitted so TV's full auth session works
+      {/* TradingView widget mounts here */}
+      <div
+        ref={containerRef}
+        id={containerId}
+        className="w-full h-full"
+        style={{ minHeight: 0 }}
       />
-      {/* Small "open in TV" escape hatch */}
+      {/* Open in TradingView escape hatch */}
       <a
         href={tvChartUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="absolute bottom-3 right-3 flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg opacity-40 hover:opacity-100 transition-opacity"
+        className="absolute bottom-3 right-3 flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg opacity-40 hover:opacity-100 transition-opacity z-10"
         style={{ background: "#1a2035", color: "#e2e8f0", border: "1px solid #1e2a3a" }}
       >
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -716,7 +703,7 @@ export default function TerminalPage() {
 
           {/* Chart — main area */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <TradingViewChart symbol={symbol} mode={mode} tvLoggedIn={tvLoggedIn} onLoginConfirmed={handleTvLoginConfirmed} />
+            <TradingViewChart symbol={symbol} mode={mode} />
           </div>
 
           {/* Right panel: Order + Stats */}
