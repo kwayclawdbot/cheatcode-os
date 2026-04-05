@@ -10,10 +10,12 @@ import { useTheme } from "@/contexts/ThemeContext";
 
 const navLinks = [
   { href: "/", label: "Home" },
+  { href: "/feed", label: "Feed" },
   { href: "/intelligence", label: "Intelligence" },
   { href: "/topics", label: "Browse" },
   { href: "/learn", label: "Learn" },
   { href: "/terminal", label: "Terminal" },
+  { href: "/journal", label: "Journal" },
 ];
 
 // The 4 logo circles — exact colors from the logo

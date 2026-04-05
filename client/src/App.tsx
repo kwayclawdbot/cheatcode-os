@@ -18,6 +18,10 @@ import NewsletterPage from "./pages/NewsletterPage";
 import PricingPage from "./pages/PricingPage";
 import CreatorPage from "./pages/CreatorPage";
 import TerminalPage from "./pages/TerminalPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import FeedPage from "./pages/FeedPage";
+import TraderProfilePage from "./pages/TraderProfilePage";
+import JournalPage from "./pages/JournalPage";
 
 function Router() {
   return (
@@ -36,6 +40,12 @@ function Router() {
       {/* Content detail pages */}
       <Route path="/video/:id" component={VideoPage} />
       <Route path="/podcast/:id" component={VideoPage} />
+
+      {/* Social + Journal */}
+      <Route path="/feed" component={FeedPage} />
+      <Route path="/journal" component={JournalPage} />
+      <Route path="/traders/:handle" component={TraderProfilePage} />
+      <Route path="/onboarding" component={OnboardingPage} />
 
       {/* Placeholder routes — show toast on nav */}
       <Route path="/topics/:id" component={TopicsPage} />
