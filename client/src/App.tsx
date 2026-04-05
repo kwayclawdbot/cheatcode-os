@@ -28,6 +28,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import CoachApplyPage from "./pages/CoachApplyPage";
 import CoachDashboard from "./pages/CoachDashboard";
 import CoachesCornerPage from "./pages/CoachesCornerPage";
+import CoachProfilePage from "./pages/CoachProfilePage";
 
 function Router() {
   return (
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/coach/apply" component={CoachApplyPage} />
       <Route path="/coach/dashboard" component={CoachDashboard} />
       <Route path="/coaches-corner" component={CoachesCornerPage} />
+      <Route path="/coaches-corner/:id" component={CoachProfilePage} />
 
       {/* Social + Journal */}
       <Route path="/feed" component={FeedPage} />
