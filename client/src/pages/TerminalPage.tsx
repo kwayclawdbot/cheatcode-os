@@ -187,25 +187,99 @@ const MOCK_MESSAGES: Record<string, { user: string; avatar: string; color: strin
   ],
 };
 
-// ─── TradingView Widget ───────────────────────────────────────────────────────
-function TradingViewChart({ symbol, mode }: { symbol: string; mode: MarketMode }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetRef = useRef<HTMLIFrameElement | null>(null);
+// ─── TradingView Chart (full authenticated session) ──────────────────────────
+// We load the full TradingView.com chart page inside an iframe so the user's
+// own account, saved layouts, indicators, and watchlists are all preserved.
+// TradingView allows this — the user just needs to be logged in to tradingview.com
+// in their browser. Their session cookie is shared with the iframe automatically.
+function TradingViewChart({ symbol, mode, tvLoggedIn, onLoginConfirmed }: {
+  symbol: string;
+  mode: MarketMode;
+  tvLoggedIn: boolean;
+  onLoginConfirmed: () => void;
+}) {
   const config = MARKET_MODES[mode];
 
-  // Build TradingView widget URL
-  const tvUrl = `https://www.tradingview.com/widgetembed/?frameElementId=tradingview_chart&symbol=${encodeURIComponent(symbol)}&interval=${config.tvInterval}&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=1&saveimage=1&toolbarbg=1A2035&studies=[]&theme=dark&style=1&timezone=exchange&withdateranges=1&showpopupbutton=1&locale=en&utm_source=cheatcode&utm_medium=widget`;
+  // Full TradingView chart URL — loads the user's own authenticated session
+  // The symbol is passed as a path segment so TV picks it up on load
+  const tvChartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}&interval=${config.tvInterval}&theme=dark`;
+
+  if (!tvLoggedIn) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-6 px-8 text-center"
+           style={{ background: "#0d1117" }}>
+        {/* TradingView logo mark */}
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+             style={{ background: "#1a2035", border: "1px solid #1e2a3a" }}>
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M4 24L12 14L18 20L24 10L28 14" stroke="#2962FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="28" cy="14" r="2" fill="#2962FF"/>
+          </svg>
+        </div>
+
+        <div className="max-w-xs">
+          <h3 className="text-lg font-black text-white mb-2" style={{ fontFamily: "var(--font-display)" }}>
+            Connect Your TradingView Account
+          </h3>
+          <p className="text-sm leading-relaxed" style={{ color: "#667085" }}>
+            Sign in to TradingView to load your own charts, saved layouts, custom indicators, and watchlists directly inside CheatCode.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          {/* Primary: open TV in new tab to login */}
+          <a
+            href="https://www.tradingview.com/accounts/signin/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 text-sm font-bold px-5 py-3 rounded-xl w-full transition-opacity hover:opacity-90"
+            style={{ background: "#2962FF", color: "#fff" }}
+          >
+            <LogIn size={15} />
+            Sign in to TradingView
+          </a>
+
+          {/* Secondary: already logged in — load the chart */}
+          <button
+            onClick={onLoginConfirmed}
+            className="flex items-center justify-center gap-2 text-sm font-bold px-5 py-3 rounded-xl w-full transition-opacity hover:opacity-90"
+            style={{ background: "#1a2035", color: "#e2e8f0", border: "1px solid #1e2a3a" }}
+          >
+            <BarChart2 size={15} />
+            I'm already logged in — Load Chart
+          </button>
+        </div>
+
+        <p className="text-[11px] max-w-xs leading-relaxed" style={{ color: "#3d4f6a" }}>
+          Your TradingView session is shared automatically via browser cookies. CheatCode never stores your credentials.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-0 relative" style={{ background: "#0d1117" }}>
+    <div className="w-full h-full min-h-0 relative" style={{ background: "#0d1117" }}>
       <iframe
-        ref={widgetRef}
         key={`${mode}-${symbol}`}
-        src={tvUrl}
+        src={tvChartUrl}
         className="w-full h-full border-0"
-        allow="clipboard-write"
+        allow="clipboard-write; fullscreen"
         title="TradingView Chart"
+        // sandbox is intentionally omitted so TV's full auth session works
       />
+      {/* Small "open in TV" escape hatch */}
+      <a
+        href={tvChartUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute bottom-3 right-3 flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg opacity-40 hover:opacity-100 transition-opacity"
+        style={{ background: "#1a2035", color: "#e2e8f0", border: "1px solid #1e2a3a" }}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M1 9L9 1M9 1H4M9 1V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+        Open in TradingView
+      </a>
     </div>
   );
 }
@@ -502,6 +576,18 @@ export default function TerminalPage() {
   const [mode, setMode] = useState<MarketMode>("stocks");
   const [symbol, setSymbol] = useState(MARKET_MODES.stocks.defaultSymbol);
   const [isLoggedIn] = useState(false); // Would come from auth context
+  // tvLoggedIn: persisted in localStorage so the user only needs to confirm once
+  const [tvLoggedIn, setTvLoggedIn] = useState<boolean>(() => {
+    try { return localStorage.getItem("cc-tv-logged-in") === "true"; } catch { return false; }
+  });
+  const handleTvLoginConfirmed = () => {
+    setTvLoggedIn(true);
+    try { localStorage.setItem("cc-tv-logged-in", "true"); } catch {}
+  };
+  const handleTvLogout = () => {
+    setTvLoggedIn(false);
+    try { localStorage.removeItem("cc-tv-logged-in"); } catch {}
+  };
   const config = MARKET_MODES[mode];
 
   // When mode changes, update default symbol
@@ -598,11 +684,25 @@ export default function TerminalPage() {
                     style={{ background: "#1a2035", color: "#667085" }}>
               <Bell size={13} />
             </button>
-            <button className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg"
-                    style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}>
-              <LogIn size={12} />
-              <span className="hidden sm:inline">Sign In</span>
-            </button>
+            {tvLoggedIn ? (
+              <button
+                onClick={handleTvLogout}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                style={{ background: "#1a2035", color: "#4DC820", border: "1px solid #4DC82040" }}
+              >
+                <Circle size={6} fill="#4DC820" color="#4DC820" />
+                <span className="hidden sm:inline">TV Connected</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => window.open("https://www.tradingview.com/accounts/signin/", "_blank")}
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90"
+                style={{ background: "#2962FF", color: "#fff" }}
+              >
+                <LogIn size={12} />
+                <span className="hidden sm:inline">Connect TV</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -616,7 +716,7 @@ export default function TerminalPage() {
 
           {/* Chart — main area */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <TradingViewChart symbol={symbol} mode={mode} />
+            <TradingViewChart symbol={symbol} mode={mode} tvLoggedIn={tvLoggedIn} onLoginConfirmed={handleTvLoginConfirmed} />
           </div>
 
           {/* Right panel: Order + Stats */}
