@@ -47,10 +47,10 @@ function Router() {
   return (
     <Switch>
       {/* ── Public landing page ── */}
-      <Route path="/" component={LandingPage} />
+      <Route path="/1" component={LandingPage} />
 
       {/* ── Core app pages ── */}
-      <Route path="/home" component={Home} />
+      <Route path="/" component={Home} />
       <Route path="/feed" component={SwipeFeedPage} />
       <Route path="/community" component={CommunityPage} />
       <Route path="/intelligence" component={IntelligencePage} />
