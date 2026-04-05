@@ -24,6 +24,10 @@ import OnboardingPage from "./pages/OnboardingPage";
 import FeedPage from "./pages/FeedPage";
 import TraderProfilePage from "./pages/TraderProfilePage";
 import JournalPage from "./pages/JournalPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import CoachApplyPage from "./pages/CoachApplyPage";
+import CoachDashboard from "./pages/CoachDashboard";
+import CoachesCornerPage from "./pages/CoachesCornerPage";
 
 function Router() {
   return (
@@ -42,6 +46,14 @@ function Router() {
       {/* Content detail pages */}
       <Route path="/video/:id" component={VideoPage} />
       <Route path="/podcast/:id" component={VideoPage} />
+
+      {/* Admin */}
+      <Route path="/admin" component={AdminDashboard} />
+
+      {/* Coach */}
+      <Route path="/coach/apply" component={CoachApplyPage} />
+      <Route path="/coach/dashboard" component={CoachDashboard} />
+      <Route path="/coaches-corner" component={CoachesCornerPage} />
 
       {/* Social + Journal */}
       <Route path="/feed" component={FeedPage} />
