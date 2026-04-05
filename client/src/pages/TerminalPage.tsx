@@ -221,7 +221,7 @@ function TradingViewChart({ symbol, mode }: {
           theme: "dark",
           style: "1",
           locale: "en",
-          toolbar_bg: "#0d1117",
+          toolbar_bg: "#000000",
           enable_publishing: false,
           allow_symbol_change: true,
           save_image: true,
@@ -231,6 +231,17 @@ function TradingViewChart({ symbol, mode }: {
           show_popup_button: true,
           popup_width: "1000",
           popup_height: "650",
+          // Force black background via overrides
+          overrides: {
+            "paneProperties.background": "#000000",
+            "paneProperties.backgroundType": "solid",
+            "paneProperties.vertGridProperties.color": "#111111",
+            "paneProperties.horzGridProperties.color": "#111111",
+            "scalesProperties.backgroundColor": "#000000",
+            "scalesProperties.lineColor": "#1a1a1a",
+            "scalesProperties.textColor": "#667085",
+          },
+          studies_overrides: {},
         });
       }
     };
