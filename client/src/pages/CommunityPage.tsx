@@ -1,16 +1,21 @@
 // CheatCode OS — Community Page
-// Design: Twitter/X-meets-Robinhood. Fully theme-aware (light/dark).
-// Post types: Trade Idea, P&L Share, Market Take, Chart Post, Question
-// Reactions: 🔥 Bullish, 🐻 Bearish, 👀 Watching, ❤️ Like
-// NO MOCK DATA — radar from live API, posts are community-generated (illustrative structure)
+// Design: StockTwits × Twitter/X for traders. Fully theme-aware (light/dark).
+// Key features:
+//   - Trending ticker pills strip (live from Kai's Radar API)
+//   - Ticker search bar → opens per-ticker feed view
+//   - Asset class tabs: All / Stocks / Forex / Futures / Crypto
+//   - Per-ticker feed: header with Kai score + link to Intelligence
+//   - Post types: Trade Idea, P&L Share, Market Take, Chart Post, Question
+//   - Reactions: 🔥 Bullish, 🐻 Bearish, 👀 Watching, ❤️ Like
 
-import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { useState, useEffect, useRef } from "react";
+import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Minus, Heart, MessageCircle, Repeat2,
-  Bookmark, Share2, Flame, Search,
-  ChevronRight, Zap, Award, Users, Clock, BarChart2
+  Bookmark, Share2, Flame, Search, X, ChevronRight, Zap, Award,
+  Users, Clock, BarChart2, ArrowUpRight, ChevronLeft, ChevronRight as ChevronRightIcon,
+  Globe, DollarSign, Activity, Bitcoin
 } from "lucide-react";
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
@@ -22,6 +27,7 @@ import { fetchRadar } from "@/lib/api";
 type PostType = "trade_idea" | "pl_share" | "market_take" | "chart_post" | "question";
 type Sentiment = "bullish" | "bearish" | "neutral";
 type FeedTab = "trending" | "following" | "latest" | "trade_ideas";
+type AssetClass = "all" | "stocks" | "forex" | "futures" | "crypto";
 
 interface Reaction {
   emoji: string;
@@ -33,6 +39,7 @@ interface Reaction {
 interface Post {
   id: string;
   type: PostType;
+  assetClass?: AssetClass;
   user: {
     name: string;
     handle: string;
@@ -65,7 +72,7 @@ interface Post {
 
 const SEED_POSTS: Post[] = [
   {
-    id: "1", type: "trade_idea",
+    id: "1", type: "trade_idea", assetClass: "stocks",
     user: { name: "Jordan Davis", handle: "@jdtrader", initials: "JD", color: "#4DC820", style: "Swing Trader", level: "Expert", levelColor: "#F79009", xp: 12450 },
     timestamp: "2h ago", sentiment: "bullish", ticker: "PLTR", timeframe: "Swing",
     entry: "$24.50", target: "$32.00", stop: "$21.80",
@@ -74,7 +81,7 @@ const SEED_POSTS: Post[] = [
     comments: 14, reposts: 6,
   },
   {
-    id: "2", type: "pl_share",
+    id: "2", type: "pl_share", assetClass: "stocks",
     user: { name: "Alex Kim", handle: "@alphatrader", initials: "AK", color: "#00AEEF", style: "Day Trader", level: "Veteran", levelColor: "#F04438", xp: 8200 },
     timestamp: "4h ago", outcome: "win", ticker: "NVDA", pnl: "+$2,840",
     text: "Caught the morning breakout on NVDA. Entered at $118.20 off the 9 EMA, took half off at $121 and let the rest run to $124.50. Clean setup, clean execution. The discipline is everything.",
@@ -82,7 +89,7 @@ const SEED_POSTS: Post[] = [
     comments: 28, reposts: 19,
   },
   {
-    id: "3", type: "market_take",
+    id: "3", type: "market_take", assetClass: "stocks",
     user: { name: "Sam Rivera", handle: "@macrotrader", initials: "SR", color: "#7B2FBE", style: "Macro", level: "Elite", levelColor: "#E8193C", xp: 21000 },
     timestamp: "6h ago", sentiment: "bearish",
     text: "The market is pricing in 3 rate cuts this year but the data doesn't support it. CPI is still sticky, the labor market is too strong, and the Fed has been clear. I think we see a repricing in Q2 that catches a lot of people off guard. Staying defensive, rotating into energy and healthcare.",
@@ -90,17 +97,34 @@ const SEED_POSTS: Post[] = [
     comments: 41, reposts: 27,
   },
   {
-    id: "4", type: "trade_idea",
+    id: "4", type: "trade_idea", assetClass: "forex",
     user: { name: "Taylor Morgan", handle: "@chartmaster", initials: "TM", color: "#E8193C", style: "Technical", level: "Trader", levelColor: "#7B2FBE", xp: 3800 },
-    timestamp: "8h ago", sentiment: "bullish", ticker: "TSLA", timeframe: "Day Trade",
-    thesis: "TSLA reclaimed the 200 SMA on the daily. If it holds above $185 at open I'm looking for a move to $195. Stop below $182. High risk but the setup is clean.",
-    reactions: [{ emoji: "🔥", label: "Bullish", count: 38 }, { emoji: "🐻", label: "Bearish", count: 52 }, { emoji: "👀", label: "Watching", count: 67 }],
-    comments: 33, reposts: 8,
+    timestamp: "8h ago", sentiment: "bullish", ticker: "EUR/USD", timeframe: "Swing",
+    thesis: "EUR/USD is forming a double bottom on the 4H chart. If it holds above 1.0850 I'm looking for a move to 1.0950. Stop below 1.0800. Clean structure, good R/R.",
+    reactions: [{ emoji: "🔥", label: "Bullish", count: 38 }, { emoji: "🐻", label: "Bearish", count: 12 }, { emoji: "👀", label: "Watching", count: 29 }],
+    comments: 11, reposts: 5,
   },
   {
-    id: "5", type: "question",
+    id: "5", type: "trade_idea", assetClass: "crypto",
+    user: { name: "Maya Chen", handle: "@cryptomaya", initials: "MC", color: "#F79009", style: "Crypto Trader", level: "Expert", levelColor: "#4DC820", xp: 9100 },
+    timestamp: "9h ago", sentiment: "bullish", ticker: "BTC", timeframe: "Swing",
+    entry: "$62,000", target: "$72,000", stop: "$58,500",
+    thesis: "BTC reclaimed the 200-day MA and is holding above it. On-chain data shows accumulation by long-term holders. The halving narrative is building. This is a high-conviction swing setup.",
+    reactions: [{ emoji: "🔥", label: "Bullish", count: 112 }, { emoji: "🐻", label: "Bearish", count: 24 }, { emoji: "👀", label: "Watching", count: 87 }],
+    comments: 56, reposts: 34,
+  },
+  {
+    id: "6", type: "trade_idea", assetClass: "futures",
+    user: { name: "Derek Walsh", handle: "@futurestrader", initials: "DW", color: "#00AEEF", style: "Futures Trader", level: "Veteran", levelColor: "#F79009", xp: 14200 },
+    timestamp: "11h ago", sentiment: "bearish", ticker: "ES", timeframe: "Day Trade",
+    thesis: "ES is at a key resistance zone from the March highs. Volume has been declining on the rallies. I'm short with a stop above 5280, targeting a move back to 5200. Tight risk, defined setup.",
+    reactions: [{ emoji: "🐻", label: "Bearish", count: 44 }, { emoji: "🔥", label: "Bullish", count: 18 }, { emoji: "👀", label: "Watching", count: 31 }],
+    comments: 22, reposts: 9,
+  },
+  {
+    id: "7", type: "question", assetClass: "stocks",
     user: { name: "Chris Lee", handle: "@newtrader99", initials: "CL", color: "#667085", style: "Beginner", level: "Rookie", levelColor: "#667085", xp: 120 },
-    timestamp: "10h ago",
+    timestamp: "12h ago",
     text: "Question for the swing traders here — do you use the weekly chart or daily chart as your primary timeframe for entries? I've been trying to figure out which one to anchor to. Any help appreciated.",
     reactions: [{ emoji: "❤️", label: "Like", count: 24 }],
     comments: 18, reposts: 2,
@@ -121,9 +145,21 @@ const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string }> = {
   question:    { label: "Question",    color: "#667085" },
 };
 
+const ASSET_TABS: { id: AssetClass; label: string; icon: React.ReactNode }[] = [
+  { id: "all",     label: "All",     icon: <Globe size={12} /> },
+  { id: "stocks",  label: "Stocks",  icon: <DollarSign size={12} /> },
+  { id: "forex",   label: "Forex",   icon: <Activity size={12} /> },
+  { id: "futures", label: "Futures", icon: <BarChart2 size={12} /> },
+  { id: "crypto",  label: "Crypto",  icon: <Bitcoin size={12} /> },
+];
+
 // ─── Post Card ────────────────────────────────────────────────────────────────
 
-function PostCard({ post, onReact }: { post: Post; onReact: (postId: string, emoji: string) => void }) {
+function PostCard({ post, onReact, onTickerClick }: {
+  post: Post;
+  onReact: (postId: string, emoji: string) => void;
+  onTickerClick: (ticker: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const typeConfig = POST_TYPE_CONFIG[post.type];
   const sentConfig = post.sentiment ? SENTIMENT_CONFIG[post.sentiment] : null;
@@ -169,7 +205,12 @@ function PostCard({ post, onReact }: { post: Post; onReact: (postId: string, emo
       {/* Trade Idea ticker strip */}
       {post.type === "trade_idea" && post.ticker && (
         <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-muted">
-          <span className="ticker-mono text-base font-black text-foreground">{post.ticker}</span>
+          <button
+            onClick={() => onTickerClick(post.ticker!)}
+            className="ticker-mono text-base font-black text-foreground hover:text-[#4DC820] transition-colors"
+          >
+            ${post.ticker}
+          </button>
           {sentConfig && (
             <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
                   style={{ background: sentConfig.color }}>
@@ -190,7 +231,12 @@ function PostCard({ post, onReact }: { post: Post; onReact: (postId: string, emo
             {post.pnl}
           </span>
           {post.ticker && (
-            <span className="ticker-mono text-sm font-bold text-foreground">on {post.ticker}</span>
+            <button
+              onClick={() => onTickerClick(post.ticker!)}
+              className="ticker-mono text-sm font-bold text-foreground hover:text-[#4DC820] transition-colors"
+            >
+              on ${post.ticker}
+            </button>
           )}
           <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full text-white"
                 style={{ background: post.outcome === "win" ? "#4DC820" : "#E8193C" }}>
@@ -270,9 +316,13 @@ function PostCard({ post, onReact }: { post: Post; onReact: (postId: string, emo
 
 // ─── Compose Box ──────────────────────────────────────────────────────────────
 
-function ComposeBox({ onPost }: { onPost: (text: string) => void }) {
-  const [text, setText] = useState("");
+function ComposeBox({ onPost, prefillTicker }: { onPost: (text: string) => void; prefillTicker?: string }) {
+  const [text, setText] = useState(prefillTicker ? `$${prefillTicker} ` : "");
   const [type, setType] = useState<PostType>("market_take");
+
+  useEffect(() => {
+    if (prefillTicker) setText(`$${prefillTicker} `);
+  }, [prefillTicker]);
 
   return (
     <div className="bg-card rounded-2xl border border-border p-4 mb-4">
@@ -325,15 +375,166 @@ function ComposeBox({ onPost }: { onPost: (text: string) => void }) {
   );
 }
 
-// ─── Trending Sidebar ─────────────────────────────────────────────────────────
+// ─── Trending Ticker Pill Strip ───────────────────────────────────────────────
 
-function TrendingSidebar({ radarTickers }: { radarTickers: any[] }) {
+function TickerPillStrip({ radarTickers, onTickerClick, activeTicker }: {
+  radarTickers: any[];
+  onTickerClick: (ticker: string) => void;
+  activeTicker: string | null;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (dir: "left" | "right") => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
+    }
+  };
+
+  // Static popular tickers as fallback + live radar
+  const staticTickers = [
+    { symbol: "NVDA", score: 78, direction: "bullish" },
+    { symbol: "TSLA", score: 52, direction: "neutral" },
+    { symbol: "AAPL", score: 61, direction: "bullish" },
+    { symbol: "SPY",  score: 45, direction: "bearish" },
+    { symbol: "QQQ",  score: 48, direction: "neutral" },
+    { symbol: "BTC",  score: 72, direction: "bullish" },
+    { symbol: "EUR/USD", score: 55, direction: "neutral" },
+    { symbol: "ES",   score: 40, direction: "bearish" },
+    { symbol: "GLD",  score: 68, direction: "bullish" },
+    { symbol: "AMZN", score: 63, direction: "bullish" },
+  ];
+
+  const allTickers = radarTickers.length > 0 ? radarTickers : staticTickers;
+
+  return (
+    <div className="relative flex items-center gap-1 bg-card border-b border-border px-4 py-2">
+      <button
+        onClick={() => scroll("left")}
+        className="flex-shrink-0 w-6 h-6 rounded-full bg-muted hover:bg-accent flex items-center justify-center transition-colors"
+      >
+        <ChevronLeft size={12} className="text-muted-foreground" />
+      </button>
+
+      <div
+        ref={scrollRef}
+        className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1 px-1"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {allTickers.map((t: any) => {
+          const isBull = t.direction?.toLowerCase() === "bullish";
+          const isBear = t.direction?.toLowerCase() === "bearish";
+          const color = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
+          const isActive = activeTicker === t.symbol;
+
+          return (
+            <button
+              key={t.symbol}
+              onClick={() => onTickerClick(isActive ? "" : t.symbol)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border"
+              style={{
+                background: isActive ? color + "22" : "var(--muted)",
+                borderColor: isActive ? color : "var(--border)",
+                color: isActive ? color : "var(--foreground)",
+              }}
+            >
+              <span className="ticker-mono">{t.symbol}</span>
+              <span className="text-[10px]" style={{ color }}>
+                {isBull ? "↑" : isBear ? "↓" : "→"}
+              </span>
+              {t.score && (
+                <span className="text-[9px] font-bold opacity-70">{Math.round(t.score)}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={() => scroll("right")}
+        className="flex-shrink-0 w-6 h-6 rounded-full bg-muted hover:bg-accent flex items-center justify-center transition-colors"
+      >
+        <ChevronRightIcon size={12} className="text-muted-foreground" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Ticker Feed Header ───────────────────────────────────────────────────────
+
+function TickerFeedHeader({ ticker, radarTickers, onClear }: {
+  ticker: string;
+  radarTickers: any[];
+  onClear: () => void;
+}) {
+  const tickerData = radarTickers.find((t: any) => t.symbol === ticker);
+  const isBull = tickerData?.direction?.toLowerCase() === "bullish";
+  const isBear = tickerData?.direction?.toLowerCase() === "bearish";
+  const color = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
+  const dirLabel = isBull ? "Bullish" : isBear ? "Bearish" : "Neutral";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-card rounded-2xl border border-border p-4 mb-4"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm text-white"
+               style={{ background: color + "22", border: `2px solid ${color}`, color }}>
+            {ticker.slice(0, 2)}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="ticker-mono font-black text-foreground text-lg">${ticker}</span>
+              {tickerData && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                      style={{ background: color }}>
+                  {dirLabel}
+                </span>
+              )}
+              {tickerData?.score && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  Kai Score: {Math.round(tickerData.score)}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Showing all ${ticker} posts
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href={`/intelligence?ticker=${ticker}`}>
+            <button className="text-xs font-bold px-3 py-1.5 rounded-xl border border-[#00AEEF] text-[#00AEEF] hover:bg-[rgba(0,174,239,0.1)] transition-colors flex items-center gap-1">
+              Full Analysis <ArrowUpRight size={11} />
+            </button>
+          </Link>
+          <button
+            onClick={onClear}
+            className="w-7 h-7 rounded-full bg-muted hover:bg-accent flex items-center justify-center transition-colors"
+          >
+            <X size={13} className="text-muted-foreground" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Right Sidebar ────────────────────────────────────────────────────────────
+
+function TrendingSidebar({ radarTickers, onTickerClick }: {
+  radarTickers: any[];
+  onTickerClick: (ticker: string) => void;
+}) {
   const trending = [
     { tag: "PLTR", posts: 284, dir: "bullish" },
     { tag: "NVDA", posts: 219, dir: "bullish" },
     { tag: "TSLA", posts: 198, dir: "neutral" },
     { tag: "SPY",  posts: 176, dir: "bearish" },
     { tag: "QQQ",  posts: 142, dir: "neutral" },
+    { tag: "BTC",  posts: 138, dir: "bullish" },
   ];
 
   return (
@@ -347,20 +548,22 @@ function TrendingSidebar({ radarTickers }: { radarTickers: any[] }) {
           {trending.map((t, i) => {
             const color = t.dir === "bullish" ? "#4DC820" : t.dir === "bearish" ? "#E8193C" : "#F79009";
             return (
-              <Link key={t.tag} href={`/intelligence?ticker=${t.tag}`}>
-                <div className="flex items-center justify-between py-1.5 hover:bg-muted rounded-xl px-2 -mx-2 transition-colors cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground">#{i + 1}</span>
-                    <span className="ticker-mono text-sm font-bold text-foreground">{t.tag}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground">{t.posts} posts</span>
-                    <span className="text-xs font-bold" style={{ color }}>
-                      {t.dir === "bullish" ? "↑" : t.dir === "bearish" ? "↓" : "→"}
-                    </span>
-                  </div>
+              <button
+                key={t.tag}
+                onClick={() => onTickerClick(t.tag)}
+                className="w-full flex items-center justify-between py-1.5 hover:bg-muted rounded-xl px-2 -mx-2 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground">#{i + 1}</span>
+                  <span className="ticker-mono text-sm font-bold text-foreground">${t.tag}</span>
                 </div>
-              </Link>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">{t.posts} posts</span>
+                  <span className="text-xs font-bold" style={{ color }}>
+                    {t.dir === "bullish" ? "↑" : t.dir === "bearish" ? "↓" : "→"}
+                  </span>
+                </div>
+              </button>
             );
           })}
         </div>
@@ -378,17 +581,19 @@ function TrendingSidebar({ radarTickers }: { radarTickers: any[] }) {
               const isBear = t.direction?.toLowerCase() === "bearish";
               const color = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
               return (
-                <Link key={t.symbol} href={`/intelligence?ticker=${t.symbol}`}>
-                  <div className="flex items-center justify-between py-1.5 hover:bg-muted rounded-xl px-2 -mx-2 transition-colors cursor-pointer">
-                    <span className="ticker-mono text-sm font-bold text-foreground">{t.symbol}</span>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 w-12 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${t.score}%`, background: color }} />
-                      </div>
-                      <span className="text-[10px] font-bold" style={{ color }}>{t.score}</span>
+                <button
+                  key={t.symbol}
+                  onClick={() => onTickerClick(t.symbol)}
+                  className="w-full flex items-center justify-between py-1.5 hover:bg-muted rounded-xl px-2 -mx-2 transition-colors"
+                >
+                  <span className="ticker-mono text-sm font-bold text-foreground">{t.symbol}</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-1.5 w-12 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${t.score}%`, background: color }} />
                     </div>
+                    <span className="text-[10px] font-bold" style={{ color }}>{t.score}</span>
                   </div>
-                </Link>
+                </button>
               );
             })}
           </div>
@@ -414,7 +619,7 @@ function TrendingSidebar({ radarTickers }: { radarTickers: any[] }) {
             <div key={u.handle} className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
                    style={{ background: u.color }}>
-                {u.name.split(" ").map(w => w[0]).join("")}
+                {u.name.split(" ").map((w: string) => w[0]).join("")}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold text-foreground truncate">{u.name}</p>
@@ -438,9 +643,13 @@ function TrendingSidebar({ radarTickers }: { radarTickers: any[] }) {
 
 export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState<FeedTab>("trending");
+  const [activeAsset, setActiveAsset] = useState<AssetClass>("all");
+  const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>(SEED_POSTS);
   const [radarTickers, setRadarTickers] = useState<any[]>([]);
+  const [tickerSearch, setTickerSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchRadar().then(r => {
@@ -452,6 +661,19 @@ export default function CommunityPage() {
       setRadarTickers(all);
     }).catch(() => {});
   }, []);
+
+  const handleTickerClick = (ticker: string) => {
+    setActiveTicker(ticker || null);
+    setTickerSearch("");
+  };
+
+  const handleTickerSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tickerSearch.trim()) {
+      setActiveTicker(tickerSearch.trim().toUpperCase());
+      setTickerSearch("");
+    }
+  };
 
   const handleReact = (postId: string, emoji: string) => {
     setPosts(prev => prev.map(p => {
@@ -471,6 +693,7 @@ export default function CommunityPage() {
     const newPost: Post = {
       id: Date.now().toString(),
       type: "market_take",
+      assetClass: activeAsset === "all" ? "stocks" : activeAsset,
       user: { name: "You", handle: "@you", initials: "YO", color: "#4DC820", style: "Trader", level: "Rookie", levelColor: "#667085", xp: 120 },
       timestamp: "Just now",
       text,
@@ -492,7 +715,18 @@ export default function CommunityPage() {
   ];
 
   const filteredPosts = posts.filter(p => {
+    // Ticker filter
+    if (activeTicker) {
+      const tickerMatch = p.ticker?.toUpperCase() === activeTicker ||
+        p.text?.toUpperCase().includes(`$${activeTicker}`) ||
+        p.thesis?.toUpperCase().includes(`$${activeTicker}`);
+      if (!tickerMatch) return false;
+    }
+    // Asset class filter
+    if (activeAsset !== "all" && p.assetClass && p.assetClass !== activeAsset) return false;
+    // Tab filter
     if (activeTab === "trade_ideas") return p.type === "trade_idea";
+    // Search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
@@ -509,24 +743,27 @@ export default function CommunityPage() {
     <div className="min-h-screen bg-background">
       <Nav />
 
-      {/* ── Page Header ── */}
+      {/* ── Sticky header ── */}
       <div className="bg-card border-b border-border sticky top-14 z-30">
+        {/* Title row */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between py-3">
             <h1 className="font-black text-foreground text-lg" style={{ fontFamily: "var(--font-display)" }}>
               Community
             </h1>
             <div className="flex items-center gap-2">
-              <div className="relative hidden sm:block">
+              {/* Ticker search */}
+              <form onSubmit={handleTickerSearch} className="relative hidden sm:block">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
+                  ref={searchInputRef}
                   type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search posts, tickers…"
-                  className="pl-8 pr-3 py-2 text-xs bg-muted border border-border rounded-xl focus:outline-none focus:border-[#4DC820] transition-colors w-48 text-foreground placeholder:text-muted-foreground"
+                  value={tickerSearch}
+                  onChange={e => setTickerSearch(e.target.value.toUpperCase())}
+                  placeholder="Search ticker… $NVDA"
+                  className="pl-8 pr-3 py-2 text-xs bg-muted border border-border rounded-xl focus:outline-none focus:border-[#4DC820] transition-colors w-44 text-foreground placeholder:text-muted-foreground uppercase"
                 />
-              </div>
+              </form>
               <Link href="/feed">
                 <button className="text-xs font-bold px-3 py-2 rounded-xl cc-gradient-bg text-[#101828] hover:opacity-90 transition-opacity flex items-center gap-1.5">
                   <Zap size={11} /> Swipe Feed
@@ -534,7 +771,8 @@ export default function CommunityPage() {
               </Link>
             </div>
           </div>
-          {/* Tabs */}
+
+          {/* Feed tabs */}
           <div className="flex gap-1">
             {TABS.map(tab => (
               <button
@@ -551,6 +789,33 @@ export default function CommunityPage() {
             ))}
           </div>
         </div>
+
+        {/* Trending ticker pill strip */}
+        <TickerPillStrip
+          radarTickers={radarTickers}
+          onTickerClick={handleTickerClick}
+          activeTicker={activeTicker}
+        />
+
+        {/* Asset class tabs */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex gap-1 py-1.5">
+            {ASSET_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveAsset(tab.id)}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all"
+                style={{
+                  background: activeAsset === tab.id ? "rgba(77,200,32,0.12)" : "transparent",
+                  color: activeAsset === tab.id ? "#4DC820" : "var(--muted-foreground)",
+                  border: activeAsset === tab.id ? "1px solid rgba(77,200,32,0.3)" : "1px solid transparent",
+                }}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* ── Main Layout ── */}
@@ -558,16 +823,41 @@ export default function CommunityPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
           {/* Feed */}
           <div>
-            <ComposeBox onPost={handlePost} />
+            {/* Ticker feed header */}
+            <AnimatePresence>
+              {activeTicker && (
+                <TickerFeedHeader
+                  ticker={activeTicker}
+                  radarTickers={radarTickers}
+                  onClear={() => setActiveTicker(null)}
+                />
+              )}
+            </AnimatePresence>
+
+            <ComposeBox onPost={handlePost} prefillTicker={activeTicker || undefined} />
+
             <div className="space-y-3">
               <AnimatePresence>
                 {filteredPosts.map(post => (
-                  <PostCard key={post.id} post={post} onReact={handleReact} />
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    onReact={handleReact}
+                    onTickerClick={handleTickerClick}
+                  />
                 ))}
               </AnimatePresence>
               {filteredPosts.length === 0 && (
                 <div className="text-center py-12">
-                  <p className="text-muted-foreground text-sm">No posts found. Be the first to post!</p>
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                    <MessageCircle size={20} className="text-muted-foreground" />
+                  </div>
+                  <p className="text-foreground font-bold text-sm mb-1">
+                    {activeTicker ? `No posts about $${activeTicker} yet` : "No posts found"}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {activeTicker ? `Be the first to share your take on $${activeTicker}` : "Be the first to post!"}
+                  </p>
                 </div>
               )}
             </div>
@@ -575,7 +865,7 @@ export default function CommunityPage() {
 
           {/* Right Sidebar */}
           <div className="hidden lg:block">
-            <TrendingSidebar radarTickers={radarTickers} />
+            <TrendingSidebar radarTickers={radarTickers} onTickerClick={handleTickerClick} />
           </div>
         </div>
       </div>
