@@ -93,11 +93,11 @@ export const todaysPicks = [
   {
     id: "p1",
     type: "podcast" as const,
-    youtubeId: "3NsQHBQDMaE",
+    youtubeId: "OQcveYRfZgs",
     title: "All-In E172: Tariff Shock, Rate Cuts, and the AI Infrastructure Supercycle",
     creatorId: "all-in",
     creator: { name: "All-In Podcast", avatar: "AI", avatarUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663185570724/QgiApnmXYRXSMA2KNkFFkL/all-in_421d15f4.jpg", color: "#2B3245" },
-    thumbnail: "https://img.youtube.com/vi/3NsQHBQDMaE/maxresdefault.jpg",
+    thumbnail: "https://img.youtube.com/vi/OQcveYRfZgs/maxresdefault.jpg",
     duration: "1:24:00",
     quickTake: "Chamath, Sacks, Friedberg, and Levchin debate tariff impacts on tech supply chains. Consensus: AI infrastructure spending is immune. MSFT, GOOGL, META all mentioned as beneficiaries.",
     tags: ["Macro", "Tech", "AI"],

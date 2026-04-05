@@ -11,6 +11,8 @@ import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { todaysPicks, tickerData } from "@/lib/mockData";
+import { fetchContentDetail, normalizeContentCard } from "@/lib/api";
+import { useEffect } from "react";
 
 const SAMPLE_VIDEO = todaysPicks[1]; // Real Vision KKR video
 
@@ -99,8 +101,40 @@ function CollapsibleSection({ title, children, defaultOpen = false }: { title: s
 export default function VideoPage() {
   const { id } = useParams<{ id: string }>();
   const [playing, setPlaying] = useState(false);
-  // Find video by id from mockData, fallback to SAMPLE_VIDEO
-  const video = (id ? todaysPicks.find(v => v.id === id) : null) || SAMPLE_VIDEO;
+  const [apiVideo, setApiVideo] = useState<any>(null);
+
+  // Try to fetch real content detail from API
+  useEffect(() => {
+    if (!id) return;
+    fetchContentDetail(id)
+      .then((detail) => {
+        const n = normalizeContentCard(detail);
+        setApiVideo({
+          id: n.id,
+          type: n.content_type,
+          youtubeId: n.youtubeId || "",
+          title: n.title,
+          creatorId: n.creator_slug || "",
+          creator: { name: n.creator_name || "Unknown", avatar: (n.creator_name || "??").slice(0, 2).toUpperCase(), avatarUrl: "", color: "#667085" },
+          thumbnail: n.thumbnailUrl || "",
+          duration: n.durationLabel || "",
+          quickTake: n.quick_take || "",
+          tags: n.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
+          relevanceBadge: n.relevanceLabel || "Watch",
+          tickers: detail.tickers || [],
+          convergenceScore: Math.round(n.relevance_score * 100),
+          publishedAt: n.publishedLabel || "",
+          keyInsights: detail.key_insights || [],
+          timestamps: detail.timestamps || [],
+          related: detail.related || [],
+          externalUrl: n.external_url,
+        });
+      })
+      .catch(() => { /* fall back to mockData */ });
+  }, [id]);
+
+  // Use API data if available, else fall back to mockData
+  const video = apiVideo || (id ? todaysPicks.find(v => v.id === id) : null) || SAMPLE_VIDEO;
   const youtubeId = (video as any).youtubeId as string | undefined;
   const creatorId = (video as any).creatorId as string | undefined;
 
@@ -207,7 +241,7 @@ export default function VideoPage() {
                 )}
               </div>
               <div className="flex gap-2 mt-2">
-                {video.tags.map(t => (
+                {video.tags.map((t: string) => (
                   <span key={t} className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full border border-border">
                     {t}
                   </span>
