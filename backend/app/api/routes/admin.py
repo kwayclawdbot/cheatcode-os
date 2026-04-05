@@ -7,6 +7,7 @@ from app.core.auth import require_user
 from app.services.curation import run_curation_cycle, process_video, fetch_channel_uploads
 from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.newsletter import generate_daily_newsletter
+from app.services.ingestion import ingest_all_pending, ingest_content
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -38,6 +39,20 @@ async def trigger_radar(user: dict = Depends(_require_admin)):
     """Manually generate radar snapshot."""
     result = await generate_radar()
     return result
+
+
+@router.post("/ingest/run")
+async def trigger_ingestion(user: dict = Depends(_require_admin)):
+    """Ingest all pending curated content into vault + KB."""
+    results = await ingest_all_pending()
+    return {"ingested": len(results), "details": results}
+
+
+@router.post("/ingest/{content_id}")
+async def trigger_single_ingest(content_id: str, user: dict = Depends(_require_admin)):
+    """Ingest a single content item."""
+    result = await ingest_content(content_id)
+    return result or {"error": "Not found or already ingested"}
 
 
 @router.post("/newsletter/generate")

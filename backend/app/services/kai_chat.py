@@ -201,6 +201,22 @@ Key Insights: {json.dumps(c.get('key_insights', [])[:3])}""")
     except Exception as e:
         log.warning("Semantic search failed: %s", e)
 
+    # 3b. Granular KB chunk search (deep transcript search)
+    try:
+        if not query_embedding:
+            query_embedding = await generate_embedding(query)
+        chunk_results = db.rpc("match_kb_chunks", {
+            "query_embedding": query_embedding,
+            "match_threshold": 0.35,
+            "match_count": 5,
+        }).execute()
+
+        for ch in (chunk_results.data or []):
+            sections.append(f"""TRANSCRIPT EXCERPT from "{ch.get('content_title', '')}" ({ch.get('creator_name', '')}):
+{ch['text'][:500]}""")
+    except Exception as e:
+        log.warning("KB chunk search failed: %s", e)
+
     # 4. Active themes
     themes = db.table("themes").select("name, status, description, tickers, escalation_score").in_(
         "status", ["active", "escalating"]

@@ -385,6 +385,13 @@ async def process_video(video: dict, creator: dict) -> dict | None:
     log.info("Curated %s (relevance=%.2f, published=%s): %s",
              video_id, relevance, record["is_published"], video["title"][:60])
 
+    # Auto-ingest into vault + KB
+    try:
+        from app.services.ingestion import ingest_content
+        await ingest_content(content_id)
+    except Exception as e:
+        log.warning("Auto-ingestion failed for %s: %s", video_id, e)
+
     return record
 
 
