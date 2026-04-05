@@ -1,17 +1,14 @@
-// CheatCode OS — Intelligence Tool: Ticker Lookup
-// Design: One input, clean output. Robinhood-simple.
-// Free: score + direction only. Paid: full evidence chain.
-// Score ring is the hero element. Evidence chain expandable below.
+// CheatCode OS — Intelligence Tool v2
+// Brand: CC Cyan for Kai/AI elements, CC Green for bullish, CC Red for bearish,
+// CC Yellow for watch, dark gradient hero, spectrum top bar
 
 import { useState } from "react";
-import { Search, TrendingUp, TrendingDown, Lock, ChevronDown, ChevronUp, ExternalLink, Zap, ArrowRight } from "lucide-react";
+import { Search, Lock, ChevronDown, ChevronUp, Zap, ArrowRight } from "lucide-react";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { tickerData, radarTickers } from "@/lib/mockData";
-
-const INTEL_IMAGE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663185570724/QgiApnmXYRXSMA2KNkFFkL/intelligence-tool-bg-oPwz7mFzUjQ4hHCmkQhv9u.webp";
 
 const SOURCE_ICONS: Record<string, string> = {
   "Flow Agent": "🌊",
@@ -34,7 +31,8 @@ function EvidenceCard({ item, isPaid }: { item: { source: string; signal: string
             <span className="text-xs text-[#98A2B3]">{item.date}</span>
           </div>
         </div>
-        <span className="text-xs font-semibold text-[#2E90FA] bg-[#EFF8FF] px-2 py-0.5 rounded-full flex-shrink-0">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+              style={{ background: "#E8F8FF", color: "#005F8A" }}>
           {item.signal}
         </span>
       </div>
@@ -66,73 +64,73 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
   }
 
   const isBullish = data.direction === "Bullish";
+  const directionColor = isBullish ? "#4DC820" : "#E8193C";
+  const directionBg = isBullish ? "#F0FDE8" : "#FFF0F3";
 
   return (
     <div className="space-y-5">
       {/* Hero score card */}
-      <div className="bg-white rounded-2xl border border-[#EAECF0] p-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          {/* Score ring */}
-          <ScoreRing score={data.score} size="xl" />
-
-          {/* Main info */}
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-1">
-              <span className="ticker-mono text-3xl font-bold text-[#101828]">{data.ticker}</span>
-              <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-                isBullish ? "bg-[#ECFDF3] text-[#027A48]" : "bg-[#FEF3F2] text-[#B42318]"
-              }`}>
-                {isBullish ? "↑" : "↓"} {data.direction}
-              </span>
+      <div className="bg-white rounded-2xl border border-[#EAECF0] overflow-hidden">
+        {/* Spectrum top bar */}
+        <div className="h-0.5" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+            <ScoreRing score={data.score} size="xl" />
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-1">
+                <span className="ticker-mono text-3xl font-bold text-[#101828]">{data.ticker}</span>
+                <span className="text-sm font-bold px-3 py-1 rounded-full"
+                      style={{ background: directionBg, color: directionColor }}>
+                  {isBullish ? "↑" : "↓"} {data.direction}
+                </span>
+              </div>
+              <p className="text-lg font-semibold text-[#101828] mb-1">
+                {data.direction} setup. {data.timeframe}. {data.confidence} confidence.
+              </p>
+              <div className="flex items-center gap-3 text-sm text-[#667085]">
+                <span className="ticker-mono font-semibold text-[#101828]">{data.price}</span>
+                <span className="font-semibold" style={{ color: data.changePercent.startsWith("+") ? "#4DC820" : "#E8193C" }}>
+                  {data.change} ({data.changePercent})
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs text-[#667085] bg-[#F2F4F7] px-2 py-0.5 rounded-full border border-[#EAECF0]">
+                  {data.theme}
+                </span>
+              </div>
             </div>
-            <p className="text-lg font-semibold text-[#101828] mb-1">
-              {data.direction} setup. {data.timeframe}. {data.confidence} confidence.
-            </p>
-            <div className="flex items-center gap-3 text-sm text-[#667085]">
-              <span className="ticker-mono font-semibold text-[#101828]">{data.price}</span>
-              <span className={`font-semibold ${data.changePercent.startsWith("+") ? "text-[#12B76A]" : "text-[#F04438]"}`}>
-                {data.change} ({data.changePercent})
-              </span>
-            </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-[#667085] bg-[#F2F4F7] px-2 py-0.5 rounded-full border border-[#EAECF0]">
-                {data.theme}
-              </span>
-            </div>
+            {!isPro && (
+              <div className="text-center sm:text-right">
+                <p className="text-xs text-[#667085] mb-2">Full breakdown</p>
+                <a href="/pricing">
+                  <button className="flex items-center gap-2 text-[#101828] text-sm font-bold px-4 py-2 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity">
+                    <Zap size={13} />
+                    Unlock Pro
+                  </button>
+                </a>
+              </div>
+            )}
           </div>
-
-          {/* CTA */}
-          {!isPro && (
-            <div className="text-center sm:text-right">
-              <p className="text-xs text-[#667085] mb-2">Full breakdown</p>
-              <a href="/pricing">
-                <button className="flex items-center gap-2 bg-[#12B76A] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#0EA05E] transition-colors">
-                  <Zap size={13} fill="white" />
-                  Unlock Pro
-                </button>
-              </a>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Catalysts + Invalidation */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-[#ECFDF3] rounded-xl border border-[#A9EFC5] p-4">
-          <p className="section-label text-[#027A48] mb-2">Catalysts</p>
+        <div className="rounded-xl border p-4" style={{ background: "#F0FDE8", borderColor: "#B6F08A" }}>
+          <p className="section-label mb-2" style={{ color: "#2E7A10" }}>Catalysts</p>
           <ul className="space-y-1">
             {data.catalysts.map((c, i) => (
-              <li key={i} className="text-sm text-[#027A48] flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#12B76A] flex-shrink-0" />
+              <li key={i} className="text-sm flex items-center gap-2" style={{ color: "#2E7A10" }}>
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#4DC820" }} />
                 {c}
               </li>
             ))}
           </ul>
         </div>
-        <div className="bg-[#FEF3F2] rounded-xl border border-[#FECDCA] p-4">
-          <p className="section-label text-[#B42318] mb-2">Invalidation Level</p>
-          <p className="text-sm text-[#B42318] font-medium">{data.invalidationLevel}</p>
-          <p className="text-xs text-[#F04438] mt-1">Monitor this level closely.</p>
+        <div className="rounded-xl border p-4" style={{ background: "#FFF0F3", borderColor: "#F8A3B1" }}>
+          <p className="section-label mb-2" style={{ color: "#A8001F" }}>Invalidation Level</p>
+          <p className="text-sm font-medium" style={{ color: "#A8001F" }}>{data.invalidationLevel}</p>
+          <p className="text-xs mt-1" style={{ color: "#E8193C" }}>Monitor this level closely.</p>
         </div>
       </div>
 
@@ -161,11 +159,11 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
             {!isPro && (
               <div className="text-center py-3">
                 <p className="text-sm text-[#667085] mb-3">
-                  {data.evidenceChain.length - 1} more signals locked. Upgrade to see the full picture.
+                  {data.evidenceChain.length - 1} more signals locked.
                 </p>
                 <a href="/pricing">
-                  <button className="flex items-center gap-2 bg-[#12B76A] text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-[#0EA05E] transition-colors mx-auto">
-                    <Zap size={13} fill="white" />
+                  <button className="flex items-center gap-2 text-[#101828] text-sm font-bold px-5 py-2 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity mx-auto">
+                    <Zap size={13} />
                     Unlock Full Evidence Chain
                   </button>
                 </a>
@@ -175,7 +173,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
         )}
       </div>
 
-      {/* Who's talking about this */}
+      {/* Who's talking */}
       <div className="bg-white rounded-xl border border-[#EAECF0] overflow-hidden">
         <button
           onClick={() => setWhoOpen(o => !o)}
@@ -204,9 +202,11 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
         </p>
         <div className="flex gap-2 flex-wrap">
           {data.relatedTickers.map(t => (
-            <button
-              key={t}
-              className="ticker-mono text-sm bg-[#F9FAFB] border border-[#EAECF0] px-3 py-1.5 rounded-lg text-[#475467] hover:border-[#12B76A] hover:text-[#12B76A] transition-colors"
+            <button key={t}
+              className="ticker-mono text-sm bg-[#F9FAFB] border border-[#EAECF0] px-3 py-1.5 rounded-lg text-[#475467] transition-colors"
+              style={{ transition: "border-color 0.15s, color 0.15s" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#4DC820"; (e.currentTarget as HTMLButtonElement).style.color = "#4DC820"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#EAECF0"; (e.currentTarget as HTMLButtonElement).style.color = "#475467"; }}
             >
               {t}
             </button>
@@ -230,18 +230,16 @@ export default function IntelligencePage() {
       <Nav />
 
       <main className="page-enter">
-        {/* Hero search section */}
-        <div className="relative bg-white border-b border-[#EAECF0] overflow-hidden">
-          <div className="absolute inset-0 opacity-5">
-            <img src={INTEL_IMAGE} alt="" className="w-full h-full object-cover" />
-          </div>
+        {/* Hero — dark gradient with spectrum bar */}
+        <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
+          <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
           <div className="container mx-auto py-10 relative">
             <div className="max-w-xl mx-auto text-center">
-              <p className="section-label mb-2">Intelligence Tool</p>
-              <h1 className="text-3xl font-bold text-[#101828] mb-2" style={{ fontFamily: "var(--font-display)" }}>
+              <p className="section-label mb-2" style={{ color: "#98A2B3" }}>Intelligence Tool</p>
+              <h1 className="text-3xl font-bold text-white mb-2" style={{ fontFamily: "var(--font-display)" }}>
                 What's the signal on any ticker?
               </h1>
-              <p className="text-[#667085] text-sm mb-6">
+              <p className="text-sm mb-6 leading-relaxed" style={{ color: "#98A2B3" }}>
                 Kai cross-references 6 data agents — news, flow, macro, insider, earnings, and curated content — into a single convergence score.
               </p>
               <div className="flex gap-2 max-w-sm mx-auto">
@@ -253,18 +251,18 @@ export default function IntelligencePage() {
                     onChange={e => setQuery(e.target.value.toUpperCase())}
                     onKeyDown={e => e.key === "Enter" && handleSearch()}
                     placeholder="Enter ticker (e.g. NVDA)"
-                    className="w-full pl-9 pr-4 py-3 text-sm bg-[#F9FAFB] border border-[#EAECF0] rounded-xl outline-none focus:border-[#12B76A] focus:ring-2 focus:ring-[#12B76A]/20 transition-all ticker-mono"
+                    className="w-full pl-9 pr-4 py-3 text-sm rounded-xl outline-none ticker-mono border border-white/20 bg-white/10 text-white placeholder-white/40 focus:bg-white/15 focus:border-[#4DC820] transition-all"
                   />
                 </div>
                 <button
                   onClick={handleSearch}
-                  className="bg-[#12B76A] text-white text-sm font-semibold px-5 py-3 rounded-xl hover:bg-[#0EA05E] transition-colors flex items-center gap-2"
+                  className="text-[#101828] text-sm font-bold px-5 py-3 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity flex items-center gap-2"
                 >
                   Analyze
                   <ArrowRight size={14} />
                 </button>
               </div>
-              <p className="text-xs text-[#98A2B3] mt-2">
+              <p className="text-xs mt-2" style={{ color: "#667085" }}>
                 Try: NVDA, KKR, CCJ, AMD, NFLX
               </p>
             </div>
@@ -273,7 +271,6 @@ export default function IntelligencePage() {
 
         <div className="container mx-auto py-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main result */}
             <div className="lg:col-span-2">
               {searched ? (
                 <TickerResult ticker={searched} isPro={false} />
@@ -293,6 +290,8 @@ export default function IntelligencePage() {
                 Today's Radar
               </h3>
               <div className="bg-white rounded-xl border border-[#EAECF0] overflow-hidden">
+                {/* Dark header */}
+                <div className="h-0.5" style={{ background: "linear-gradient(90deg, #4DC820 0%, #C8D400 100%)" }} />
                 <div className="divide-y divide-[#F2F4F7]">
                   {radarTickers.map(t => (
                     <button
@@ -304,15 +303,18 @@ export default function IntelligencePage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="ticker-mono text-sm font-bold text-[#101828]">{t.ticker}</span>
-                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                            t.direction === "Bullish" ? "text-[#027A48] bg-[#ECFDF3]" : "text-[#B42318] bg-[#FEF3F2]"
-                          }`}>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded"
+                                style={{
+                                  color: t.direction === "Bullish" ? "#2E7A10" : "#A8001F",
+                                  background: t.direction === "Bullish" ? "#F0FDE8" : "#FFF0F3",
+                                }}>
                             {t.direction}
                           </span>
                         </div>
                         <div className="text-xs text-[#98A2B3]">{t.confidence}</div>
                       </div>
-                      <span className={`text-sm font-semibold ${t.change.startsWith("+") ? "text-[#12B76A]" : "text-[#F04438]"}`}>
+                      <span className="text-sm font-semibold"
+                            style={{ color: t.change.startsWith("+") ? "#4DC820" : "#E8193C" }}>
                         {t.change}
                       </span>
                     </button>

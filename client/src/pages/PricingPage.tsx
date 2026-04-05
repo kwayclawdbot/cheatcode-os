@@ -1,6 +1,5 @@
-// CheatCode OS — Pricing Page
-// Design: Three tiers. Clean, Robinhood-simple. Green CTA for Pro.
-// Free / Pro ($29) / Elite ($99)
+// CheatCode OS — Pricing Page v2
+// Brand: CC Green→Yellow gradient on Pro CTA, CC Dark for Elite, spectrum top bar
 
 import { Link } from "wouter";
 import { Check, Zap, Lock } from "lucide-react";
@@ -15,7 +14,7 @@ const TIERS = [
     period: "forever",
     description: "Start exploring. No credit card required.",
     cta: "Get Started Free",
-    ctaStyle: "border border-[#EAECF0] text-[#475467] hover:bg-[#F9FAFB]",
+    ctaType: "outline" as const,
     popular: false,
     features: [
       "Browse all curated videos and podcasts",
@@ -41,7 +40,7 @@ const TIERS = [
     period: "per month",
     description: "For serious traders who want the full picture.",
     cta: "Start Pro Free Trial",
-    ctaStyle: "bg-[#12B76A] text-white hover:bg-[#0EA05E]",
+    ctaType: "gradient" as const,
     popular: true,
     features: [
       "Everything in Free",
@@ -63,7 +62,7 @@ const TIERS = [
     period: "per month",
     description: "For professionals, funds, and power users.",
     cta: "Get Elite Access",
-    ctaStyle: "bg-[#101828] text-white hover:bg-[#1D2939]",
+    ctaType: "dark" as const,
     popular: false,
     features: [
       "Everything in Pro",
@@ -84,14 +83,16 @@ export default function PricingPage() {
       <Nav />
 
       <main className="page-enter">
-        {/* Header */}
-        <div className="bg-white border-b border-[#EAECF0]">
+        {/* Header — dark gradient */}
+        <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
+          <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
           <div className="container mx-auto py-12 text-center">
-            <p className="section-label mb-2">Pricing</p>
-            <h1 className="text-3xl font-bold text-[#101828] mb-3" style={{ fontFamily: "var(--font-display)" }}>
-              Intelligence compounds. So does your edge.
+            <p className="section-label mb-2" style={{ color: "#98A2B3" }}>Pricing</p>
+            <h1 className="text-3xl font-bold text-white mb-3" style={{ fontFamily: "var(--font-display)" }}>
+              Intelligence compounds.{" "}
+              <span className="cc-gradient-text">So does your edge.</span>
             </h1>
-            <p className="text-[#667085] text-sm max-w-md mx-auto">
+            <p className="text-sm max-w-md mx-auto" style={{ color: "#98A2B3" }}>
               Start free. Upgrade when you want the full picture. Cancel anytime.
             </p>
           </div>
@@ -100,11 +101,19 @@ export default function PricingPage() {
         <div className="container mx-auto py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {TIERS.map(tier => (
-              <div key={tier.id} className={`relative bg-white rounded-2xl border overflow-hidden ${
-                tier.popular ? "border-[#12B76A] shadow-lg shadow-green-100" : "border-[#EAECF0]"
-              }`}>
+              <div key={tier.id} className={`relative bg-white rounded-2xl overflow-hidden ${
+                tier.popular
+                  ? "border-2 shadow-xl shadow-green-100/50"
+                  : "border border-[#EAECF0]"
+              }`}
+                style={tier.popular ? { borderColor: "#4DC820" } : {}}>
+                {/* Top accent bar */}
                 {tier.popular && (
-                  <div className="bg-[#12B76A] text-white text-xs font-bold text-center py-1.5 tracking-wide">
+                  <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #4DC820 0%, #C8D400 100%)" }} />
+                )}
+                {tier.popular && (
+                  <div className="text-center py-1.5 text-xs font-bold tracking-wide"
+                       style={{ background: "linear-gradient(90deg, #4DC820 0%, #C8D400 100%)", color: "#101828" }}>
                     MOST POPULAR
                   </div>
                 )}
@@ -118,15 +127,28 @@ export default function PricingPage() {
                   </div>
                   <p className="text-xs text-[#667085] mb-5">{tier.description}</p>
 
-                  <button className={`w-full text-sm font-semibold py-2.5 rounded-xl transition-colors mb-5 flex items-center justify-center gap-2 ${tier.ctaStyle}`}>
-                    {tier.popular && <Zap size={13} fill="white" />}
-                    {tier.cta}
-                  </button>
+                  {tier.ctaType === "gradient" && (
+                    <button className="w-full text-[#101828] text-sm font-bold py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2">
+                      <Zap size={13} />
+                      {tier.cta}
+                    </button>
+                  )}
+                  {tier.ctaType === "dark" && (
+                    <button className="w-full text-white text-sm font-bold py-2.5 rounded-xl hover:opacity-90 transition-opacity mb-5 flex items-center justify-center gap-2"
+                            style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
+                      {tier.cta}
+                    </button>
+                  )}
+                  {tier.ctaType === "outline" && (
+                    <button className="w-full text-[#475467] text-sm font-semibold py-2.5 rounded-xl border border-[#EAECF0] hover:bg-[#F9FAFB] transition-colors mb-5">
+                      {tier.cta}
+                    </button>
+                  )}
 
                   <div className="space-y-2.5">
                     {tier.features.map((f, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        <Check size={14} className="text-[#12B76A] flex-shrink-0 mt-0.5" />
+                        <Check size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#4DC820" }} />
                         <span className="text-xs text-[#475467] leading-relaxed">{f}</span>
                       </div>
                     ))}
@@ -142,11 +164,10 @@ export default function PricingPage() {
             ))}
           </div>
 
-          {/* FAQ / trust signals */}
           <div className="max-w-2xl mx-auto mt-12 text-center">
             <p className="text-sm text-[#667085]">
               All plans include a 7-day free trial. No credit card required for Free.{" "}
-              <Link href="/"><span className="text-[#12B76A] font-semibold underline">Start exploring →</span></Link>
+              <Link href="/"><span className="font-semibold cc-gradient-text underline">Start exploring →</span></Link>
             </p>
           </div>
         </div>

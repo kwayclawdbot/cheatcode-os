@@ -51,7 +51,7 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
             <span className="ticker-mono text-sm font-bold text-[#101828]">{ticker}</span>
             {data && (
               <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                data.direction === "Bullish" ? "text-[#027A48] bg-[#ECFDF3]" : "text-[#B42318] bg-[#FEF3F2]"
+                data.direction === "Bullish" ? "text-[#2E7A10] bg-[#F0FDE8]" : "text-[#A8001F] bg-[#FFF0F3]"
               }`}>
                 {data.direction}
               </span>
@@ -59,7 +59,7 @@ function TickerMention({ ticker, creatorNote, isPaid }: { ticker: string; creato
           </div>
           <p className="text-xs text-[#667085] leading-relaxed">{creatorNote}</p>
           {data && (
-            <p className={`text-xs font-medium mt-1 ${isPaid ? "text-[#2E90FA]" : "gated-blur text-[#2E90FA]"}`}>
+            <p className={`text-xs font-medium mt-1 ${isPaid ? "text-[#00AEEF]" : "gated-blur text-[#00AEEF]"}`}>
               {isPaid
                 ? `Kai: ${data.direction} setup. ${data.timeframe}. Score ${data.score}.`
                 : "Kai: Full breakdown available for Pro members."}
@@ -156,7 +156,7 @@ export default function VideoPage() {
                 <span className="text-sm text-[#98A2B3] flex items-center gap-1"><Clock size={12} />{video.publishedAt}</span>
                 <span className="text-[#EAECF0]">·</span>
                 <span className="text-sm text-[#98A2B3]">{video.duration}</span>
-                <a href="#" className="ml-auto text-xs text-[#2E90FA] flex items-center gap-1 hover:underline">
+                <a href="#" className="ml-auto text-xs text-[#00AEEF] flex items-center gap-1 hover:underline">
                   Watch on YouTube <ExternalLink size={10} />
                 </a>
               </div>
@@ -167,9 +167,9 @@ export default function VideoPage() {
                   </span>
                 ))}
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                  video.relevanceBadge === "Critical" ? "bg-red-50 text-red-700 border-red-200" :
-                  video.relevanceBadge === "High Relevance" ? "bg-green-50 text-green-700 border-green-200" :
-                  "bg-amber-50 text-amber-700 border-amber-200"
+                  video.relevanceBadge === "Critical" ? "bg-[#FFF0F3] text-[#A8001F] border-[#F8A3B1]" :
+                  video.relevanceBadge === "High Relevance" ? "bg-[#F0FDE8] text-[#2E7A10] border-[#B6F08A]" :
+                  "bg-[#FAFDE8] text-[#7A6800] border-[#E8F08A]"
                 }`}>
                   {video.relevanceBadge}
                 </span>
@@ -177,12 +177,12 @@ export default function VideoPage() {
             </div>
 
             {/* Quick Take — always visible */}
-            <div className="bg-gradient-to-r from-[#EFF8FF] to-[#F0FDF9] rounded-xl p-4 border border-[#BAE6FD]">
+            <div className="bg-gradient-to-r from-[#E8F8FF] to-[#F0FDE8] rounded-xl p-4 border border-[#7FDBF8]">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-5 h-5 rounded-full bg-[#2E90FA] flex items-center justify-center">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#00AEEF" }}>
                   <span className="text-white text-[9px] font-bold">K</span>
                 </div>
-                <span className="text-xs font-semibold text-[#1570EF]">Kai's Quick Take</span>
+                <span className="text-xs font-semibold" style={{ color: "#005F8A" }}>Kai's Quick Take</span>
               </div>
               <p className="text-sm text-[#101828] leading-relaxed">{video.quickTake}</p>
             </div>
@@ -192,7 +192,7 @@ export default function VideoPage() {
               <ul className="divide-y divide-[#F2F4F7]">
                 {KEY_INSIGHTS.map((insight, i) => (
                   <li key={i} className="flex gap-3 px-4 py-3">
-                    <span className="w-5 h-5 rounded-full bg-[#ECFDF3] text-[#027A48] text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#F0FDE8", color: "#2E7A10" }}>
                       {i + 1}
                     </span>
                     <p className="text-sm text-[#475467] leading-relaxed">{insight}</p>
@@ -227,7 +227,7 @@ export default function VideoPage() {
               <div className="divide-y divide-[#F2F4F7]">
                 {TIMESTAMPS.map((ts, i) => (
                   <button key={i} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F9FAFB] transition-colors text-left">
-                    <span className="ticker-mono text-xs text-[#12B76A] w-10 flex-shrink-0">{ts.time}</span>
+                    <span className="ticker-mono text-xs w-10 flex-shrink-0" style={{ color: "#4DC820" }}>{ts.time}</span>
                     <span className="text-sm text-[#475467]">{ts.label}</span>
                   </button>
                 ))}
@@ -241,10 +241,10 @@ export default function VideoPage() {
             <div className="bg-white rounded-xl border border-[#EAECF0] p-5 text-center">
               <p className="section-label mb-3">KKR Convergence Score</p>
               <ScoreRing score={88} size="lg" />
-              <p className="text-sm font-semibold text-[#B42318] mt-3">Bearish Setup</p>
+              <p className="text-sm font-semibold mt-3" style={{ color: "#E8193C" }}>Bearish Setup</p>
               <p className="text-xs text-[#667085] mt-1">Swing Trade · High Conviction</p>
               <Link href="/intelligence?ticker=KKR">
-                <button className="w-full mt-4 bg-[#101828] text-white text-sm font-semibold py-2 rounded-lg hover:bg-[#1D2939] transition-colors">
+                <button className="w-full mt-4 text-[#101828] text-sm font-bold py-2 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity">
                   Full Intelligence Breakdown
                 </button>
               </Link>

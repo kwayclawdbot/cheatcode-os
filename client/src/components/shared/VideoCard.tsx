@@ -1,6 +1,5 @@
-// CheatCode OS — VideoCard Component
-// Design: Spotify-style content card with hover quick-take reveal
-// Used in horizontal scroll rows and grid layouts
+// CheatCode OS — VideoCard v2
+// Brand: CC Green for bullish scores, CC Red for critical badges, CC Yellow for watch
 
 import { Link } from "wouter";
 import { Play, Headphones, Clock, TrendingUp } from "lucide-react";
@@ -22,10 +21,10 @@ interface VideoCardProps {
   compact?: boolean;
 }
 
-const badgeColors: Record<string, string> = {
-  "Critical": "bg-red-50 text-red-700 border border-red-200",
-  "High Relevance": "bg-green-50 text-green-700 border border-green-200",
-  "Watch": "bg-amber-50 text-amber-700 border border-amber-200",
+const badgeStyles: Record<string, { bg: string; text: string; border: string }> = {
+  "Critical":      { bg: "#FFF0F3", text: "#A8001F", border: "#F8A3B1" },
+  "High Relevance":{ bg: "#F0FDE8", text: "#2E7A10", border: "#B6F08A" },
+  "Watch":         { bg: "#FAFDE8", text: "#7A6800", border: "#E8F08A" },
 };
 
 export function VideoCard({
@@ -33,6 +32,8 @@ export function VideoCard({
   quickTake, tags, relevanceBadge, tickers, convergenceScore, publishedAt, compact = false
 }: VideoCardProps) {
   const href = type === "video" ? `/video/${id}` : `/podcast/${id}`;
+  const badge = badgeStyles[relevanceBadge] || badgeStyles["Watch"];
+  const scoreColor = convergenceScore >= 80 ? "#4DC820" : convergenceScore >= 60 ? "#C8D400" : "#E8193C";
 
   return (
     <Link href={href}>
@@ -44,13 +45,12 @@ export function VideoCard({
             alt={title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
-          {/* Duration badge */}
           <div className="absolute bottom-2 right-2 bg-black/75 text-white text-xs font-medium px-1.5 py-0.5 rounded flex items-center gap-1">
             {type === "video" ? <Play size={10} fill="white" /> : <Headphones size={10} />}
             {duration}
           </div>
-          {/* Relevance badge */}
-          <div className={`absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-full ${badgeColors[relevanceBadge] || badgeColors["Watch"]}`}>
+          <div className="absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+               style={{ background: badge.bg, color: badge.text, borderColor: badge.border }}>
             {relevanceBadge}
           </div>
         </div>
@@ -59,10 +59,8 @@ export function VideoCard({
         <div className="p-3">
           {/* Creator row */}
           <div className="flex items-center gap-2 mb-2">
-            <div
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-              style={{ backgroundColor: creator.color }}
-            >
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                 style={{ backgroundColor: creator.color }}>
               {creator.avatar}
             </div>
             <span className="text-xs text-[#667085] font-medium truncate">{creator.name}</span>
@@ -78,7 +76,7 @@ export function VideoCard({
             {title}
           </h3>
 
-          {/* Quick take — visible on hover */}
+          {/* Quick take */}
           {!compact && (
             <p className="text-xs text-[#667085] leading-relaxed line-clamp-2 mb-3">
               {quickTake}
@@ -95,8 +93,8 @@ export function VideoCard({
               ))}
             </div>
             <div className="flex items-center gap-1">
-              <TrendingUp size={10} className="text-[#12B76A]" />
-              <span className="score-number text-xs" style={{ color: convergenceScore >= 80 ? "#12B76A" : convergenceScore >= 60 ? "#F79009" : "#F04438" }}>
+              <TrendingUp size={10} style={{ color: scoreColor }} />
+              <span className="score-number text-xs" style={{ color: scoreColor }}>
                 {convergenceScore}
               </span>
             </div>

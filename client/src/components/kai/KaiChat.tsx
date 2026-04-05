@@ -1,7 +1,7 @@
-// CheatCode OS — Kai Chat Widget
-// Design: Persistent bottom-right bubble. Opens to a chat panel.
-// Kai is the AI analyst — calm, clinical, data-first voice.
-// Blue (#2E90FA) brand color for Kai/AI elements.
+// CheatCode OS — Kai Chat Widget v2
+// Brand: CC Cyan (#00AEEF) for Kai identity
+// Bubble: CC Cyan with pulse animation
+// Header: dark gradient (CC Dark) with cyan accent
 
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Minimize2, Zap, Lock } from "lucide-react";
@@ -45,9 +45,7 @@ export function KaiChat() {
   const FREE_LIMIT = 5;
 
   useEffect(() => {
-    if (open) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    if (open) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
   const sendMessage = () => {
@@ -57,14 +55,8 @@ export function KaiChat() {
     setInput("");
     setMessageCount(c => c + 1);
     setIsTyping(true);
-
     setTimeout(() => {
-      const kaiResponse: Message = {
-        role: "kai",
-        content: getKaiResponse(userMsg.content),
-        timestamp: "now",
-      };
-      setMessages(prev => [...prev, kaiResponse]);
+      setMessages(prev => [...prev, { role: "kai", content: getKaiResponse(userMsg.content), timestamp: "now" }]);
       setIsTyping(false);
     }, 1200);
   };
@@ -77,18 +69,23 @@ export function KaiChat() {
       {open && (
         <div className="fixed bottom-20 right-4 z-50 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-[#EAECF0] flex flex-col overflow-hidden"
              style={{ maxHeight: "520px" }}>
-          {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#EAECF0] bg-gradient-to-r from-[#EFF8FF] to-[#F0FDF9]">
-            <div className="w-9 h-9 rounded-full bg-[#2E90FA] flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>K</span>
+          {/* Header — dark gradient with spectrum top bar */}
+          <div>
+            <div className="h-0.5" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
+            <div className="flex items-center gap-3 px-4 py-3"
+                 style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                   style={{ background: "#00AEEF" }}>
+                <span className="text-white font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>K</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-white text-sm" style={{ fontFamily: "var(--font-display)" }}>Kai</div>
+                <div className="text-xs font-medium" style={{ color: "#4DC820" }}>AI Analyst · Online</div>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X size={16} />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-[#101828] text-sm" style={{ fontFamily: "var(--font-display)" }}>Kai</div>
-              <div className="text-xs text-[#12B76A] font-medium">AI Analyst · Online</div>
-            </div>
-            <button onClick={() => setOpen(false)} className="text-[#98A2B3] hover:text-[#475467] transition-colors">
-              <X size={16} />
-            </button>
           </div>
 
           {/* Messages */}
@@ -96,7 +93,8 @@ export function KaiChat() {
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role === "kai" && (
-                  <div className="w-6 h-6 rounded-full bg-[#2E90FA] flex items-center justify-center flex-shrink-0 mr-2 mt-1">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mr-2 mt-1"
+                       style={{ background: "#00AEEF" }}>
                     <span className="text-white text-[9px] font-bold">K</span>
                   </div>
                 )}
@@ -109,14 +107,16 @@ export function KaiChat() {
             ))}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="w-6 h-6 rounded-full bg-[#2E90FA] flex items-center justify-center flex-shrink-0 mr-2 mt-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mr-2 mt-1"
+                     style={{ background: "#00AEEF" }}>
                   <span className="text-white text-[9px] font-bold">K</span>
                 </div>
                 <div className="kai-message px-3 py-2">
                   <div className="flex gap-1 items-center h-4">
-                    <span className="w-1.5 h-1.5 bg-[#2E90FA] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 bg-[#2E90FA] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 bg-[#2E90FA] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    {[0, 150, 300].map(delay => (
+                      <span key={delay} className="w-1.5 h-1.5 rounded-full animate-bounce"
+                            style={{ backgroundColor: "#00AEEF", animationDelay: `${delay}ms` }} />
+                    ))}
                   </div>
                 </div>
               </div>
@@ -126,8 +126,9 @@ export function KaiChat() {
 
           {/* Message limit banner */}
           {remaining <= 2 && remaining > 0 && (
-            <div className="px-4 py-2 bg-[#FFFAEB] border-t border-[#FEDF89] text-xs text-[#B54708] font-medium">
-              {remaining} free message{remaining !== 1 ? "s" : ""} left today.{" "}
+            <div className="px-4 py-2 border-t text-xs font-medium"
+                 style={{ background: "#FAFDE8", borderColor: "#E8F08A", color: "#7A6800" }}>
+              {remaining} free message{remaining !== 1 ? "s" : ""} left.{" "}
               <a href="/pricing" className="underline font-semibold">Upgrade to Pro</a> for unlimited.
             </div>
           )}
@@ -140,8 +141,8 @@ export function KaiChat() {
                 <span>You've used your 5 free messages today.</span>
               </div>
               <a href="/pricing">
-                <button className="w-full bg-[#12B76A] text-white text-sm font-semibold py-2 rounded-lg hover:bg-[#0EA05E] transition-colors flex items-center justify-center gap-2">
-                  <Zap size={14} fill="white" />
+                <button className="w-full text-[#101828] text-sm font-bold py-2 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                  <Zap size={14} />
                   Upgrade to Pro — Unlimited Kai
                 </button>
               </a>
@@ -155,12 +156,16 @@ export function KaiChat() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && sendMessage()}
                   placeholder="Ask about any ticker or theme..."
-                  className="flex-1 text-sm bg-[#F9FAFB] border border-[#EAECF0] rounded-lg px-3 py-2 outline-none focus:border-[#2E90FA] focus:ring-1 focus:ring-[#2E90FA] transition-colors"
+                  className="flex-1 text-sm bg-[#F9FAFB] border border-[#EAECF0] rounded-lg px-3 py-2 outline-none transition-colors"
+                  style={{ fontFamily: "var(--font-body)" }}
+                  onFocus={e => { e.currentTarget.style.borderColor = "#00AEEF"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(0,174,239,0.15)"; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = "#EAECF0"; e.currentTarget.style.boxShadow = "none"; }}
                 />
                 <button
                   onClick={sendMessage}
                   disabled={!input.trim()}
-                  className="w-9 h-9 bg-[#2E90FA] text-white rounded-lg flex items-center justify-center hover:bg-[#1570EF] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                  className="w-9 h-9 text-white rounded-lg flex items-center justify-center transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                  style={{ background: "#00AEEF" }}
                 >
                   <Send size={14} />
                 </button>
@@ -173,10 +178,11 @@ export function KaiChat() {
         </div>
       )}
 
-      {/* Bubble trigger */}
+      {/* Bubble trigger — CC Cyan */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="kai-pulse fixed bottom-4 right-4 z-50 w-14 h-14 bg-[#2E90FA] rounded-full shadow-lg flex items-center justify-center hover:bg-[#1570EF] transition-colors"
+        className="kai-pulse fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+        style={{ background: "#00AEEF" }}
         aria-label="Open Kai Chat"
       >
         {open ? (

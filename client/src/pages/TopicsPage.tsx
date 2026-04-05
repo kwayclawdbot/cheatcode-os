@@ -19,28 +19,19 @@ const TABS = [
 
 const SKILL_LEVELS = [
   {
-    level: "Beginner",
-    color: "#12B76A",
-    bg: "#ECFDF3",
-    border: "#A9EFC5",
+    level: "Beginner", color: "#4DC820", bg: "#F0FDE8", border: "#B6F08A",
     description: "New to markets. Start here.",
     paths: ["Market Foundations", "Reading Charts Basics", "Risk Management 101"],
     videoCount: 48,
   },
   {
-    level: "Intermediate",
-    color: "#2E90FA",
-    bg: "#EFF8FF",
-    border: "#B2DDFF",
+    level: "Intermediate", color: "#00AEEF", bg: "#E8F8FF", border: "#7FDBF8",
     description: "You know the basics. Go deeper.",
     paths: ["Technical Analysis Core", "Options Fundamentals", "Swing Trading Setups"],
     videoCount: 134,
   },
   {
-    level: "Advanced",
-    color: "#F79009",
-    bg: "#FFFAEB",
-    border: "#FEDF89",
+    level: "Advanced", color: "#7B2FBE", bg: "#F5EEFF", border: "#C4A0F0",
     description: "Institutional-level thinking.",
     paths: ["Advanced Macro Trading", "Options Flow Analysis", "Position Sizing & Risk"],
     videoCount: 102,
@@ -73,7 +64,7 @@ function TopicsTab() {
             📈 Technical Analysis — Latest
           </h2>
           <Link href="/topics/technical-analysis">
-            <span className="text-sm text-[#12B76A] font-semibold flex items-center gap-1">
+            <span className="text-sm font-semibold flex items-center gap-1 cc-gradient-text">
               See all <ChevronRight size={14} />
             </span>
           </Link>
@@ -116,7 +107,7 @@ function CreatorsTab() {
             <p className="text-xs text-[#475467] mb-3">{c.specialty}</p>
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#98A2B3]">{c.videoCount} curated videos</span>
-              <span className="text-xs text-[#12B76A] font-semibold flex items-center gap-1">
+              <span className="text-xs font-semibold flex items-center gap-1 cc-gradient-text">
                 View profile <ChevronRight size={12} />
               </span>
             </div>
@@ -132,10 +123,10 @@ function ThemesTab() {
     <div className="space-y-4">
       {hotThemes.map(theme => {
         const statusColors: Record<string, string> = {
-          "Escalating": "text-[#B42318] bg-[#FEF3F2] border-[#FECDCA]",
-          "Active": "text-[#027A48] bg-[#ECFDF3] border-[#A9EFC5]",
-          "Watch": "text-[#B54708] bg-[#FFFAEB] border-[#FEDF89]",
-          "New": "text-[#1570EF] bg-[#EFF8FF] border-[#B2DDFF]",
+          "Escalating": "text-[#A8001F] bg-[#FFF0F3] border-[#F8A3B1]",
+          "Active": "text-[#2E7A10] bg-[#F0FDE8] border-[#B6F08A]",
+          "Watch": "text-[#7A6800] bg-[#FAFDE8] border-[#E8F08A]",
+          "New": "text-[#005F8A] bg-[#E8F8FF] border-[#7FDBF8]",
         };
         return (
           <Link key={theme.id} href={`/themes/${theme.id}`}>
@@ -232,25 +223,31 @@ export default function TopicsPage() {
       <Nav />
 
       <main className="page-enter">
-        {/* Header */}
-        <div className="bg-white border-b border-[#EAECF0]">
-          <div className="container mx-auto py-6">
-            <h1 className="text-2xl font-bold text-[#101828] mb-1" style={{ fontFamily: "var(--font-display)" }}>
-              Browse
+        {/* Header — dark gradient with spectrum bar */}
+        <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
+          <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
+          <div className="container mx-auto py-8">
+            <p className="section-label mb-1" style={{ color: "#98A2B3" }}>Browse</p>
+            <h1 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-display)" }}>
+              Find content your way
             </h1>
-            <p className="text-sm text-[#667085]">
+            <p className="text-sm" style={{ color: "#98A2B3" }}>
               Explore curated finance content by topic, creator, theme, or skill level.
             </p>
+          </div>
+        </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 mt-5 border-b border-[#EAECF0] -mb-px">
+        {/* Tabs — sticky below nav */}
+        <div className="bg-white border-b border-[#EAECF0] sticky top-14 z-40">
+          <div className="container mx-auto">
+            <div className="flex gap-1">
               {TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
                     activeTab === tab.id
-                      ? "border-[#12B76A] text-[#12B76A]"
+                      ? "border-[#4DC820] text-[#4DC820]"
                       : "border-transparent text-[#667085] hover:text-[#101828]"
                   }`}
                 >

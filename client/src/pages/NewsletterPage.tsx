@@ -37,16 +37,17 @@ export default function NewsletterPage() {
       <Nav />
 
       <main className="page-enter">
-        {/* Header */}
-        <div className="bg-white border-b border-[#EAECF0]">
+        {/* Header — dark gradient */}
+        <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
+          <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 33%, #7B2FBE 66%, #4DC820 100%)" }} />
           <div className="container mx-auto py-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
               <div>
-                <p className="section-label mb-1">Daily Brief</p>
-                <h1 className="text-2xl font-bold text-[#101828] mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                <p className="section-label mb-1" style={{ color: "#98A2B3" }}>Daily Brief</p>
+                <h1 className="text-2xl font-bold text-white mb-2" style={{ fontFamily: "var(--font-display)" }}>
                   The CheatCode Daily
                 </h1>
-                <p className="text-sm text-[#667085] max-w-md">
+                <p className="text-sm max-w-md" style={{ color: "#98A2B3" }}>
                   Every morning: market regime, top 3 curated videos, theme changes, and Kai's intelligence tool CTA. Auto-generated. Always relevant.
                 </p>
               </div>
@@ -63,12 +64,12 @@ export default function NewsletterPage() {
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         placeholder="your@email.com"
-                        className="pl-9 pr-4 py-2.5 text-sm bg-[#F9FAFB] border border-[#EAECF0] rounded-xl outline-none focus:border-[#12B76A] focus:ring-2 focus:ring-[#12B76A]/20 transition-all w-56"
+                        className="pl-9 pr-4 py-2.5 text-sm bg-white/10 border border-white/20 rounded-xl outline-none text-white placeholder-white/40 focus:border-[#4DC820] transition-all w-56"
                       />
                     </div>
                     <button
                       onClick={() => setSubscribed(true)}
-                      className="bg-[#12B76A] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-[#0EA05E] transition-colors flex items-center gap-2"
+                      className="text-[#101828] text-sm font-bold px-4 py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity flex items-center gap-2"
                     >
                       Subscribe
                       <ArrowRight size={13} />
@@ -77,9 +78,9 @@ export default function NewsletterPage() {
                   <p className="text-[10px] text-[#98A2B3] mt-1.5">Free. Unsubscribe anytime.</p>
                 </div>
               ) : (
-                <div className="flex-shrink-0 bg-[#ECFDF3] border border-[#A9EFC5] rounded-xl px-5 py-3 text-center">
-                  <p className="text-sm font-semibold text-[#027A48]">You're subscribed!</p>
-                  <p className="text-xs text-[#12B76A] mt-0.5">First brief arrives tomorrow morning.</p>
+                <div className="flex-shrink-0 rounded-xl px-5 py-3 text-center" style={{ background: "#F0FDE8", border: "1px solid #B6F08A" }}>
+                  <p className="text-sm font-semibold" style={{ color: "#2E7A10" }}>You're subscribed!</p>
+                  <p className="text-xs mt-0.5" style={{ color: "#4DC820" }}>First brief arrives tomorrow morning.</p>
                 </div>
               )}
             </div>
@@ -117,7 +118,7 @@ export default function NewsletterPage() {
                       <ul className="space-y-1">
                         {issue.topVideos.map((v, i) => (
                           <li key={i} className="text-xs text-[#475467] flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#12B76A] flex-shrink-0" />
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#4DC820" }} />
                             {v}
                           </li>
                         ))}
@@ -128,7 +129,7 @@ export default function NewsletterPage() {
                       <ul className="space-y-1">
                         {issue.themeChanges.map((t, i) => (
                           <li key={i} className="text-xs text-[#475467] flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#F79009] flex-shrink-0" />
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#C8D400" }} />
                             {t}
                           </li>
                         ))}
@@ -172,7 +173,7 @@ export default function NewsletterPage() {
               </div>
 
               {/* Pro upgrade */}
-              <div className="bg-[#101828] rounded-xl p-5 text-white">
+              <div className="rounded-xl p-5 text-white" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
                 <h3 className="font-bold text-sm mb-2" style={{ fontFamily: "var(--font-display)" }}>
                   Get real-time alerts
                 </h3>
@@ -180,7 +181,7 @@ export default function NewsletterPage() {
                   Pro members get push alerts when a ticker hits 90+ convergence. Don't wait for the morning brief.
                 </p>
                 <Link href="/pricing">
-                  <button className="w-full flex items-center justify-center gap-2 bg-[#12B76A] text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-[#0EA05E] transition-colors">
+                  <button className="w-full flex items-center justify-center gap-2 text-[#101828] text-sm font-bold py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity">
                     <Zap size={13} fill="white" />
                     Upgrade to Pro
                   </button>

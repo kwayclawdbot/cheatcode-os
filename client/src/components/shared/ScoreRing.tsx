@@ -1,6 +1,5 @@
-// CheatCode OS — ScoreRing Component
-// Design: Circular SVG progress ring with color-coded conviction level
-// Colors: Green (80+), Amber (60-79), Red (<60)
+// CheatCode OS — ScoreRing v2
+// Brand colors: CC Green (80+), CC Yellow (60-79), CC Red (<60)
 
 interface ScoreRingProps {
   score: number;
@@ -16,9 +15,9 @@ const sizeConfig = {
 };
 
 function getScoreColor(score: number) {
-  if (score >= 80) return "#12B76A";
-  if (score >= 60) return "#F79009";
-  return "#F04438";
+  if (score >= 80) return "#4DC820"; // CC Green
+  if (score >= 60) return "#C8D400"; // CC Yellow
+  return "#E8193C";                  // CC Red
 }
 
 function getConfidenceLabel(score: number) {
@@ -41,31 +40,19 @@ export function ScoreRing({ score, size = "md", showLabel = true }: ScoreRingPro
   return (
     <div className="relative inline-flex items-center justify-center flex-col">
       <svg width={dim} height={dim} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={cx} cy={cy} r={radius} strokeWidth={stroke} className="score-ring-track" />
         <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          strokeWidth={stroke}
-          className="score-ring-track"
-        />
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          strokeWidth={stroke}
+          cx={cx} cy={cy} r={radius} strokeWidth={stroke}
           stroke={color}
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
           fill="none"
-          style={{ transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)" }}
+          style={{ transition: "stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1)" }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span
-          className={`score-number font-bold leading-none ${fontSize}`}
-          style={{ color }}
-        >
+        <span className={`score-number font-bold leading-none ${fontSize}`} style={{ color }}>
           {score}
         </span>
         {showLabel && (
