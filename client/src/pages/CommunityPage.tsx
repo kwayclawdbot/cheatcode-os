@@ -22,6 +22,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchRadar, fetchTicker, fetchContent, fetchContentByTicker } from "@/lib/api";
 import { SparklineChart } from "@/components/intelligence/SparklineChart";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -736,11 +737,12 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
               width: 120,
             }}
           >
-            <div className="flex items-center justify-between px-3 pt-2.5 pb-0">
-              <span className="text-[13px] font-black tracking-tight" style={{ color: isActive ? color : "var(--foreground)" }}>
+            <div className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-0">
+              <TickerLogo symbol={t.symbol} size={20} />
+              <span className="text-[12px] font-black tracking-tight flex-1 truncate" style={{ color: isActive ? color : "var(--foreground)" }}>
                 {t.symbol}
               </span>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: color + "20", color }}>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: color + "20", color }}>
                 {Math.round(t.score ?? 50)}
               </span>
             </div>
