@@ -1,6 +1,39 @@
 // CheatCode OS — API Client
 // Fetches from FastAPI backend, falls back to mock data when backend unavailable
 
+// ── YouTube ID Extraction ────────────────────────────────────────────────────
+
+/**
+ * Extracts the YouTube video ID from any YouTube URL format:
+ * - https://www.youtube.com/watch?v=VIDEO_ID
+ * - https://youtu.be/VIDEO_ID
+ * - https://www.youtube.com/embed/VIDEO_ID
+ * - https://www.youtube.com/shorts/VIDEO_ID
+ * Returns null if no valid ID found.
+ */
+export function extractYoutubeId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  // Standard watch URL: ?v=ID or &v=ID
+  const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (watchMatch) return watchMatch[1];
+  // Short URL: youtu.be/ID
+  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortMatch) return shortMatch[1];
+  // Embed URL: /embed/ID or /shorts/ID
+  const embedMatch = url.match(/\/(?:embed|shorts)\/([a-zA-Z0-9_-]{11})/);
+  if (embedMatch) return embedMatch[1];
+  return null;
+}
+
+/**
+ * Returns the best available thumbnail URL for a content card.
+ * Prefers maxresdefault from YouTube, falls back to hqdefault, then thumbnail_url.
+ */
+export function getYoutubeThumbnail(youtubeId: string | null, fallback?: string | null): string {
+  if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+  return fallback || "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640&q=80";
+}
+
 const API_BASE = import.meta.env.VITE_API_URL || "https://cheatcode-os-api-production.up.railway.app/api/v1";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -51,6 +84,41 @@ export interface ContentCard {
   skill_level: string;
   published_at: string | null;
   curated_at: string;
+  // Derived fields (populated by normalizeContentCard)
+  youtubeId?: string | null;
+  thumbnailUrl?: string;
+  durationLabel?: string;
+  publishedLabel?: string;
+  relevanceLabel?: string;
+}
+
+/**
+ * Normalizes a raw ContentCard from the API into a display-ready card.
+ * Extracts YouTube ID, generates thumbnail URL, formats duration and date.
+ * Always call this before rendering API content.
+ */
+export function normalizeContentCard(card: ContentCard): ContentCard {
+  const youtubeId = extractYoutubeId(card.external_url);
+  const thumbnailUrl = getYoutubeThumbnail(youtubeId, card.thumbnail_url);
+  const durationLabel = card.duration_seconds
+    ? `${Math.floor(card.duration_seconds / 60)}:${String(card.duration_seconds % 60).padStart(2, "0")}`
+    : "";
+  const publishedLabel = card.published_at
+    ? (() => {
+        const diff = Date.now() - new Date(card.published_at).getTime();
+        const h = Math.floor(diff / 3600000);
+        const d = Math.floor(diff / 86400000);
+        if (h < 1) return "Just now";
+        if (h < 24) return `${h}h ago`;
+        if (d === 1) return "Yesterday";
+        if (d < 7) return `${d}d ago`;
+        return new Date(card.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      })()
+    : "";
+  const relevanceLabel =
+    card.relevance_score >= 0.8 ? "Critical" :
+    card.relevance_score >= 0.6 ? "High Relevance" : "Watch";
+  return { ...card, youtubeId, thumbnailUrl, durationLabel, publishedLabel, relevanceLabel };
 }
 
 export interface ContentDetail extends ContentCard {

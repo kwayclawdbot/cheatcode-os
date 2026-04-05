@@ -94,10 +94,14 @@ export default function CreatorPage() {
           if (thumb.includes("hqdefault")) thumb = thumb.replace("hqdefault", "maxresdefault");
           const vidMatch = p.external_url?.match(/[?&]v=([^&]+)/);
           if (!thumb && vidMatch) thumb = `https://i.ytimg.com/vi/${vidMatch[1]}/maxresdefault.jpg`;
+          const vidMatch2 = p.external_url?.match(/[?&]v=([^&]+)/);
           return {
-            id: p.id, type: p.content_type as "video" | "podcast",
+            id: p.id,
+            type: p.content_type as "video" | "podcast",
+            youtubeId: vidMatch2 ? vidMatch2[1] : "",
             title: p.title,
-            creator: { name: p.creator_name || "Unknown", avatar: (p.creator_name || "??").slice(0, 2).toUpperCase(), color: "#667085" },
+            creatorId: id || "",
+            creator: { name: p.creator_name || "Unknown", avatar: (p.creator_name || "??").slice(0, 2).toUpperCase(), avatarUrl: "", color: "#667085" },
             thumbnail: thumb, duration: p.duration_seconds ? `${Math.floor(p.duration_seconds / 60)}:${String(p.duration_seconds % 60).padStart(2, "0")}` : "",
             quickTake: p.quick_take || "", tags: p.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
             relevanceBadge: p.relevance_score >= 0.8 ? "Critical" : p.relevance_score >= 0.6 ? "High Relevance" : "Watch",

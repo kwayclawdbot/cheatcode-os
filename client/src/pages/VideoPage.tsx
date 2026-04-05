@@ -11,6 +11,8 @@ import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { todaysPicks, tickerData } from "@/lib/mockData";
+import { fetchContentDetail, normalizeContentCard } from "@/lib/api";
+import { useEffect } from "react";
 
 const SAMPLE_VIDEO = todaysPicks[1]; // Real Vision KKR video
 
@@ -97,7 +99,44 @@ function CollapsibleSection({ title, children, defaultOpen = false }: { title: s
 }
 
 export default function VideoPage() {
-  const video = SAMPLE_VIDEO;
+  const { id } = useParams<{ id: string }>();
+  const [playing, setPlaying] = useState(false);
+  const [apiVideo, setApiVideo] = useState<any>(null);
+
+  // Try to fetch real content detail from API
+  useEffect(() => {
+    if (!id) return;
+    fetchContentDetail(id)
+      .then((detail) => {
+        const n = normalizeContentCard(detail);
+        setApiVideo({
+          id: n.id,
+          type: n.content_type,
+          youtubeId: n.youtubeId || "",
+          title: n.title,
+          creatorId: n.creator_slug || "",
+          creator: { name: n.creator_name || "Unknown", avatar: (n.creator_name || "??").slice(0, 2).toUpperCase(), avatarUrl: "", color: "#667085" },
+          thumbnail: n.thumbnailUrl || "",
+          duration: n.durationLabel || "",
+          quickTake: n.quick_take || "",
+          tags: n.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
+          relevanceBadge: n.relevanceLabel || "Watch",
+          tickers: detail.tickers || [],
+          convergenceScore: Math.round(n.relevance_score * 100),
+          publishedAt: n.publishedLabel || "",
+          keyInsights: detail.key_insights || [],
+          timestamps: detail.timestamps || [],
+          related: detail.related || [],
+          externalUrl: n.external_url,
+        });
+      })
+      .catch(() => { /* fall back to mockData */ });
+  }, [id]);
+
+  // Use API data if available, else fall back to mockData
+  const video = apiVideo || (id ? todaysPicks.find(v => v.id === id) : null) || SAMPLE_VIDEO;
+  const youtubeId = (video as any).youtubeId as string | undefined;
+  const creatorId = (video as any).creatorId as string | undefined;
 
   return (
     <div className="min-h-screen bg-background">
@@ -117,16 +156,33 @@ export default function VideoPage() {
           <div className="lg:col-span-2 space-y-5">
             {/* Video embed */}
             <div className="relative bg-black rounded-2xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
-              <img
-                src={video.thumbnail}
-                alt={video.title}
-                className="w-full h-full object-cover opacity-80"
-              />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg">
-                  <Play size={24} fill="#101828" className="text-[#101828] ml-1" />
-                </button>
-              </div>
+              {playing && youtubeId ? (
+                <iframe
+                  src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0`}
+                  title={video.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full"
+                  style={{ border: "none" }}
+                />
+              ) : (
+                <>
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-full h-full object-cover opacity-80"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640&q=80"; }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <button
+                      onClick={() => setPlaying(true)}
+                      className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
+                    >
+                      <Play size={24} fill="#101828" className="text-[#101828] ml-1" />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Title + meta */}
@@ -146,22 +202,46 @@ export default function VideoPage() {
               </div>
               <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                       style={{ backgroundColor: video.creator.color }}>
-                    {video.creator.avatar}
-                  </div>
-                  <span className="text-sm font-medium text-muted-foreground">{video.creator.name}</span>
+                  {creatorId ? (
+                    <Link href={`/creators/${creatorId}`}>
+                      {(video.creator as any).avatarUrl ? (
+                        <img src={(video.creator as any).avatarUrl} alt={video.creator.name}
+                          className="w-7 h-7 rounded-full object-cover cursor-pointer hover:ring-2 ring-[#4DC820]"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).src = ""; }} />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold cursor-pointer"
+                             style={{ backgroundColor: video.creator.color }}>
+                          {video.creator.avatar}
+                        </div>
+                      )}
+                    </Link>
+                  ) : (
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                         style={{ backgroundColor: video.creator.color }}>
+                      {video.creator.avatar}
+                    </div>
+                  )}
+                  {creatorId ? (
+                    <Link href={`/creators/${creatorId}`}>
+                      <span className="text-sm font-medium text-muted-foreground hover:underline cursor-pointer">{video.creator.name}</span>
+                    </Link>
+                  ) : (
+                    <span className="text-sm font-medium text-muted-foreground">{video.creator.name}</span>
+                  )}
                 </div>
                 <span className="text-border">·</span>
                 <span className="text-sm text-muted-foreground flex items-center gap-1"><Clock size={12} />{video.publishedAt}</span>
                 <span className="text-border">·</span>
                 <span className="text-sm text-muted-foreground">{video.duration}</span>
-                <a href="#" className="ml-auto text-xs text-[#00AEEF] flex items-center gap-1 hover:underline">
-                  Watch on YouTube <ExternalLink size={10} />
-                </a>
+                {youtubeId && (
+                  <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noopener noreferrer"
+                     className="ml-auto text-xs text-[#00AEEF] flex items-center gap-1 hover:underline">
+                    Watch on YouTube <ExternalLink size={10} />
+                  </a>
+                )}
               </div>
               <div className="flex gap-2 mt-2">
-                {video.tags.map(t => (
+                {video.tags.map((t: string) => (
                   <span key={t} className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full border border-border">
                     {t}
                   </span>
