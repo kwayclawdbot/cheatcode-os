@@ -35,14 +35,19 @@ async def fetch_bulk_quotes(symbols: list[str] | None = None) -> dict[str, dict]
         return {}
 
     tickers = symbols or TRACKED_TICKERS
-    # EODHD needs .US suffix
-    eodhd_symbols = ",".join(f"{t}.US" if not any(c in t for c in ["-", "."]) else t for t in tickers)
+    # EODHD: first symbol in path, rest as s= parameter
+    suffixed = [f"{t}.US" if not any(c in t for c in ["-", "."]) else t for t in tickers]
+    first = suffixed[0]
+    rest = ",".join(suffixed[1:]) if len(suffixed) > 1 else ""
 
     try:
         async with httpx.AsyncClient() as client:
+            params = {"api_token": s.eodhd_api_key, "fmt": "json"}
+            if rest:
+                params["s"] = rest
             resp = await client.get(
-                f"https://eodhistoricaldata.com/api/real-time/{eodhd_symbols}",
-                params={"api_token": s.eodhd_api_key, "fmt": "json"},
+                f"https://eodhistoricaldata.com/api/real-time/{first}",
+                params=params,
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -57,19 +62,24 @@ async def fetch_bulk_quotes(symbols: list[str] | None = None) -> dict[str, dict]
             quotes = {}
             for q in raw:
                 code = q.get("code", "").replace(".US", "")
-                quotes[code] = {
-                    "symbol": code,
-                    "price": q.get("close", 0),
-                    "open": q.get("open", 0),
-                    "high": q.get("high", 0),
-                    "low": q.get("low", 0),
-                    "close": q.get("close", 0),
-                    "prev_close": q.get("previousClose", 0),
-                    "change": round(q.get("change", 0), 2),
-                    "change_pct": round(q.get("change_p", 0), 2),
-                    "volume": q.get("volume", 0),
-                    "timestamp": q.get("timestamp", 0),
-                }
+                if not code:
+                    continue
+                try:
+                    quotes[code] = {
+                        "symbol": code,
+                        "price": float(q.get("close") or 0),
+                        "open": float(q.get("open") or 0),
+                        "high": float(q.get("high") or 0),
+                        "low": float(q.get("low") or 0),
+                        "close": float(q.get("close") or 0),
+                        "prev_close": float(q.get("previousClose") or 0),
+                        "change": round(float(q.get("change") or 0), 2),
+                        "change_pct": round(float(q.get("change_p") or 0), 2),
+                        "volume": int(q.get("volume") or 0),
+                        "timestamp": int(q.get("timestamp") or 0),
+                    }
+                except (ValueError, TypeError):
+                    continue
 
             if not symbols:
                 _quote_cache["data"] = quotes
@@ -90,7 +100,7 @@ async def get_market_summary() -> dict:
 
     quotes = await fetch_bulk_quotes()
     if not quotes:
-        return {"indices": [], "movers": [], "sentiment": "neutral"}
+        return {"indices": [], "gainers": [], "losers": [], "sentiment": "neutral", "timestamp": datetime.now(timezone.utc).isoformat()}
 
     # Index performance
     indices = []
