@@ -8,7 +8,26 @@ import { ChevronRight, Star, Users, BookOpen, Flame } from "lucide-react";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { topicGrid, creators, hotThemes, todaysPicks, learningPaths } from "@/lib/mockData";
+import { topicGrid, creators as mockCreators, hotThemes, todaysPicks, learningPaths } from "@/lib/mockData";
+import { fetchCreators } from "@/lib/api";
+import { useApi } from "@/hooks/useApi";
+
+const CREATOR_COLORS = ["#12B76A", "#2E90FA", "#F79009", "#F04438", "#7C3AED", "#0EA5E9", "#E8193C", "#00AEEF", "#4DC820", "#667085", "#D946EF", "#EC4899", "#14B8A6"];
+
+function useCreators() {
+  const { data: apiCreators } = useApi(fetchCreators, []);
+  if (!apiCreators?.length) return mockCreators;
+  return apiCreators.map((c, i) => ({
+    id: c.slug,
+    name: c.name,
+    handle: `@${c.slug}`,
+    specialty: c.tags.map(t => t.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())).join(", "),
+    videoCount: c.content_count,
+    avatar: c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
+    color: CREATOR_COLORS[i % CREATOR_COLORS.length],
+    verified: true,
+  }));
+}
 
 const TABS = [
   { id: "topics", label: "By Topic", icon: <BookOpen size={14} /> },
@@ -216,6 +235,7 @@ function SkillTab() {
 
 export default function TopicsPage() {
   const [activeTab, setActiveTab] = useState("topics");
+  const creators = useCreators();
 
   return (
     <div className="min-h-screen bg-[#F9FAFB]">

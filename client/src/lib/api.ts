@@ -98,6 +98,24 @@ export async function fetchContentByTicker(symbol: string): Promise<ContentCard[
   return apiFetch(`/content/by-ticker/${symbol}`);
 }
 
+// ── Creators ────────────────────────────────────────────────────────────────
+
+export interface Creator {
+  id: string;
+  name: string;
+  slug: string;
+  platform: string;
+  avatar_url: string | null;
+  description: string | null;
+  quality_score: number;
+  tags: string[];
+  content_count: number;
+}
+
+export async function fetchCreators(): Promise<Creator[]> {
+  return apiFetch("/content/creators");
+}
+
 // ── Intelligence ────────────────────────────────────────────────────────────
 
 export interface TickerData {

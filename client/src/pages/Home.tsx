@@ -16,7 +16,7 @@ import {
   marketSentiment as mockSentiment, todaysPicks as mockPicks, topicGrid as mockTopicGrid,
   hotThemes as mockThemes, radarTickers as mockRadar, creators as mockCreators
 } from "@/lib/mockData";
-import { fetchHome, fetchRadar } from "@/lib/api";
+import { fetchHome, fetchRadar, fetchCreators } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 
 // Transform API data to match existing component shapes
@@ -65,7 +65,22 @@ function useHomeData() {
     color: t.status === "escalating" ? "#F04438" : t.status === "active" ? "#12B76A" : "#F79009",
   })) : mockThemes;
 
-  return { marketSentiment, todaysPicks, topicGrid: mockTopicGrid, hotThemes, radarTickers, creators: mockCreators };
+  const { data: apiCreators } = useApi(fetchCreators, []);
+
+  const CREATOR_COLORS = ["#12B76A", "#2E90FA", "#F79009", "#F04438", "#7C3AED", "#0EA5E9", "#E8193C", "#00AEEF", "#4DC820", "#667085", "#D946EF", "#EC4899", "#14B8A6"];
+
+  const creators = apiCreators?.length ? apiCreators.map((c, i) => ({
+    id: c.slug,
+    name: c.name,
+    handle: `@${c.slug}`,
+    specialty: c.tags.map(t => t.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())).join(", "),
+    videoCount: c.content_count,
+    avatar: c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
+    color: CREATOR_COLORS[i % CREATOR_COLORS.length],
+    verified: true,
+  })) : mockCreators;
+
+  return { marketSentiment, todaysPicks, topicGrid: mockTopicGrid, hotThemes, radarTickers, creators };
 }
 
 
