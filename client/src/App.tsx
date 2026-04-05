@@ -43,6 +43,7 @@ import CoachDashboard from "./pages/CoachDashboard";
 import CoachesCornerPage from "./pages/CoachesCornerPage";
 import CoachProfilePage from "./pages/CoachProfilePage";
 import DiscoverPage from "./pages/DiscoverPage";
+import KaiAssistPage from "./pages/KaiAssistPage";
 
 function Router() {
   return (
@@ -85,6 +86,7 @@ function Router() {
 
       {/* ── Legacy feed route → redirect to swipe feed ── */}
       <Route path="/social-feed" component={FeedPage} />
+      <Route path="/assist" component={KaiAssistPage} />
 
       {/* ── Creator / topic routes ── */}
       <Route path="/topics/:id" component={TopicsPage} />
