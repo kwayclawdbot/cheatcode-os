@@ -215,6 +215,32 @@ export default function LearnPage() {
             </div>
           </section>
 
+          {/* Coaches Corner CTA */}
+          <section className="rounded-2xl border border-border overflow-hidden">
+            <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #4DC820 0%, #C8D400 100%)" }} />
+            <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
+                     style={{ background: "linear-gradient(135deg, #F0FDE8, #FAFDE8)" }}>
+                  🏆
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                    Coaches Corner — Learn from verified traders
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+                    Browse courses, book 1-on-1 sessions, and join elite communities led by CheatCode's verified coach roster. Every coach holds a real track record.
+                  </p>
+                </div>
+              </div>
+              <Link href="/coaches-corner">
+                <button className="flex-shrink-0 flex items-center gap-2 text-[#101828] text-sm font-bold px-5 py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity">
+                  Browse Coaches
+                </button>
+              </Link>
+            </div>
+          </section>
+
           {/* Pro upsell banner */}
           <section className="rounded-2xl p-8 text-white overflow-hidden relative"
                    style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>

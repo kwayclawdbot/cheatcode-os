@@ -18,10 +18,12 @@ const navLinks = [
   { href: "/intelligence", label: "Intelligence", emoji: "🧠" },
   { href: "/topics", label: "Browse", emoji: "🎬" },
   { href: "/learn", label: "Learn", emoji: "📚" },
+  { href: "/coaches-corner", label: "Coaches Corner", emoji: "🏆" },
   { href: "/terminal", label: "Terminal", emoji: "📊" },
   { href: "/journal", label: "Journal", emoji: "📓" },
   { href: "/newsletter", label: "Newsletter", emoji: "✉️" },
   { href: "/pricing", label: "Pricing", emoji: "⚡" },
+  { href: "/admin", label: "Admin", emoji: "⚙️" },
 ];
 
 // The 4 logo circles — exact colors from the logo
@@ -125,7 +127,7 @@ export function Nav() {
 
             {/* Desktop nav links */}
             <nav className="hidden lg:flex items-center gap-0.5 flex-1">
-              {navLinks.slice(0, 7).map(({ href, label }) => (
+              {navLinks.slice(0, 8).map(({ href, label }) => (
                 <Link key={href} href={href}>
                   <span
                     className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap"
