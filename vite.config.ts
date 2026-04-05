@@ -182,8 +182,9 @@ export default defineConfig({
     ],
     proxy: {
       "/api/v1": {
-        target: "http://localhost:8000",
+        target: "https://cheatcode-os-api-production.up.railway.app",
         changeOrigin: true,
+        secure: true,
       },
     },
     fs: {

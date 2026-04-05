@@ -8,34 +8,27 @@ import { ScoreRing } from "@/components/shared/ScoreRing";
 import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { tickerData as mockTickerData, radarTickers as mockRadar } from "@/lib/mockData";
 import { fetchTicker, fetchRadar, type TickerData, type RadarData } from "@/lib/api";
 
-// Use live API data with mock fallback
-const tickerData = mockTickerData;
-
 function useRadarTickers() {
-  const [tickers, setTickers] = useState(mockRadar);
+  const [tickers, setTickers] = useState<any[]>([]);
   useEffect(() => {
     fetchRadar()
       .then((r) => {
         const all = [...(r.critical || []), ...(r.high_conviction || []), ...(r.watch || [])];
-        if (all.length) {
-          setTickers(all.map((t) => ({
-            ticker: t.symbol,
-            score: t.score,
-            direction: t.direction ? t.direction.charAt(0).toUpperCase() + t.direction.slice(1) : "Neutral",
-            timeframe: t.timeframe ? t.timeframe.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : "Swing",
-            confidence: t.confidence ? t.confidence.charAt(0).toUpperCase() + t.confidence.slice(1).replace(/_/g, " ") : "Watch",
-            change: "",
-          })));
-        }
+        setTickers(all.map((t) => ({
+          ticker: t.symbol,
+          score: t.score,
+          direction: t.direction ? t.direction.charAt(0).toUpperCase() + t.direction.slice(1) : "Neutral",
+          timeframe: t.timeframe ? t.timeframe.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : "Swing",
+          confidence: t.confidence ? t.confidence.charAt(0).toUpperCase() + t.confidence.slice(1).replace(/_/g, " ") : "Watch",
+          change: "",
+        })));
       })
       .catch(() => {});
   }, []);
   return tickers;
 }
-const radarTickers = mockRadar; // will be overridden in component
 
 const SOURCE_ICONS: Record<string, string> = {
   "Flow Agent": "🌊",
@@ -76,9 +69,28 @@ function EvidenceCard({ item, isPaid }: { item: { source: string; signal: string
 }
 
 function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boolean }) {
-  const data = tickerData[ticker.toUpperCase()];
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [whoOpen, setWhoOpen] = useState(false);
+
+  useEffect(() => {
+    if (!ticker) return;
+    setLoading(true);
+    setData(null);
+    fetchTicker(ticker.toUpperCase())
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => { setData(null); setLoading(false); });
+  }, [ticker]);
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="w-12 h-12 rounded-full border-2 border-[#4DC820] border-t-transparent animate-spin mx-auto mb-4" />
+        <p className="text-muted-foreground text-sm">Analyzing {ticker.toUpperCase()}...</p>
+      </div>
+    );
+  }
 
   if (!data) {
     return (
@@ -146,7 +158,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
         <div className="rounded-xl border p-4" style={{ background: "#F0FDE8", borderColor: "#B6F08A" }}>
           <p className="section-label mb-2" style={{ color: "#2E7A10" }}>Catalysts</p>
           <ul className="space-y-1">
-            {data.catalysts.map((c, i) => (
+            {(data.catalysts || []).map((c: string, i: number) => (
               <li key={i} className="text-sm flex items-center gap-2" style={{ color: "#2E7A10" }}>
                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#4DC820" }} />
                 {c}
@@ -180,7 +192,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
         </button>
         {evidenceOpen && (
           <div className="border-t border-border p-4 space-y-3">
-            {data.evidenceChain.map((item, i) => (
+            {(data.evidenceChain || []).map((item: any, i: number) => (
               <EvidenceCard key={i} item={item} isPaid={isPro || i === 0} />
             ))}
             {!isPro && (
@@ -214,7 +226,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
         {whoOpen && (
           <div className="border-t border-border p-4">
             <div className="scroll-row">
-              {data.videosMentioning.map(v => (
+              {(data.videosMentioning || []).map((v: any) => (
                 <VideoCard key={v.id} {...v} compact />
               ))}
             </div>
@@ -228,7 +240,7 @@ function TickerResult({ ticker, isPro = false }: { ticker: string; isPro?: boole
           Related Tickers
         </p>
         <div className="flex gap-2 flex-wrap">
-          {data.relatedTickers.map(t => (
+          {(data.relatedTickers || []).map((t: string) => (
             <button key={t}
               className="ticker-mono text-sm bg-muted border border-border px-3 py-1.5 rounded-lg text-muted-foreground transition-colors"
               style={{ transition: "border-color 0.15s, color 0.15s" }}

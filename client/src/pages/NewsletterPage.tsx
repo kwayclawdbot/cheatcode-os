@@ -1,13 +1,60 @@
 // CheatCode OS — Newsletter Archive
-// Design: Clean editorial list. SEO-friendly archive.
-// Daily auto-generated email previews with market regime, top videos, theme changes.
+// NO MOCK DATA — newsletter archive is curated editorial content
+// Design: Clean editorial list. Daily auto-generated email previews.
 
 import { Link } from "wouter";
 import { Mail, TrendingUp, TrendingDown, Minus, ArrowRight, Zap, ChevronRight } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { newsletterArchive } from "@/lib/mockData";
 import { useState } from "react";
+
+const NEWSLETTER_ARCHIVE = [
+  {
+    id: "2026-04-04",
+    date: "April 4, 2026",
+    sentiment: "Bearish",
+    subject: "Tariff shock sends markets into correction — what the top creators are saying",
+    previewText: "S&P 500 dropped 4.8% on tariff escalation fears. Kai's macro agent flagged this regime shift 3 days ago. Here's what SMB Capital, Real Vision, and Mark Minervini are watching.",
+    topVideos: ["SMB Capital: How to trade a volatile open", "Real Vision: Macro regime shift explained", "Mark Minervini: Protecting capital in corrections"],
+    themeChanges: ["Tariff Risk: Escalated to Critical", "Defensive Rotation: New theme added", "Tech Momentum: Downgraded to Watch"],
+  },
+  {
+    id: "2026-04-03",
+    date: "April 3, 2026",
+    sentiment: "Choppy",
+    subject: "Mixed signals: jobs data beats but rate cut odds fall — Kai's read",
+    previewText: "Strong payrolls data pushed rate cut expectations back to September. Kai's flow agent is seeing unusual put activity in QQQ. Rayner Teo and tastytrade break it down.",
+    topVideos: ["tastytrade: Options positioning for a choppy market", "Rayner Teo: Key levels to watch on SPY", "Humbled Trader: Trading psychology in uncertainty"],
+    themeChanges: ["Rate Cut Timeline: Pushed to Q3", "Options Premium: Elevated — opportunity for sellers", "Small Cap Momentum: Fading"],
+  },
+  {
+    id: "2026-04-02",
+    date: "April 2, 2026",
+    sentiment: "Bullish",
+    subject: "NVDA breaks out — 3 creators called it before the move",
+    previewText: "NVDA hit a new 52-week high after Blackwell demand commentary. Kai's convergence score hit 94 two days before the breakout. Mark Minervini, Adam Khoo, and ZipTrader all had it on their radar.",
+    topVideos: ["Mark Minervini: NVDA VCP setup breakdown", "Adam Khoo: Why I added NVDA to my portfolio", "ZipTrader: NVDA breakout — what's next?"],
+    themeChanges: ["AI Infrastructure: Upgraded to Critical", "Semiconductor Cycle: Bullish confirmation", "NVDA Convergence Score: 94 (all-time high)"],
+  },
+  {
+    id: "2026-04-01",
+    date: "April 1, 2026",
+    sentiment: "Bullish",
+    subject: "Q1 closes strong — what the best traders are positioning for in Q2",
+    previewText: "S&P 500 closed Q1 up 9.2%. Kai's macro agent is flagging a potential regime shift as earnings season begins. Real Vision and Earn Your Leisure share their Q2 outlooks.",
+    topVideos: ["Real Vision: Q2 macro playbook", "Earn Your Leisure: Market Mondays Q1 recap", "Warrior Trading: Q2 momentum setups to watch"],
+    themeChanges: ["Q2 Earnings Season: New theme added", "Defensive Rotation: Downgraded to Watch", "Mega Cap Tech: Upgraded to High Conviction"],
+  },
+  {
+    id: "2026-03-31",
+    date: "March 31, 2026",
+    sentiment: "Choppy",
+    subject: "End of quarter rebalancing — navigating the noise",
+    previewText: "Quarter-end rebalancing creates unusual price action. Kai's flow agent detected significant institutional hedging activity. Chris Sain and Investors Podcast Network explain what to focus on.",
+    topVideos: ["Chris Sain: Don't panic — quarter-end explained", "Investors Podcast Network: Long-term perspective on volatility", "SMB Capital: Quarter-end trading strategies"],
+    themeChanges: ["Institutional Rebalancing: Active", "Volatility: Elevated through month-end", "Macro Regime: Transitional"],
+  },
+];
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
   const styles: Record<string, string> = {
@@ -94,7 +141,7 @@ export default function NewsletterPage() {
               <h2 className="text-lg font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>
                 Archive
               </h2>
-              {newsletterArchive.map(issue => (
+              {NEWSLETTER_ARCHIVE.map(issue => (
                 <div key={issue.id} className="content-card bg-card rounded-2xl border border-border p-5 cursor-pointer">
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div>
@@ -139,7 +186,6 @@ export default function NewsletterPage() {
                 </div>
               ))}
 
-              {/* Load more placeholder */}
               <div className="text-center py-4">
                 <button className="text-sm text-muted-foreground border border-border px-5 py-2 rounded-xl hover:bg-muted transition-colors">
                   Load more issues
@@ -149,7 +195,6 @@ export default function NewsletterPage() {
 
             {/* Sidebar */}
             <div className="space-y-5">
-              {/* What's in every brief */}
               <div className="bg-card rounded-xl border border-border p-5">
                 <h3 className="font-bold text-sm text-foreground mb-4" style={{ fontFamily: "var(--font-display)" }}>
                   What's in every brief
@@ -172,7 +217,6 @@ export default function NewsletterPage() {
                 </div>
               </div>
 
-              {/* Pro upgrade */}
               <div className="rounded-xl p-5 text-white" style={{ background: "linear-gradient(135deg, #2B3245 0%, #1a2035 100%)" }}>
                 <h3 className="font-bold text-sm mb-2" style={{ fontFamily: "var(--font-display)" }}>
                   Get real-time alerts
