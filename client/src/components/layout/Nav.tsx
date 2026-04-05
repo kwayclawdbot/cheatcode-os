@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/intelligence", label: "Intelligence" },
   { href: "/topics", label: "Browse" },
   { href: "/learn", label: "Learn" },
+  { href: "/terminal", label: "Terminal" },
 ];
 
 // The 4 logo circles — exact colors from the logo

@@ -115,6 +115,7 @@ function TopicsTab() {
 }
 
 function CreatorsTab() {
+  const creators = useCreators();
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
       {creators.map(c => (
@@ -122,9 +123,15 @@ function CreatorsTab() {
           <div className="cursor-pointer text-center group/creator">
             {/* Avatar — big, visual */}
             <div className="relative mx-auto mb-2.5" style={{ width: 80, height: 80 }}>
-              <div className="w-full h-full rounded-full flex items-center justify-center text-white text-2xl font-bold transition-transform duration-200 group-hover/creator:scale-110"
+              <div className="w-full h-full rounded-full overflow-hidden transition-transform duration-200 group-hover/creator:scale-110"
                    style={{ backgroundColor: c.color }}>
-                {c.avatar}
+                {(c as any).avatarUrl ? (
+                  <img src={(c as any).avatarUrl} alt={c.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">
+                    {c.avatar}
+                  </div>
+                )}
               </div>
               {c.verified && (
                 <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold"

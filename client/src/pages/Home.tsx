@@ -398,9 +398,15 @@ export default function Home() {
                 {creators.map(c => (
                   <Link key={c.id} href={`/creators/${c.id}`}>
                     <div className="flex-shrink-0 w-36 cursor-pointer group/creator text-center">
-                      <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold mx-auto mb-2 transition-transform duration-200 group-hover/creator:scale-110"
+                      <div className="w-16 h-16 rounded-full overflow-hidden mx-auto mb-2 transition-transform duration-200 group-hover/creator:scale-110"
                            style={{ backgroundColor: c.color }}>
-                        {c.avatar}
+                        {(c as any).avatarUrl ? (
+                          <img src={(c as any).avatarUrl} alt={c.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-white text-xl font-bold">
+                            {c.avatar}
+                          </div>
+                        )}
                       </div>
                       <p className="text-xs font-semibold text-foreground truncate" style={{ fontFamily: "var(--font-display)" }}>
                         {c.name}
