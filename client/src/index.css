@@ -1,3 +1,26 @@
+/*
+ * CheatCode OS — Design System
+ * Philosophy: "Spotify Card" — Content-First Platform Design
+ * Robinhood × BuzzFeed × Spotify
+ *
+ * Color System (semantic):
+ *   Brand Green:   #12B76A  — bullish, positive, CTAs
+ *   Brand Red:     #F04438  — bearish, risk, negative
+ *   Brand Amber:   #F79009  — watch, neutral, caution
+ *   Brand Blue:    #2E90FA  — Kai/AI, informational
+ *   Near-Black:    #101828  — primary text
+ *   Mid-Gray:      #667085  — secondary text
+ *   Light-Gray:    #F9FAFB  — card backgrounds, section fills
+ *   Border:        #EAECF0  — dividers, card borders
+ *
+ * Typography:
+ *   Display: Sora (geometric, modern, confident)
+ *   UI/Body: Inter (clean, legible)
+ *   Mono/Data: JetBrains Mono (scores, tickers, numbers)
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -40,77 +63,65 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* CheatCode OS brand tokens */
+  --color-brand-green: #12B76A;
+  --color-brand-green-light: #ECFDF3;
+  --color-brand-green-dark: #027A48;
+  --color-brand-red: #F04438;
+  --color-brand-red-light: #FEF3F2;
+  --color-brand-amber: #F79009;
+  --color-brand-amber-light: #FFFAEB;
+  --color-brand-blue: #2E90FA;
+  --color-brand-blue-light: #EFF8FF;
+  --color-cc-black: #101828;
+  --color-cc-gray-600: #475467;
+  --color-cc-gray-500: #667085;
+  --color-cc-gray-400: #98A2B3;
+  --color-cc-gray-200: #EAECF0;
+  --color-cc-gray-100: #F2F4F7;
+  --color-cc-gray-50: #F9FAFB;
+
+  /* Font families */
+  --font-display: 'Sora', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
+  --primary: oklch(0.55 0.18 155);
+  --primary-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(0.55 0.18 155);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --chart-1: oklch(0.55 0.18 155);
+  --chart-2: oklch(0.65 0.15 155);
+  --chart-3: oklch(0.45 0.2 155);
+  --chart-4: oklch(0.7 0.12 155);
+  --chart-5: oklch(0.35 0.22 155);
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
+  --foreground: oklch(0.12 0.01 265);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
+  --card-foreground: oklch(0.12 0.01 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
+  --popover-foreground: oklch(0.12 0.01 265);
+  --secondary: oklch(0.97 0.002 265);
+  --secondary-foreground: oklch(0.35 0.01 265);
+  --muted: oklch(0.97 0.002 265);
+  --muted-foreground: oklch(0.52 0.012 265);
+  --accent: oklch(0.97 0.002 265);
+  --accent-foreground: oklch(0.12 0.01 265);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.92 0.004 265);
+  --input: oklch(0.92 0.004 265);
+  --ring: oklch(0.55 0.18 155);
   --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
-}
-
-.dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --sidebar-foreground: oklch(0.12 0.01 265);
+  --sidebar-accent: oklch(0.97 0.002 265);
+  --sidebar-accent-foreground: oklch(0.12 0.01 265);
+  --sidebar-border: oklch(0.92 0.004 265);
+  --sidebar-ring: oklch(0.55 0.18 155);
 }
 
 @layer base {
@@ -119,6 +130,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -134,24 +151,11 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -162,16 +166,133 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
   }
+
+  /* Score Ring animation */
+  .score-ring-track {
+    stroke: #EAECF0;
+    fill: none;
+  }
+  .score-ring-fill {
+    fill: none;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Kai pulse animation */
+  @keyframes kai-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(18, 183, 106, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(18, 183, 106, 0); }
+  }
+  .kai-pulse {
+    animation: kai-pulse 2.5s ease-in-out infinite;
+  }
+
+  /* Horizontal scroll row */
+  .scroll-row {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Content card hover */
+  .content-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .content-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+  }
+
+  /* Sentiment badge */
+  .sentiment-bullish {
+    background-color: #ECFDF3;
+    color: #027A48;
+    border: 1px solid #A9EFC5;
+  }
+  .sentiment-bearish {
+    background-color: #FEF3F2;
+    color: #B42318;
+    border: 1px solid #FECDCA;
+  }
+  .sentiment-choppy {
+    background-color: #FFFAEB;
+    color: #B54708;
+    border: 1px solid #FEDF89;
+  }
+
+  /* Section header */
+  .section-label {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #667085;
+  }
+
+  /* Ticker mono */
+  .ticker-mono {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+
+  /* Score number */
+  .score-number {
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+
+  /* Blurred gated content */
+  .gated-blur {
+    filter: blur(4px);
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* Kai chat message bubble */
+  .kai-message {
+    background: linear-gradient(135deg, #EFF8FF 0%, #F0FDF9 100%);
+    border: 1px solid #BAE6FD;
+    border-radius: 0 12px 12px 12px;
+  }
+  .user-message {
+    background: #F9FAFB;
+    border: 1px solid #EAECF0;
+    border-radius: 12px 0 12px 12px;
+  }
+
+  /* Nav active state */
+  .nav-active {
+    color: #12B76A;
+    font-weight: 600;
+  }
+}
+
+/* Page transition */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: page-in 0.2s ease-out forwards;
 }
