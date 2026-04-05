@@ -259,7 +259,7 @@ export function Nav() {
                       <span
                         className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap cursor-pointer"
                         style={
-                          location === item.href
+                          (location === item.href || (item.href === "/home" && location === "/"))
                             ? { color: "#4DC820", backgroundColor: isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8" }
                             : { color: isDark ? "#98A2B3" : "#475467" }
                         }
