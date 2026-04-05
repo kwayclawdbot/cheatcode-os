@@ -3,16 +3,19 @@
 //   1. Try /api/v1/market/sparkline/:symbol (EODHD 30-day history) — when deployed
 //   2. Fall back to /api/v1/market/quote/:symbol and synthesize a realistic
 //      intraday shape from open/high/low/close/prev_close data
-// KEY FIX: Y-axis domain is set to [dataMin * 0.998, dataMax * 1.002] so the
-//          chart zooms into the actual price range instead of starting at 0.
-// MOBILE FIX: Uses ResizeObserver on a STABLE outer div (always mounted) so
-//             width is measured correctly regardless of loading state.
+//
+// MOBILE FIX:
+//   - Accepts an explicit `width` prop so callers can pass the known card width
+//   - Falls back to ResizeObserver with multiple retry delays (50ms, 200ms, 500ms, 1000ms)
+//   - SVG uses viewBox + preserveAspectRatio="none" so it always fills the container
+//   - Default width=104 (120px card - 16px padding) renders immediately without waiting
 import { useEffect, useState, useRef } from "react";
 
 interface SparklineChartProps {
   symbol: string;
   color: string;  // "#4DC820" bullish | "#E8193C" bearish | "#F79009" neutral
   height?: number;
+  width?: number; // optional explicit width — skips ResizeObserver if provided
 }
 
 // In-memory cache to avoid re-fetching on re-renders
@@ -86,14 +89,17 @@ async function fetchSparklineData(symbol: string): Promise<number[]> {
   return [];
 }
 
-/** Pure SVG sparkline — no Recharts dependency, no Y=0 baseline issue */
+/** Pure SVG sparkline — uses viewBox so it always fills the container */
 function SvgSparkline({ values, color, width, height }: {
   values: number[];
   color: string;
   width: number;
   height: number;
 }) {
-  if (values.length < 2 || width <= 0) return null;
+  if (values.length < 2) return null;
+
+  const W = 100; // internal viewBox width — SVG scales to fill container
+  const H = 40;  // internal viewBox height
 
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -105,21 +111,26 @@ function SvgSparkline({ values, color, width, height }: {
   const domainMax = max + pad;
   const domainRange = domainMax - domainMin;
 
-  const toX = (i: number) => (i / (values.length - 1)) * width;
-  const toY = (v: number) => height - ((v - domainMin) / domainRange) * height;
+  const toX = (i: number) => (i / (values.length - 1)) * W;
+  const toY = (v: number) => H - ((v - domainMin) / domainRange) * H;
 
   // Build polyline points
   const points = values.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
 
   // Build filled area path
   const linePath = values.map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
-  const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
+  const areaPath = `${linePath} L${W},${H} L0,${H} Z`;
 
-  const gradId = `sg-${color.replace("#", "")}-${Math.round(width)}`;
+  const gradId = `sg-${color.replace("#", "")}`;
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
-         style={{ display: "block", overflow: "visible" }}>
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      style={{ display: "block", width: "100%", height: "100%" }}
+    >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.25" />
@@ -133,42 +144,54 @@ function SvgSparkline({ values, color, width, height }: {
         points={points}
         fill="none"
         stroke={color}
-        strokeWidth="1.5"
+        strokeWidth="2"
         strokeLinejoin="round"
         strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
 }
 
-export function SparklineChart({ symbol, color, height = 40 }: SparklineChartProps) {
+export function SparklineChart({ symbol, color, height = 40, width: widthProp }: SparklineChartProps) {
   const [values, setValues] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
-  const [width, setWidth] = useState(0);
-  // CRITICAL: containerRef is on a STABLE outer div that is ALWAYS mounted.
-  // This ensures ResizeObserver always has a valid element to measure,
-  // regardless of whether we're in loading or data state.
+  const [measuredWidth, setMeasuredWidth] = useState(widthProp ?? 104);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Measure actual container width — stable ref, always present
+  // If explicit width prop is provided, skip ResizeObserver entirely
   useEffect(() => {
+    if (widthProp !== undefined) {
+      setMeasuredWidth(widthProp);
+      return;
+    }
     const el = containerRef.current;
     if (!el) return;
+
     const measure = () => {
       const w = el.getBoundingClientRect().width;
-      if (w > 0) setWidth(Math.floor(w));
+      if (w > 0) setMeasuredWidth(Math.floor(w));
     };
-    // Initial measurement (may be 0 if not yet painted)
+
+    // Immediate attempt
     measure();
-    // Also measure after a short delay in case the card hasn't fully laid out
-    const timer = setTimeout(measure, 50);
+
+    // Multiple retry delays to handle mobile paint timing
+    const timers = [
+      setTimeout(measure, 50),
+      setTimeout(measure, 200),
+      setTimeout(measure, 500),
+      setTimeout(measure, 1000),
+    ];
+
     const ro = new ResizeObserver(() => measure());
     ro.observe(el);
+
     return () => {
-      clearTimeout(timer);
+      timers.forEach(clearTimeout);
       ro.disconnect();
     };
-  }, []);
+  }, [widthProp]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,15 +207,22 @@ export function SparklineChart({ symbol, color, height = 40 }: SparklineChartPro
 
   return (
     // Stable outer div — ALWAYS mounted so ResizeObserver always has a target
-    <div ref={containerRef} style={{ width: "100%", height, position: "relative" }}>
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height, position: "relative", overflow: "hidden" }}
+    >
       {loading || values.length < 3 ? (
-        // Loading skeleton — inside the stable outer div
         <div
           style={{ width: "100%", height: "100%" }}
           className={loading ? "animate-pulse bg-muted/40 rounded" : "bg-muted/20 rounded"}
         />
       ) : (
-        <SvgSparkline values={values} color={color} width={width || 104} height={height} />
+        <SvgSparkline
+          values={values}
+          color={color}
+          width={measuredWidth}
+          height={height}
+        />
       )}
     </div>
   );
