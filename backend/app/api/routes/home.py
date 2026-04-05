@@ -45,7 +45,7 @@ async def get_home(user: dict | None = Depends(get_current_user)):
         "id, title, content_type, external_url, thumbnail_url, duration_seconds, "
         "quick_take, relevance_score, topics, themes, skill_level, published_at, curated_at, "
         "creators:creator_id(name, slug)"
-    ).eq("is_published", True).order("curated_at", desc=True).limit(12).execute()
+    ).eq("is_published", True).order("relevance_score", desc=True).limit(12).execute()
 
     pick_cards = []
     for p in (picks.data or []):
