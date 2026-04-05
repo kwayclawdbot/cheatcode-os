@@ -1,16 +1,13 @@
-"""Smart Crop — face-detection based 9:16 cropping for speaker-focused clips.
+"""Smart Crop v4 — DNN face detection + active speaker tracking.
 
-Detects faces in the video, tracks the primary speaker's position,
-and crops a smooth 9:16 frame centered on them.
-
-For multi-person panels (podcasts, interviews), it widens the crop
-to include the group rather than tracking one face.
+Uses OpenCV DNN (res10 SSD) for robust face detection.
+Filters static faces (posters, images on wall).
+Tracks lip movement for active speaker.
+Smooth cinematic panning with hold times.
 """
 
-import json
 import logging
 import subprocess
-import tempfile
 from pathlib import Path
 
 import cv2
@@ -18,153 +15,241 @@ import numpy as np
 
 log = logging.getLogger("smart_crop")
 
-# Use OpenCV's DNN face detector (ships with opencv, no extra install)
-_FACE_NET = None
-_FACE_PROTO = None
+MODEL_DIR = Path(__file__).parent.parent.parent / "models"
+PROTO = str(MODEL_DIR / "face_detect.prototxt")
+MODEL = str(MODEL_DIR / "face_detect.caffemodel")
+
+# Tuning
+MIN_HOLD_SECONDS = 4.0
+ENERGY_SWITCH_RATIO = 2.0
+ENERGY_FLOOR = 3.5
+SMOOTH_WINDOW_SECONDS = 2.5
+SPEAKER_WINDOW_SECONDS = 1.5
+FACE_CONFIDENCE = 0.45
+STATIC_FACE_THRESHOLD = 2.0  # faces with less than this avg movement are posters
 
 
-def _get_face_detector():
-    """Load OpenCV's DNN face detector (Caffe model)."""
-    global _FACE_NET
-    if _FACE_NET is not None:
-        return _FACE_NET
-
-    # Use OpenCV's built-in Haar cascade as fallback (always available)
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    _FACE_NET = cv2.CascadeClassifier(cascade_path)
-    return _FACE_NET
+def _get_dnn_detector():
+    return cv2.dnn.readNetFromCaffe(PROTO, MODEL)
 
 
-def detect_face_positions(video_path: str, sample_every_n_frames: int = 15) -> list[dict]:
-    """Sample frames and detect face positions throughout the video."""
+def _detect_faces_dnn(frame, net, confidence_thresh=FACE_CONFIDENCE):
+    """Detect faces using DNN. Returns [(x, y, w, h, confidence)]."""
+    h, w = frame.shape[:2]
+    blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+    net.setInput(blob)
+    detections = net.forward()
+
+    faces = []
+    for i in range(detections.shape[2]):
+        conf = float(detections[0, 0, i, 2])
+        if conf < confidence_thresh:
+            continue
+        box = detections[0, 0, i, 3:7] * [w, h, w, h]
+        x1, y1, x2, y2 = box.astype(int)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 > x1 and y2 > y1:
+            faces.append((x1, y1, x2 - x1, y2 - y1, conf))
+
+    return faces
+
+
+def establish_face_slots(video_path: str) -> list[dict]:
+    """Detect stable face positions using DNN + filter out static (poster) faces."""
     cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        log.error("Cannot open video: %s", video_path)
-        return []
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     vid_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     vid_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    detector = _get_face_detector()
-    positions = []
+    net = _get_dnn_detector()
+
+    # Sample frames throughout first 10 seconds
+    sample_count = min(int(fps * 10), total_frames)
+    sample_interval = max(1, sample_count // 40)  # ~40 samples
+
+    all_faces = []
+    prev_gray = None
+    face_movement = {}  # track movement per face cluster to filter posters
+
     frame_idx = 0
-
-    while cap.isOpened():
+    while cap.isOpened() and frame_idx < sample_count:
         ret, frame = cap.read()
         if not ret:
             break
 
-        if frame_idx % sample_every_n_frames == 0:
+        if frame_idx % sample_interval == 0:
+            faces = _detect_faces_dnn(frame, net)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            detections = detector.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-            )
 
-            faces = []
-            for (x, y, w, h) in detections:
-                faces.append({
-                    "x_center": (x + w / 2) / vid_w,
-                    "y_center": (y + h / 2) / vid_h,
-                    "width": w / vid_w,
-                    "height": h / vid_h,
-                    "confidence": 0.8,
+            for (x, y, w, h, conf) in faces:
+                cx = x + w // 2
+                cy = y + h // 2
+
+                # Measure face region movement if we have prev frame
+                movement = 0.0
+                if prev_gray is not None:
+                    face_region_curr = gray[y:y+h, x:x+w]
+                    face_region_prev = prev_gray[y:y+h, x:x+w]
+                    if face_region_curr.shape == face_region_prev.shape and face_region_curr.size > 0:
+                        movement = float(np.mean(cv2.absdiff(face_region_curr, face_region_prev)))
+
+                all_faces.append({
+                    "x": cx, "y": cy, "w": w, "h": h,
+                    "conf": conf, "movement": movement,
                 })
 
-            positions.append({
-                "frame": frame_idx,
-                "faces": faces,
-            })
+            prev_gray = gray.copy()
 
         frame_idx += 1
 
     cap.release()
 
-    log.info("Scanned %d frames, detected faces in %d samples",
-             total_frames, sum(1 for p in positions if p["faces"]))
+    if not all_faces:
+        return []
 
-    return positions
+    # Cluster by BOTH x AND y position (separates real faces from posters above/below)
+    threshold_x = vid_w * 0.10
+    threshold_y = vid_h * 0.20  # faces must be at similar vertical position
+
+    clusters = []
+    used = set()
+    xs = np.array([f["x"] for f in all_faces])
+    sorted_indices = np.argsort(xs)
+
+    for idx in sorted_indices:
+        idx = int(idx)
+        if idx in used:
+            continue
+        cluster = [all_faces[idx]]
+        used.add(idx)
+        for other_idx in sorted_indices:
+            other_idx = int(other_idx)
+            if other_idx in used:
+                continue
+            if (abs(all_faces[other_idx]["x"] - all_faces[idx]["x"]) < threshold_x and
+                abs(all_faces[other_idx]["y"] - all_faces[idx]["y"]) < threshold_y):
+                cluster.append(all_faces[other_idx])
+                used.add(other_idx)
+
+        if len(cluster) >= 3:
+            avg_movement = np.mean([f["movement"] for f in cluster if f["movement"] > 0])
+            avg_conf = np.mean([f["conf"] for f in cluster])
+
+            clusters.append({
+                "x_center": int(np.median([f["x"] for f in cluster])),
+                "y_center": int(np.median([f["y"] for f in cluster])),
+                "avg_width": int(np.median([f["w"] for f in cluster])),
+                "avg_height": int(np.median([f["h"] for f in cluster])),
+                "count": len(cluster),
+                "avg_movement": float(avg_movement) if not np.isnan(avg_movement) else 0,
+                "avg_conf": float(avg_conf),
+            })
+
+    # FILTER 1: remove faces in top 30% of frame (posters, images on wall)
+    clusters = [c for c in clusters if c["y_center"] > vid_h * 0.30]
+
+    # FILTER 2: remove low-detection-count clusters (noise)
+    clusters = [c for c in clusters if c["count"] >= 5]
+
+    # FILTER 3: remove static faces (no movement = poster)
+    if clusters:
+        max_movement = max(c["avg_movement"] for c in clusters)
+        if max_movement > 0:
+            clusters = [c for c in clusters if c["avg_movement"] > STATIC_FACE_THRESHOLD
+                        or c["avg_movement"] > max_movement * 0.3]
+
+    clusters.sort(key=lambda c: c["x_center"])
+
+    log.info("Found %d real face slots (filtered posters): %s",
+             len(clusters),
+             [(c["x_center"], f"mov={c['avg_movement']:.1f}", f"n={c['count']}") for c in clusters])
+
+    return clusters
 
 
-def compute_crop_trajectory(
-    positions: list[dict],
-    video_width: int,
-    video_height: int,
-    target_aspect: float = 9 / 16,
-    smoothing: int = 5,
-) -> list[dict]:
-    """Compute a smooth crop trajectory from face positions.
+def detect_active_speaker(video_path: str, face_slots: list[dict]) -> list[dict]:
+    """Track who's speaking via lip movement with stability controls."""
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    vid_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vid_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    Returns list of {frame, crop_x, crop_y, crop_w, crop_h} for each sampled frame.
-    """
-    if not positions:
-        # No face data — center crop
-        crop_w = int(video_height * target_aspect)
-        crop_x = (video_width - crop_w) // 2
-        return [{"frame": 0, "crop_x": crop_x, "crop_y": 0,
-                 "crop_w": crop_w, "crop_h": video_height}]
+    window_frames = max(1, int(fps * SPEAKER_WINDOW_SECONDS))
+    min_hold_frames = int(fps * MIN_HOLD_SECONDS)
 
-    # Determine if multi-person (panel) or single speaker
-    face_counts = [len(p["faces"]) for p in positions if p["faces"]]
-    avg_faces = np.mean(face_counts) if face_counts else 0
-    is_panel = avg_faces >= 2
+    prev_gray = None
+    speaker_timeline = []
+    slot_energy = [0.0] * len(face_slots)
+    frame_count = 0
+    current_speaker = 0
+    frames_on_current = 0
 
-    crop_w = int(video_height * target_aspect)
-    crop_h = video_height
+    for frame_idx in range(total_frames):
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    # If panel with 2+ people, widen crop or use full width center
-    if is_panel:
-        # For panels: find the bounding box of all faces, center crop on that
-        all_x_centers = []
-        for p in positions:
-            for f in p["faces"]:
-                all_x_centers.append(f["x_center"] * video_width)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        if all_x_centers:
-            group_center_x = np.mean(all_x_centers)
-        else:
-            group_center_x = video_width / 2
+        if prev_gray is not None:
+            for slot_idx, slot in enumerate(face_slots):
+                sx, sy = slot["x_center"], slot["y_center"]
+                sw, sh = slot["avg_width"], slot["avg_height"]
 
-        crop_x = int(group_center_x - crop_w / 2)
-        crop_x = max(0, min(crop_x, video_width - crop_w))
+                # Mouth region: lower 35%, center 50% width
+                mx1 = max(0, sx - int(sw * 0.25))
+                mx2 = min(vid_w, sx + int(sw * 0.25))
+                my1 = max(0, sy + int(sh * 0.15))
+                my2 = min(vid_h, sy + int(sh * 0.45))
 
-        # Static crop for panels (no tracking jitter)
-        return [{"frame": 0, "crop_x": crop_x, "crop_y": 0,
-                 "crop_w": crop_w, "crop_h": crop_h}]
+                if mx2 <= mx1 or my2 <= my1:
+                    continue
 
-    # Single speaker: track face position with smoothing
-    raw_centers = []
-    for p in positions:
-        if p["faces"]:
-            # Use the largest/most confident face
-            best = max(p["faces"], key=lambda f: f["confidence"])
-            raw_centers.append(best["x_center"] * video_width)
-        elif raw_centers:
-            raw_centers.append(raw_centers[-1])  # hold last position
-        else:
-            raw_centers.append(video_width / 2)  # default center
+                curr = gray[my1:my2, mx1:mx2]
+                prev = prev_gray[my1:my2, mx1:mx2]
 
-    # Smooth the trajectory to avoid jitter
-    if len(raw_centers) > smoothing:
-        kernel = np.ones(smoothing) / smoothing
-        smoothed = np.convolve(raw_centers, kernel, mode="same")
-    else:
-        smoothed = raw_centers
+                if curr.shape == prev.shape and curr.size > 0:
+                    slot_energy[slot_idx] += float(np.mean(cv2.absdiff(curr, prev)))
 
-    trajectory = []
-    for i, (pos, center_x) in enumerate(zip(positions, smoothed)):
-        crop_x = int(center_x - crop_w / 2)
-        crop_x = max(0, min(crop_x, video_width - crop_w))
+        frame_count += 1
+        frames_on_current += 1
 
-        trajectory.append({
-            "frame": pos["frame"],
-            "crop_x": crop_x,
-            "crop_y": 0,
-            "crop_w": crop_w,
-            "crop_h": crop_h,
-        })
+        if frame_count >= window_frames:
+            avg = [e / frame_count for e in slot_energy]
+            candidate = int(np.argmax(avg))
+            candidate_e = avg[candidate]
+            current_e = avg[current_speaker]
 
-    return trajectory
+            if (candidate != current_speaker and
+                frames_on_current >= min_hold_frames and
+                candidate_e > current_e * ENERGY_SWITCH_RATIO and
+                candidate_e > ENERGY_FLOOR):
+                current_speaker = candidate
+                frames_on_current = 0
+
+            speaker_timeline.append({
+                "time_sec": round(frame_idx / fps, 2),
+                "active_slot_idx": current_speaker,
+            })
+
+            slot_energy = [0.0] * len(face_slots)
+            frame_count = 0
+
+        prev_gray = gray.copy()
+
+    cap.release()
+
+    if speaker_timeline:
+        counts = {}
+        for t in speaker_timeline:
+            s = t["active_slot_idx"]
+            counts[s] = counts.get(s, 0) + 1
+        log.info("Speaker distribution: %s (%d windows)", counts, len(speaker_timeline))
+
+    return speaker_timeline
 
 
 def smart_crop_video(
@@ -173,11 +258,7 @@ def smart_crop_video(
     output_width: int = 1080,
     output_height: int = 1920,
 ) -> bool:
-    """Full pipeline: detect faces → compute crop → apply via ffmpeg.
-
-    For static crops (panels, stable single speaker), uses one ffmpeg command.
-    For dynamic tracking, exports crop keyframes and applies frame-by-frame.
-    """
+    """Full pipeline: DNN faces → filter posters → track speaker → smooth pan render."""
     cap = cv2.VideoCapture(input_path)
     vid_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     vid_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -186,13 +267,11 @@ def smart_crop_video(
     cap.release()
 
     if vid_w == 0 or vid_h == 0:
-        log.error("Cannot read video dimensions: %s", input_path)
         return False
 
-    # If already vertical, just scale
-    if vid_h > vid_w:
-        log.info("Video already vertical, just scaling")
-        result = subprocess.run([
+    # Already vertical
+    if vid_h >= vid_w:
+        r = subprocess.run([
             "ffmpeg", "-i", input_path,
             "-vf", f"scale={output_width}:{output_height}:force_original_aspect_ratio=decrease,"
                    f"pad={output_width}:{output_height}:(ow-iw)/2:(oh-ih)/2",
@@ -200,63 +279,100 @@ def smart_crop_video(
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart", "-y", output_path,
         ], capture_output=True, text=True, timeout=120)
-        return result.returncode == 0
+        return r.returncode == 0
 
-    log.info("Detecting faces in %dx%d video (%d frames)...", vid_w, vid_h, total_frames)
+    crop_w = int(vid_h * 9 / 16)
+    if crop_w > vid_w:
+        crop_w = vid_w
 
-    # Detect faces
-    positions = detect_face_positions(input_path, sample_every_n_frames=15)
+    # Phase 1
+    log.info("Phase 1: DNN face detection...")
+    face_slots = establish_face_slots(input_path)
 
-    # Compute crop trajectory
-    trajectory = compute_crop_trajectory(positions, vid_w, vid_h)
+    if not face_slots:
+        log.warning("No faces — center crop")
+        cx = (vid_w - crop_w) // 2
+        return _ffmpeg_crop(input_path, output_path, crop_w, vid_h, cx, output_width, output_height)
 
-    if len(trajectory) <= 1:
-        # Static crop — single ffmpeg command
-        t = trajectory[0]
-        log.info("Static crop at x=%d (panel or stable speaker)", t["crop_x"])
+    if len(face_slots) == 1:
+        cx = max(0, min(face_slots[0]["x_center"] - crop_w // 2, vid_w - crop_w))
+        log.info("Single speaker at x=%d", cx)
+        return _ffmpeg_crop(input_path, output_path, crop_w, vid_h, cx, output_width, output_height)
 
-        result = subprocess.run([
-            "ffmpeg", "-i", input_path,
-            "-vf", f"crop={t['crop_w']}:{t['crop_h']}:{t['crop_x']}:{t['crop_y']},"
-                   f"scale={output_width}:{output_height}:flags=lanczos",
-            "-c:v", "libx264", "-crf", "20", "-preset", "fast",
-            "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart", "-y", output_path,
-        ], capture_output=True, text=True, timeout=120)
-        return result.returncode == 0
+    # Phase 2
+    log.info("Phase 2: Speaker tracking (%d faces)...", len(face_slots))
+    timeline = detect_active_speaker(input_path, face_slots)
 
-    else:
-        # Dynamic crop — use sendcmd to update crop position per frame
-        # Build sendcmd file with crop keyframes
-        crop_w = trajectory[0]["crop_w"]
-        crop_h = trajectory[0]["crop_h"]
-        sample_interval = 15  # frames between samples
+    if not timeline:
+        gc = int(np.mean([s["x_center"] for s in face_slots]))
+        cx = max(0, min(gc - crop_w // 2, vid_w - crop_w))
+        return _ffmpeg_crop(input_path, output_path, crop_w, vid_h, cx, output_width, output_height)
 
-        # Interpolate trajectory to every frame
-        cmd_lines = []
-        for i, t in enumerate(trajectory):
-            time_sec = t["frame"] / fps
-            cmd_lines.append(f"{time_sec:.3f} [in] crop w {crop_w} h {crop_h} x {t['crop_x']} y {t['crop_y']};")
+    # Phase 3: Render with jump cuts (instant snap to active speaker)
+    log.info("Phase 3: Rendering with jump cuts...")
 
-        # Write sendcmd script
-        cmd_file = Path(input_path).parent / "crop_cmd.txt"
-        cmd_file.write_text("\n".join(cmd_lines))
+    # Build per-frame crop_x — NO smoothing, instant snap
+    frame_cx = []
+    ti = 0
+    for fi in range(total_frames):
+        t = fi / fps
+        while ti < len(timeline) - 1 and timeline[ti + 1]["time_sec"] <= t:
+            ti += 1
+        slot = face_slots[timeline[ti]["active_slot_idx"]]
+        cx = max(0, min(slot["x_center"] - crop_w // 2, vid_w - crop_w))
+        frame_cx.append(int(cx))
 
-        log.info("Dynamic crop with %d keyframes", len(cmd_lines))
+    smoothed = frame_cx  # No smoothing — hard cuts
 
-        # Use zoompan for smooth dynamic cropping
-        # Simpler approach: use the median crop position (most stable)
-        median_x = int(np.median([t["crop_x"] for t in trajectory]))
-        log.info("Using median crop x=%d for stability", median_x)
+    # Extract audio
+    audio_tmp = str(Path(output_path).with_suffix(".audio.aac"))
+    subprocess.run(["ffmpeg", "-i", input_path, "-vn", "-c:a", "aac", "-b:a", "128k", "-y", audio_tmp],
+                   capture_output=True, timeout=30)
 
-        result = subprocess.run([
-            "ffmpeg", "-i", input_path,
-            "-vf", f"crop={crop_w}:{crop_h}:{median_x}:0,"
-                   f"scale={output_width}:{output_height}:flags=lanczos",
-            "-c:v", "libx264", "-crf", "20", "-preset", "fast",
-            "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart", "-y", output_path,
-        ], capture_output=True, text=True, timeout=120)
+    # Render video
+    video_tmp = str(Path(output_path).with_suffix(".video.mp4"))
+    cap = cv2.VideoCapture(input_path)
+    writer = cv2.VideoWriter(video_tmp, cv2.VideoWriter_fourcc(*"mp4v"), fps, (output_width, output_height))
 
-        cmd_file.unlink(missing_ok=True)
-        return result.returncode == 0
+    fi = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        cx = int(smoothed[fi]) if fi < len(smoothed) else int(smoothed[-1])
+        cropped = frame[:, cx:cx + crop_w]
+        resized = cv2.resize(cropped, (output_width, output_height), interpolation=cv2.INTER_LANCZOS4)
+        writer.write(resized)
+        fi += 1
+
+    writer.release()
+    cap.release()
+
+    # Mux
+    r = subprocess.run([
+        "ffmpeg", "-i", video_tmp, "-i", audio_tmp,
+        "-c:v", "libx264", "-crf", "20", "-preset", "fast",
+        "-c:a", "copy", "-movflags", "+faststart", "-y", output_path,
+    ], capture_output=True, text=True, timeout=180)
+
+    Path(video_tmp).unlink(missing_ok=True)
+    Path(audio_tmp).unlink(missing_ok=True)
+
+    if r.returncode != 0:
+        log.error("Mux failed: %s", r.stderr[:300])
+        return False
+
+    changes = sum(1 for i in range(1, len(timeline)) if timeline[i]["active_slot_idx"] != timeline[i-1]["active_slot_idx"])
+    log.info("Done: %d frames, %d speaker switches", fi, changes)
+    return True
+
+
+def _ffmpeg_crop(input_path, output_path, cw, ch, cx, ow, oh):
+    r = subprocess.run([
+        "ffmpeg", "-i", input_path,
+        "-vf", f"crop={cw}:{ch}:{cx}:0,scale={ow}:{oh}:flags=lanczos",
+        "-c:v", "libx264", "-crf", "20", "-preset", "fast",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart", "-y", output_path,
+    ], capture_output=True, text=True, timeout=120)
+    return r.returncode == 0
