@@ -1022,8 +1022,9 @@ export default function CommunityPage() {
                     const color = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
                     return (
                       <button key={t.symbol} onClick={() => handleTickerClick(t.symbol)}
-                              className="w-full flex items-center justify-between py-1.5 hover:bg-muted rounded-lg px-2 -mx-2 transition-colors">
-                        <span className="ticker-mono text-sm font-bold text-foreground">{t.symbol}</span>
+                              className="w-full flex items-center gap-2 py-1.5 hover:bg-muted rounded-lg px-2 -mx-2 transition-colors">
+                        <TickerLogo symbol={t.symbol} size={20} />
+                        <span className="ticker-mono text-sm font-bold text-foreground flex-1 text-left">{t.symbol}</span>
                         <div className="flex items-center gap-1.5">
                           <div className="h-1 w-10 bg-muted rounded-full overflow-hidden">
                             <div className="h-full rounded-full" style={{ width: `${t.score}%`, background: color }} />

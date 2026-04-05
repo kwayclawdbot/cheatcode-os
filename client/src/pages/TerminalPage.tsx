@@ -15,6 +15,7 @@ import {
   BarChart2, Lock, LogIn, RefreshCw, Star, Bell
 } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MarketMode = "stocks" | "futures" | "forex" | "crypto";
@@ -354,13 +355,14 @@ function WatchlistPanel({ mode, onSelectSymbol, activeSymbol }: {
             <button
               key={item.symbol}
               onClick={() => onSelectSymbol(item.symbol)}
-              className="w-full px-3 py-2 flex items-center justify-between hover:opacity-80 transition-all text-left"
+              className="w-full px-3 py-2 flex items-center gap-2 hover:opacity-80 transition-all text-left"
               style={{
                 background: isActive ? `${config.color}15` : "transparent",
                 borderLeft: isActive ? `2px solid ${config.color}` : "2px solid transparent",
               }}
             >
-              <div>
+              <TickerLogo symbol={item.symbol} size={24} />
+              <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold" style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)" }}>
                   {item.symbol}
                 </p>

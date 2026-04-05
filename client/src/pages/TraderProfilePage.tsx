@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
 
@@ -456,6 +457,7 @@ export default function TraderProfilePage() {
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: post.typeBg, color: post.typeColor }}>
                     {post.type}
                   </span>
+                  <TickerLogo symbol={post.ticker} size={20} />
                   <span className="font-black text-sm" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
                     {post.ticker}
                   </span>
@@ -486,7 +488,8 @@ export default function TraderProfilePage() {
                 className="flex items-center gap-4 p-4 rounded-2xl border"
                 style={{ background: "var(--card)", borderColor: "var(--border)" }}
               >
-                <span className="font-black text-base w-16" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
+                <TickerLogo symbol={t.ticker} size={28} />
+                <span className="font-black text-base" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
                   {t.ticker}
                 </span>
                 <span

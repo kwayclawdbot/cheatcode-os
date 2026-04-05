@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { SparklineChart } from "@/components/intelligence/SparklineChart";
+import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { fetchRadar } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -125,7 +126,8 @@ function TickerListRow({
       <span className="text-[11px] font-black text-muted-foreground w-5 text-right flex-shrink-0">
         {rank}
       </span>
-
+      {/* Logo */}
+      <TickerLogo symbol={ticker.symbol} size={30} className="flex-shrink-0" />
       {/* Symbol + name */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
