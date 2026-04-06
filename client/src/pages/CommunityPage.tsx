@@ -745,7 +745,7 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
               </span>
             </div>
             <div className="px-1 py-1" style={{ height: 44 }}>
-              <SparklineChart symbol={t.symbol} color={color} height={40} />
+              <SparklineChart symbol={t.symbol} color={color} height={40} price={t.price} changePct={changePct} />
             </div>
             <div className="flex items-center justify-between px-3 pb-2.5 pt-0">
               {formattedPrice && (
