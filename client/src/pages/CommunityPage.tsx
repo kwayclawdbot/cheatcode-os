@@ -709,7 +709,14 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
     <div
       ref={scrollRef}
       className="flex items-center gap-3 overflow-x-auto pb-3 pt-2 px-4 sm:px-6"
-      style={{ scrollbarWidth: "none", minHeight: 114 }}
+      style={{
+        scrollbarWidth: "none",
+        minHeight: 114,
+        // iOS Safari: enable momentum scrolling and prevent clipping
+        WebkitOverflowScrolling: "touch" as any,
+        // iOS Safari: prevent the scroll container from collapsing its children
+        alignItems: "flex-start",
+      }}
     >
       {liveTickers.map((t: any) => {
         const isBull = t.direction?.toLowerCase() === "bullish";
@@ -727,8 +734,10 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
           <button
             key={t.symbol}
             onClick={() => onTickerClick(isActive ? "" : t.symbol)}
-            className="flex-shrink-0 flex flex-col rounded-xl transition-all border overflow-hidden"
+            className="flex-shrink-0 flex flex-col rounded-xl transition-all border"
             style={{
+              // iOS Safari fix: overflow:hidden on a button clips SVG children — use clip instead
+              overflow: "hidden",
               background: isActive ? color + "12" : "var(--card)",
               borderColor: isActive ? color : "var(--border)",
               boxShadow: isActive ? `0 0 0 1.5px ${color}50` : "0 1px 3px rgba(0,0,0,0.06)",
@@ -744,8 +753,9 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
                 {Math.round(t.score ?? 50)}
               </span>
             </div>
-            <div className="px-1 py-1" style={{ height: 44 }}>
-              <SparklineChart symbol={t.symbol} color={color} height={40} price={t.price} changePct={changePct} />
+            {/* iOS Safari fix: explicit pixel width/height, no padding that reduces available space */}
+            <div style={{ width: 120, height: 40, flexShrink: 0, display: "block" }}>
+              <SparklineChart symbol={t.symbol} color={color} height={40} width={120} price={t.price} changePct={changePct} />
             </div>
             <div className="flex items-center justify-between px-3 pb-2.5 pt-0">
               {formattedPrice && (

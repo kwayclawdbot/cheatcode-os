@@ -146,7 +146,7 @@ function TickerListRow({
 
       {/* Sparkline */}
       <div className="w-14 flex-shrink-0">
-        <SparklineChart symbol={ticker.symbol} color={color} height={32} price={ticker.price} changePct={ticker.change_pct} />
+        <SparklineChart symbol={ticker.symbol} color={color} height={32} width={56} price={ticker.price} changePct={ticker.change_pct} />
       </div>
 
       {/* Score badge */}
