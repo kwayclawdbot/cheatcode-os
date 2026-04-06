@@ -709,7 +709,7 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
     <div
       ref={scrollRef}
       className="flex items-center gap-3 overflow-x-auto pb-3 pt-2 px-4 sm:px-6"
-      style={{ scrollbarWidth: "none" }}
+      style={{ scrollbarWidth: "none", minHeight: 114 }}
     >
       {liveTickers.map((t: any) => {
         const isBull = t.direction?.toLowerCase() === "bullish";
