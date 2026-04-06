@@ -11,7 +11,7 @@ import {
   Send, Sparkles, TrendingUp, BarChart2, BookOpen, Zap,
   ChevronRight, Plus, Trash2, MessageSquare, Bot, User,
   Copy, ThumbsUp, ThumbsDown, RefreshCw, ChevronDown,
-  Flame, Target, Shield, Activity
+  Flame, Target, Shield, Activity, X
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -333,7 +333,8 @@ export default function KaiAssistPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(() => loadActiveConvId());
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Default closed on mobile (< md), open on desktop
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -472,6 +473,22 @@ export default function KaiAssistPage() {
     <Nav />
     <div className="flex h-[calc(100vh-56px)] overflow-hidden relative" style={{ background: bg }}>
 
+      {/* ── Mobile backdrop — tap to close sidebar ── */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-20 md:hidden"
+            style={{ background: "rgba(0,0,0,0.45)" }}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── Sidebar ── */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -480,8 +497,13 @@ export default function KaiAssistPage() {
             animate={{ width: 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="flex-shrink-0 flex flex-col border-r overflow-hidden absolute md:relative z-30 h-full md:h-auto"
-            style={{ background: sidebarBg, borderColor }}
+            className="flex-shrink-0 flex flex-col border-r overflow-hidden fixed md:relative z-30 h-full top-0 md:top-auto left-0 md:left-auto"
+            style={{
+              background: sidebarBg,
+              borderColor,
+              // iOS safe area: clear the notch when fixed-positioned
+              paddingTop: "env(safe-area-inset-top, 0px)",
+            }}
           >
             {/* Sidebar header */}
             <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0" style={{ borderColor }}>
@@ -494,17 +516,31 @@ export default function KaiAssistPage() {
                   Kai Assist
                 </span>
               </div>
-              <button
-                onClick={() => { createNewConversation(); }}
-                className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
-                style={{
-                  background: isDark ? "rgba(77,200,32,0.15)" : "#F0FDE8",
-                  color: "#4DC820",
-                }}
-                title="New chat"
-              >
-                <Plus size={14} />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => { createNewConversation(); }}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+                  style={{
+                    background: isDark ? "rgba(77,200,32,0.15)" : "#F0FDE8",
+                    color: "#4DC820",
+                  }}
+                  title="New chat"
+                >
+                  <Plus size={14} />
+                </button>
+                {/* Close button — only visible on mobile */}
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+                  style={{
+                    background: isDark ? "rgba(255,255,255,0.06)" : "#F2F4F7",
+                    color: isDark ? "#667085" : "#98A2B3",
+                  }}
+                  title="Close"
+                >
+                  <X size={13} />
+                </button>
+              </div>
             </div>
 
             {/* Conversation list */}
@@ -526,7 +562,7 @@ export default function KaiAssistPage() {
                         ? isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8"
                         : "transparent",
                     }}
-                    onClick={() => setActiveConvId(conv.id)}
+                    onClick={() => { setActiveConvId(conv.id); if (window.innerWidth < 768) setSidebarOpen(false); }}
                     onMouseEnter={e => {
                       if (activeConvId !== conv.id)
                         (e.currentTarget as HTMLDivElement).style.background = isDark ? "rgba(255,255,255,0.05)" : "#F9FAFB";
@@ -573,11 +609,20 @@ export default function KaiAssistPage() {
              style={{ background: sidebarBg, borderColor }}>
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-            style={{ color: isDark ? "#667085" : "#98A2B3" }}
-            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all flex-shrink-0"
+            style={{
+              background: sidebarOpen
+                ? isDark ? "rgba(77,200,32,0.12)" : "#F0FDE8"
+                : isDark ? "rgba(255,255,255,0.06)" : "#F2F4F7",
+              color: sidebarOpen ? "#4DC820" : isDark ? "#667085" : "#667085",
+            }}
+            title={sidebarOpen ? "Hide history" : "Show history"}
           >
-            <ChevronDown size={16} style={{ transform: sidebarOpen ? "rotate(90deg)" : "rotate(-90deg)", transition: "transform 0.2s" }} />
+            <MessageSquare size={13} />
+            <span className="text-[11px] font-semibold hidden sm:inline">
+              {sidebarOpen ? "Hide" : "History"}
+            </span>
+            <ChevronDown size={11} style={{ transform: sidebarOpen ? "rotate(90deg)" : "rotate(-90deg)", transition: "transform 0.2s" }} />
           </button>
 
           <div className="flex items-center gap-2.5">
