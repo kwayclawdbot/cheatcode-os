@@ -149,18 +149,22 @@ function LogoIcon({ size = 28 }: { size?: number }) {
   const diamondSize = size * 0.09;
   const circles = [
     { cx: cx,          cy: cy - offset, color: "#E8193C" },
-    { cx: cx + offset, cy: cy,          color: "#C8D400" },
-    { cx: cx,          cy: cy + offset, color: "#4DC820" },
     { cx: cx - offset, cy: cy,          color: "#00AEEF" },
+    { cx: cx + offset, cy: cy,          color: "#4DC820" },
+    { cx: cx,          cy: cy + offset, color: "#7B2FBE" },
   ];
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none">
-      <circle cx={cx} cy={cy} r={size * 0.46} fill="none" stroke="rgba(77,200,32,0.15)" strokeWidth={strokeW} />
       {circles.map((c, i) => (
-        <circle key={i} cx={c.cx} cy={c.cy} r={r} fill={c.color} opacity={0.92} />
+        <g key={i}>
+          <circle cx={c.cx} cy={c.cy} r={r} stroke={c.color} strokeWidth={strokeW} fill="none" />
+          <rect
+            x={c.cx - diamondSize / 2} y={c.cy - diamondSize / 2}
+            width={diamondSize} height={diamondSize}
+            fill={c.color} transform={`rotate(45 ${c.cx} ${c.cy})`}
+          />
+        </g>
       ))}
-      <rect x={cx - diamondSize} y={cy - diamondSize} width={diamondSize * 2} height={diamondSize * 2}
-            fill="#C8D400" transform={`rotate(45 ${cx} ${cy})`} opacity={0.9} />
     </svg>
   );
 }
