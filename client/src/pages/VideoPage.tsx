@@ -1,31 +1,47 @@
 // CheatCode OS — Video Page
-// Design: YouTube embed top, AI context layer below (the product)
-// NO MOCK DATA — all content from live Railway API + creator registry
+// Design: YouTube embed top, Kai enrichment layer below (the product)
+// Enrichment: quick take, key insights, ticker pills, quality score, pill badges
+// Data: Railway API (content detail) + tRPC ingest.getVideoEnrichment (LLM on-demand)
 
 import { Link, useParams } from "wouter";
-import { ArrowLeft, ExternalLink, ChevronDown, ChevronUp, Lock, Play, Clock, Bookmark, Share2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import {
+  ArrowLeft, ExternalLink, ChevronDown, ChevronUp,
+  Play, Clock, Bookmark, Share2, Zap, TrendingUp,
+  TrendingDown, Minus, BookOpen, BarChart2, Brain,
+  AlertTriangle, Lightbulb, Target, Wifi
+} from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchContentDetail, fetchContent, normalizeContentCard, trackEvent } from "@/lib/api";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
+import { trpc } from "@/lib/trpc";
 
-function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+// ─── Helper Components ────────────────────────────────────────────────────────
+
+function CollapsibleSection({
+  title, children, defaultOpen = false, icon
+}: {
+  title: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border rounded-xl overflow-hidden bg-card">
+    <div className="rounded-2xl overflow-hidden border border-border bg-card">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted transition-colors"
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-card hover:bg-muted/60 transition-colors"
       >
-        <span className="font-semibold text-sm text-foreground" style={{ fontFamily: "var(--font-display)" }}>
+        <span className="font-semibold text-sm text-foreground flex items-center gap-2">
+          {icon}
           {title}
         </span>
-        {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+        {open
+          ? <ChevronUp size={15} className="text-muted-foreground" />
+          : <ChevronDown size={15} className="text-muted-foreground" />}
       </button>
       {open && (
-        <div className="border-t border-border bg-card">
+        <div className="border-t border-border">
           {children}
         </div>
       )}
@@ -33,36 +49,86 @@ function CollapsibleSection({ title, children, defaultOpen = false }: { title: s
   );
 }
 
-function TickerCard({ ticker, context, sentiment }: { ticker: string; context: string; sentiment?: string }) {
+function TickerPill({
+  ticker, sentiment, context, isPrimary
+}: {
+  ticker: string; sentiment?: string; context?: string; isPrimary?: boolean;
+}) {
+  const sentimentColor =
+    sentiment === "bullish"
+      ? { bg: "#F0FDE8", text: "#2E7A10", border: "#B6F08A", icon: <TrendingUp size={10} /> }
+      : sentiment === "bearish"
+      ? { bg: "#FFF0F3", text: "#A8001F", border: "#F8A3B1", icon: <TrendingDown size={10} /> }
+      : { bg: "#F4F4F5", text: "#52525B", border: "#D4D4D8", icon: <Minus size={10} /> };
+
   return (
-    <Link href={`/intelligence?ticker=${ticker}`}>
-      <div className="content-card flex items-start gap-3 p-3 bg-card rounded-xl border border-border cursor-pointer">
-        <div className="flex-shrink-0">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-bold text-white"
-               style={{ background: sentiment === "bullish" ? "#12B76A" : sentiment === "bearish" ? "#E8193C" : "#667085" }}>
-            {ticker.slice(0, 3)}
-          </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="ticker-mono text-sm font-bold text-foreground">{ticker}</span>
-            {sentiment && (
-              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                sentiment === "bullish" ? "text-[#2E7A10] bg-[#F0FDE8]" : "text-[#A8001F] bg-[#FFF0F3]"
-              }`}>
-                {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">{context}</p>
-          <p className="text-xs text-[#00AEEF] mt-1 flex items-center gap-1">
-            <Lock size={10} /> View full analysis
-          </p>
-        </div>
+    <Link href={`/tickers/${ticker.toUpperCase()}`}>
+      <div
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer transition-all hover:shadow-sm hover:scale-105 active:scale-95"
+        style={{ backgroundColor: sentimentColor.bg, color: sentimentColor.text, borderColor: sentimentColor.border }}
+        title={context}
+      >
+        {sentimentColor.icon}
+        <span className="text-xs font-bold tracking-wide" style={{ fontFamily: "var(--font-mono)" }}>
+          {ticker}
+        </span>
+        {isPrimary && (
+          <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: "rgba(0,0,0,0.08)" }}>
+            PRIMARY
+          </span>
+        )}
       </div>
     </Link>
   );
 }
+
+function PillBadge({ label }: { label: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border"
+      style={{ background: "rgba(0,174,239,0.08)", color: "#005F8A", borderColor: "rgba(0,174,239,0.2)" }}
+    >
+      <Zap size={9} />
+      {label}
+    </span>
+  );
+}
+
+function InsightIcon({ category }: { category: string }) {
+  const map: Record<string, React.ReactNode> = {
+    strategy: <Target size={13} className="text-[#7C3AED]" />,
+    analysis: <BarChart2 size={13} className="text-[#2E90FA]" />,
+    risk: <AlertTriangle size={13} className="text-[#F79009]" />,
+    opportunity: <TrendingUp size={13} className="text-[#12B76A]" />,
+    education: <BookOpen size={13} className="text-[#667085]" />,
+  };
+  return <>{map[category] ?? <Lightbulb size={13} className="text-[#667085]" />}</>;
+}
+
+function SkillBadge({ level }: { level: string }) {
+  const map: Record<string, { label: string; bg: string; text: string }> = {
+    beginner: { label: "Beginner", bg: "#F0FDE8", text: "#2E7A10" },
+    intermediate: { label: "Intermediate", bg: "#EFF8FF", text: "#1570EF" },
+    advanced: { label: "Advanced", bg: "#F5F3FF", text: "#6927DA" },
+  };
+  const s = map[level] ?? map.intermediate;
+  return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: s.bg, color: s.text }}>
+      {s.label}
+    </span>
+  );
+}
+
+function ContentTypeBadge({ type }: { type: string }) {
+  const label = type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VideoPage() {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +136,12 @@ export default function VideoPage() {
   const [video, setVideo] = useState<any>(null);
   const [related, setRelated] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [imgFailed, setImgFailed] = useState(false);
 
+  // Stable reference for tRPC query input
+  const contentId = useMemo(() => id ?? "", [id]);
+
+  // ── Fetch main content detail ──────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -93,28 +164,28 @@ export default function VideoPage() {
           },
           thumbnail: n.thumbnailUrl || "",
           duration: n.durationLabel || "",
-          quickTake: n.quick_take || "",
+          quickTake: detail.quick_take || "",
           tags: n.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
           relevanceBadge: n.relevanceLabel || "Watch",
           tickers: detail.tickers || [],
-          convergenceScore: Math.round(n.relevance_score * 100),
-          publishedAt: n.publishedLabel || "",
           keyInsights: detail.key_insights || [],
           timestamps: detail.timestamps || [],
           externalUrl: n.external_url,
           description: detail.description || "",
+          convergenceScore: Math.round(n.relevance_score * 100),
+          publishedAt: n.publishedLabel || "",
+          skillLevel: (detail as any).skill_level || "intermediate",
+          contentType: (detail as any).content_type || "trading_education",
+          pillBadges: (detail as any).pill_badges || [],
         });
-        // Set related from API response
         if (detail.related?.length) {
           setRelated(detail.related.map((r) => {
             const rn = normalizeContentCard(r);
             const rslug = rn.creator_slug || "";
             return {
               id: rn.id,
-              type: rn.content_type,
               youtubeId: rn.youtubeId || "",
               title: rn.title,
-              creatorId: rslug,
               creator: {
                 name: rn.creator_name || "Unknown",
                 avatar: (rn.creator_name || "??").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
@@ -123,10 +194,6 @@ export default function VideoPage() {
               },
               thumbnail: rn.thumbnailUrl || "",
               duration: rn.durationLabel || "",
-              quickTake: rn.quick_take || "",
-              tags: rn.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
-              relevanceBadge: rn.relevanceLabel || "Watch",
-              tickers: [] as string[],
               convergenceScore: Math.round(rn.relevance_score * 100),
               publishedAt: rn.publishedLabel || "",
             };
@@ -134,51 +201,67 @@ export default function VideoPage() {
         }
         setLoading(false);
       })
-      .catch(() => {
-        setLoading(false);
-      });
+      .catch(() => setLoading(false));
   }, [id]);
 
-  // Fetch related content if API didn't return any
+  // ── Fallback related content ───────────────────────────────────────────────
   useEffect(() => {
     if (related.length > 0 || loading) return;
     fetchContent({ sort: "relevance", page: 1 })
       .then((items) => {
-        const mapped = items.slice(0, 5).map((r) => {
-          const rn = normalizeContentCard(r);
-          const rslug = rn.creator_slug || "";
-          return {
-            id: rn.id,
-            type: rn.content_type,
-            youtubeId: rn.youtubeId || "",
-            title: rn.title,
-            creatorId: rslug,
-            creator: {
-              name: rn.creator_name || "Unknown",
-              avatar: (rn.creator_name || "??").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-              avatarUrl: getCreatorAvatar(rslug),
-              color: getCreatorColor(rslug),
-            },
-            thumbnail: rn.thumbnailUrl || "",
-            duration: rn.durationLabel || "",
-            quickTake: rn.quick_take || "",
-            tags: rn.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
-            relevanceBadge: rn.relevanceLabel || "Watch",
-            tickers: [] as string[],
-            convergenceScore: Math.round(rn.relevance_score * 100),
-            publishedAt: rn.publishedLabel || "",
-          };
-        });
-        setRelated(mapped.filter(r => r.id !== id));
+        setRelated(
+          items.slice(0, 5).map((r) => {
+            const rn = normalizeContentCard(r);
+            const rslug = rn.creator_slug || "";
+            return {
+              id: rn.id,
+              youtubeId: rn.youtubeId || "",
+              title: rn.title,
+              creator: {
+                name: rn.creator_name || "Unknown",
+                avatar: (rn.creator_name || "??").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+                avatarUrl: getCreatorAvatar(rslug),
+                color: getCreatorColor(rslug),
+              },
+              thumbnail: rn.thumbnailUrl || "",
+              duration: rn.durationLabel || "",
+              convergenceScore: Math.round(rn.relevance_score * 100),
+              publishedAt: rn.publishedLabel || "",
+            };
+          }).filter(r => r.id !== id)
+        );
       })
       .catch(() => {});
   }, [related.length, loading, id]);
 
+  // ── LLM enrichment via tRPC (on-demand if Railway data is sparse) ──────────
+  const { data: enrichment, isLoading: enrichLoading } = trpc.ingest.getVideoEnrichment.useQuery(
+    { contentId },
+    {
+      enabled: !!contentId,
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    }
+  );
+
+  // Merge enrichment over Railway data (enrichment wins if present)
+  const quickTake = enrichment?.quickTake || video?.quickTake || "";
+  const keyInsights: Array<{ insight: string; category: string }> =
+    enrichment?.keyInsights?.length ? enrichment.keyInsights : (video?.keyInsights || []);
+  const tickers: Array<{ ticker: string; sentiment: string; mention_context?: string; is_primary?: boolean }> =
+    enrichment?.tickers?.length ? enrichment.tickers : (video?.tickers || []);
+  const pillBadges: string[] = enrichment?.pillBadges?.length ? enrichment.pillBadges : (video?.pillBadges || []);
+  const topics: string[] = enrichment?.topics?.length ? enrichment.topics : (video?.tags || []);
+  const skillLevel: string = enrichment?.skillLevel || video?.skillLevel || "intermediate";
+  const contentType: string = enrichment?.contentType || video?.contentType || "trading_education";
+  const qualityScore: number = enrichment?.qualityScore ?? video?.convergenceScore ?? 0;
+
+  // ── Loading skeleton ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Nav />
-        <main className="container mx-auto py-6">
+        <main className="container mx-auto py-6 max-w-6xl">
           <div className="animate-pulse space-y-4">
             <div className="h-4 bg-muted rounded w-32" />
             <div className="rounded-2xl bg-muted" style={{ aspectRatio: "16/9" }} />
@@ -194,19 +277,16 @@ export default function VideoPage() {
     return (
       <div className="min-h-screen bg-background">
         <Nav />
-        <main className="container mx-auto py-6">
+        <main className="container mx-auto py-6 max-w-6xl">
           <Link href="/">
             <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
-              <ArrowLeft size={14} />
-              Back
+              <ArrowLeft size={14} /> Back to Home
             </button>
           </Link>
-          <div className="text-center py-16">
+          <div className="text-center py-20">
             <p className="text-lg font-semibold text-foreground mb-2">Video not found</p>
             <p className="text-sm text-muted-foreground">This content may have been removed or the ID is invalid.</p>
-            <Link href="/">
-              <button className="mt-4 cc-gradient-bg text-[#101828] font-bold px-6 py-2 rounded-lg">Go Home</button>
-            </Link>
+            <Link href="/"><button className="mt-4 cc-gradient-bg text-[#101828] font-bold px-6 py-2 rounded-lg">Go Home</button></Link>
           </div>
         </main>
       </div>
@@ -220,19 +300,20 @@ export default function VideoPage() {
     <div className="min-h-screen bg-background">
       <Nav />
 
-      <main className="page-enter container mx-auto py-6">
+      <main className="page-enter container mx-auto py-6 max-w-6xl">
         <Link href="/">
           <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
-            <ArrowLeft size={14} />
-            Back to Today's Picks
+            <ArrowLeft size={14} /> Back to Today's Picks
           </button>
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main content */}
-          <div className="lg:col-span-2 space-y-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+
+          {/* ── Main Column ─────────────────────────────────────────────── */}
+          <div className="space-y-5 min-w-0">
+
             {/* Video embed */}
-            <div className="relative bg-black rounded-2xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
+            <div className="rounded-2xl overflow-hidden bg-black shadow-lg" style={{ aspectRatio: "16/9" }}>
               {playing && youtubeId ? (
                 <iframe
                   src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0`}
@@ -243,29 +324,38 @@ export default function VideoPage() {
                   style={{ border: "none" }}
                 />
               ) : (
-                <>
+                <div
+                  className="relative w-full h-full cursor-pointer group"
+                  onClick={() => setPlaying(true)}
+                >
                   <img
                     src={video.thumbnail}
                     alt={video.title}
-                    className="w-full h-full object-cover opacity-80"
-                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640&q=80"; }}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src =
+                        "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1280&q=80";
+                    }}
                   />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <button
-                      onClick={() => setPlaying(true)}
-                      className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                    >
-                      <Play size={24} fill="#101828" className="text-[#101828] ml-1" />
-                    </button>
+                  <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                      <Play size={24} fill="#101828" className="ml-1" />
+                    </div>
                   </div>
-                </>
+                  {video.duration && (
+                    <span className="absolute bottom-3 right-3 text-xs font-semibold text-white bg-black/70 px-2 py-1 rounded-lg">
+                      {video.duration}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
             {/* Title + meta */}
             <div>
-              <div className="flex items-start justify-between gap-4">
-                <h1 className="text-xl font-bold text-foreground leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="text-xl font-bold text-foreground leading-snug flex-1"
+                    style={{ fontFamily: "var(--font-display)" }}>
                   {video.title}
                 </h1>
                 <div className="flex gap-2 flex-shrink-0">
@@ -277,37 +367,43 @@ export default function VideoPage() {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3 mt-2 flex-wrap">
+
+              {/* Creator + date row */}
+              <div className="flex items-center gap-3 mt-2.5 flex-wrap">
                 <div className="flex items-center gap-2">
                   {creatorId ? (
                     <Link href={`/creators/${creatorId}`}>
-                      <div className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:ring-2 ring-[#4DC820] flex-shrink-0"
-                           style={{ backgroundColor: video.creator.color }}>
-                        {video.creator.avatarUrl ? (
+                      <div
+                        className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:ring-2 ring-[#4DC820] flex-shrink-0"
+                        style={{ backgroundColor: video.creator.color }}
+                      >
+                        {video.creator.avatarUrl && !imgFailed ? (
                           <img src={video.creator.avatarUrl} alt={video.creator.name}
                             className="w-full h-full object-cover"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                            onError={() => setImgFailed(true)} />
                         ) : video.creator.avatar}
                       </div>
                     </Link>
                   ) : (
                     <div className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-bold"
                          style={{ backgroundColor: video.creator.color }}>
-                      {video.creator.avatarUrl ? (
-                        <img src={video.creator.avatarUrl} alt={video.creator.name} className="w-full h-full object-cover" />
-                      ) : video.creator.avatar}
+                      {video.creator.avatar}
                     </div>
                   )}
                   {creatorId ? (
                     <Link href={`/creators/${creatorId}`}>
-                      <span className="text-sm font-medium text-muted-foreground hover:underline cursor-pointer">{video.creator.name}</span>
+                      <span className="text-sm font-medium text-muted-foreground hover:underline cursor-pointer">
+                        {video.creator.name}
+                      </span>
                     </Link>
                   ) : (
                     <span className="text-sm font-medium text-muted-foreground">{video.creator.name}</span>
                   )}
                 </div>
                 <span className="text-border">·</span>
-                <span className="text-sm text-muted-foreground flex items-center gap-1"><Clock size={12} />{video.publishedAt}</span>
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Clock size={12} />{video.publishedAt}
+                </span>
                 {video.duration && (
                   <>
                     <span className="text-border">·</span>
@@ -315,95 +411,220 @@ export default function VideoPage() {
                   </>
                 )}
                 {youtubeId && (
-                  <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noopener noreferrer"
-                     className="ml-auto text-xs text-[#00AEEF] flex items-center gap-1 hover:underline">
+                  <a
+                    href={`https://www.youtube.com/watch?v=${youtubeId}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="ml-auto text-xs text-[#00AEEF] flex items-center gap-1 hover:underline"
+                  >
                     Watch on YouTube <ExternalLink size={10} />
                   </a>
                 )}
               </div>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {video.tags.map((t: string) => (
-                  <span key={t} className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full border border-border">
-                    {t}
-                  </span>
-                ))}
+
+              {/* Badge row */}
+              <div className="flex gap-2 mt-3 flex-wrap items-center">
+                <SkillBadge level={skillLevel} />
+                <ContentTypeBadge type={contentType} />
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                  video.relevanceBadge === "Critical" ? "bg-[#FFF0F3] text-[#A8001F] border-[#F8A3B1]" :
-                  video.relevanceBadge === "High Relevance" ? "bg-[#F0FDE8] text-[#2E7A10] border-[#B6F08A]" :
-                  "bg-[#FAFDE8] text-[#7A6800] border-[#E8F08A]"
+                  video.relevanceBadge === "Critical"
+                    ? "bg-[#FFF0F3] text-[#A8001F] border-[#F8A3B1]"
+                    : video.relevanceBadge === "High Relevance"
+                    ? "bg-[#F0FDE8] text-[#2E7A10] border-[#B6F08A]"
+                    : "bg-[#FAFDE8] text-[#7A6800] border-[#E8F08A]"
                 }`}>
                   {video.relevanceBadge}
                 </span>
+                {topics.slice(0, 3).map((t: string) => (
+                  <span key={t} className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full border border-border">
+                    {t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                  </span>
+                ))}
               </div>
+
+              {/* Pill badges */}
+              {pillBadges.length > 0 && (
+                <div className="flex gap-2 mt-2.5 flex-wrap">
+                  {pillBadges.map((badge: string) => (
+                    <PillBadge key={badge} label={badge} />
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Quick Take */}
-            {video.quickTake && (
-              <div className="rounded-xl p-4 border border-border" style={{ background: "linear-gradient(to right, rgba(0,174,239,0.08), rgba(77,200,32,0.06))" }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#00AEEF" }}>
-                    <span className="text-white text-[9px] font-bold">K</span>
+            {/* ── Kai Quick Take ─────────────────────────────────────────── */}
+            {(quickTake || enrichLoading) && (
+              <div
+                className="rounded-2xl p-5 border"
+                style={{
+                  background: "linear-gradient(135deg, rgba(0,174,239,0.06) 0%, rgba(77,200,32,0.04) 100%)",
+                  borderColor: "rgba(0,174,239,0.2)"
+                }}
+              >
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: "linear-gradient(135deg, #00AEEF, #4DC820)" }}
+                  >
+                    <Brain size={13} className="text-white" />
                   </div>
-                  <span className="text-xs font-semibold" style={{ color: "#005F8A" }}>Kai's Quick Take</span>
+                  <div>
+                    <p className="text-xs font-bold" style={{ color: "#005F8A" }}>Kai's Quick Take</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {enrichLoading && !quickTake
+                        ? "Analysing video..."
+                        : enrichment?.fromCache === false
+                        ? "Generated on-demand"
+                        : "From content layer"}
+                    </p>
+                  </div>
+                  {enrichLoading && !quickTake && (
+                    <div className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Wifi size={10} className="animate-pulse" />
+                      Thinking...
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm text-foreground leading-relaxed">{video.quickTake}</p>
+                {quickTake ? (
+                  <p className="text-sm text-foreground leading-relaxed">{quickTake}</p>
+                ) : (
+                  <div className="space-y-2 animate-pulse">
+                    <div className="h-3 bg-muted rounded w-full" />
+                    <div className="h-3 bg-muted rounded w-5/6" />
+                    <div className="h-3 bg-muted rounded w-4/6" />
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Description */}
-            {video.description && (
-              <CollapsibleSection title="About This Video" defaultOpen={false}>
-                <div className="px-4 py-3">
-                  <p className="text-sm text-muted-foreground leading-relaxed">{video.description}</p>
+            {/* ── Key Insights ───────────────────────────────────────────── */}
+            {(keyInsights.length > 0 || enrichLoading) && (
+              <CollapsibleSection
+                title="Key Insights"
+                defaultOpen={true}
+                icon={<Lightbulb size={14} className="text-[#F79009]" />}
+              >
+                {keyInsights.length > 0 ? (
+                  <div className="divide-y divide-border">
+                    {keyInsights.map((ins, i) => (
+                      <div key={i} className="flex items-start gap-3 px-5 py-3.5">
+                        <div className="mt-0.5 flex-shrink-0">
+                          <InsightIcon category={ins.category} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground leading-relaxed">
+                            {typeof ins === "string" ? ins : ins.insight}
+                          </p>
+                          {ins.category && (
+                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-0.5 block">
+                              {ins.category}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-5 py-4 space-y-2 animate-pulse">
+                    {[1, 2, 3].map(i => <div key={i} className="h-3 bg-muted rounded w-full" />)}
+                  </div>
+                )}
+              </CollapsibleSection>
+            )}
+
+            {/* ── Tickers Discussed ──────────────────────────────────────── */}
+            {(tickers.length > 0 || enrichLoading) && (
+              <CollapsibleSection
+                title="Tickers Discussed"
+                defaultOpen={true}
+                icon={<BarChart2 size={14} className="text-[#2E90FA]" />}
+              >
+                <div className="p-5">
+                  {/* Pill row */}
+                  {tickers.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {tickers.map((t) => (
+                        <TickerPill
+                          key={t.ticker}
+                          ticker={t.ticker}
+                          sentiment={t.sentiment}
+                          context={t.mention_context}
+                          isPrimary={t.is_primary}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {/* Context cards */}
+                  {tickers.filter(t => t.mention_context).length > 0 && (
+                    <div className="space-y-2.5">
+                      {tickers.filter(t => t.mention_context).map((t) => (
+                        <Link key={t.ticker} href={`/tickers/${t.ticker.toUpperCase()}`}>
+                          <div className="flex items-start gap-3 p-3.5 rounded-xl border border-border hover:bg-muted/50 transition-colors cursor-pointer">
+                            <div
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                              style={{
+                                background:
+                                  t.sentiment === "bullish" ? "#12B76A" :
+                                  t.sentiment === "bearish" ? "#E8193C" : "#667085"
+                              }}
+                            >
+                              {t.ticker.slice(0, 3)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-sm font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                                  {t.ticker}
+                                </span>
+                                {t.sentiment && (
+                                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                                    t.sentiment === "bullish" ? "text-[#2E7A10] bg-[#F0FDE8]" :
+                                    t.sentiment === "bearish" ? "text-[#A8001F] bg-[#FFF0F3]" :
+                                    "text-[#52525B] bg-[#F4F4F5]"
+                                  }`}>
+                                    {t.sentiment.charAt(0).toUpperCase() + t.sentiment.slice(1)}
+                                  </span>
+                                )}
+                                {t.is_primary && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#EFF8FF] text-[#1570EF]">
+                                    PRIMARY
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground leading-relaxed">{t.mention_context}</p>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                  {enrichLoading && tickers.length === 0 && (
+                    <div className="space-y-2 animate-pulse">
+                      {[1, 2].map(i => <div key={i} className="h-12 bg-muted rounded-xl" />)}
+                    </div>
+                  )}
                 </div>
               </CollapsibleSection>
             )}
 
-            {/* Key Insights from API */}
-            {video.keyInsights?.length > 0 && (
-              <CollapsibleSection title="Key Insights" defaultOpen>
-                <ul className="divide-y divide-border">
-                  {video.keyInsights.map((insight: any, i: number) => (
-                    <li key={i} className="flex gap-3 px-4 py-3">
-                      <span className="w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#F0FDE8", color: "#2E7A10" }}>
-                        {i + 1}
-                      </span>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {typeof insight === "string" ? insight : insight.insight || ""}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </CollapsibleSection>
-            )}
-
-            {/* Tickers Mentioned from API */}
-            {video.tickers?.length > 0 && (
-              <CollapsibleSection title="Tickers Mentioned" defaultOpen>
-                <div className="p-4 space-y-3">
-                  {video.tickers.map((t: any) => (
-                    <TickerCard
-                      key={t.ticker}
-                      ticker={t.ticker}
-                      context={t.mention_context || `Mentioned in this ${video.type}`}
-                      sentiment={t.sentiment}
-                    />
-                  ))}
-                </div>
-              </CollapsibleSection>
-            )}
-
-            {/* Timestamps from API */}
+            {/* ── Timestamps ─────────────────────────────────────────────── */}
             {video.timestamps?.length > 0 && (
-              <CollapsibleSection title="Timestamps">
+              <CollapsibleSection
+                title="Timestamps"
+                icon={<Clock size={14} className="text-muted-foreground" />}
+              >
                 <div className="divide-y divide-border">
                   {video.timestamps.map((ts: any, i: number) => {
                     const secs = ts.seconds || 0;
                     const mins = Math.floor(secs / 60);
                     const s = String(secs % 60).padStart(2, "0");
                     return (
-                      <button key={i} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors text-left">
-                        <span className="ticker-mono text-xs w-10 flex-shrink-0" style={{ color: "#4DC820" }}>{mins}:{s}</span>
+                      <button
+                        key={i}
+                        onClick={() => setPlaying(true)}
+                        className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted transition-colors text-left"
+                      >
+                        <span className="ticker-mono text-xs w-10 flex-shrink-0" style={{ color: "#4DC820" }}>
+                          {mins}:{s}
+                        </span>
                         <span className="text-sm text-muted-foreground">{ts.label}</span>
                       </button>
                     );
@@ -411,50 +632,99 @@ export default function VideoPage() {
                 </div>
               </CollapsibleSection>
             )}
+
+            {/* ── Description ────────────────────────────────────────────── */}
+            {video.description && (
+              <CollapsibleSection
+                title="Description"
+                icon={<BookOpen size={14} className="text-muted-foreground" />}
+              >
+                <div className="px-5 py-4">
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line line-clamp-6">
+                    {video.description}
+                  </p>
+                </div>
+              </CollapsibleSection>
+            )}
           </div>
 
-          {/* Sidebar */}
+          {/* ── Sidebar ─────────────────────────────────────────────────── */}
           <div className="space-y-5">
-            {/* Convergence score */}
-            <div className="bg-card rounded-xl border border-border p-5 text-center">
-              <p className="section-label mb-3">Convergence Score</p>
-              <ScoreRing score={video.convergenceScore} size="lg" />
-              <p className="text-sm font-semibold mt-3" style={{
-                color: video.convergenceScore >= 80 ? "#4DC820" : video.convergenceScore >= 60 ? "#C8D400" : "#E8193C"
+
+            {/* Convergence score card */}
+            <div className="bg-card rounded-2xl border border-border p-5 text-center">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                Convergence Score
+              </p>
+              <ScoreRing score={qualityScore} size="lg" />
+              <p className="text-sm font-bold mt-3" style={{
+                color: qualityScore >= 80 ? "#4DC820" : qualityScore >= 60 ? "#C8D400" : "#E8193C"
               }}>
                 {video.relevanceBadge}
               </p>
               <p className="text-xs text-muted-foreground mt-1">{video.creator.name}</p>
-              {video.tickers?.[0]?.ticker && (
-                <Link href={`/intelligence?ticker=${video.tickers[0].ticker}`}>
-                  <button className="w-full mt-4 text-[#101828] text-sm font-bold py-2 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity">
+              {tickers[0]?.ticker && (
+                <Link href={`/tickers/${tickers[0].ticker.toUpperCase()}`}>
+                  <button className="w-full mt-4 text-[#101828] text-sm font-bold py-2.5 rounded-xl cc-gradient-bg hover:opacity-90 transition-opacity">
                     Full Intelligence Breakdown
                   </button>
                 </Link>
               )}
             </div>
 
-            {/* Related videos */}
+            {/* Primary tickers quick-access */}
+            {tickers.filter(t => t.is_primary).length > 0 && (
+              <div className="bg-card rounded-2xl border border-border p-4">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                  Primary Tickers
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {tickers.filter(t => t.is_primary).map((t) => (
+                    <TickerPill
+                      key={t.ticker}
+                      ticker={t.ticker}
+                      sentiment={t.sentiment}
+                      context={t.mention_context}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Watch Next */}
             {related.length > 0 && (
               <div>
                 <h3 className="font-bold text-sm text-foreground mb-3" style={{ fontFamily: "var(--font-display)" }}>
                   Watch Next
                 </h3>
                 <div className="space-y-3">
-                  {related.slice(0, 4).map(v => (
+                  {related.slice(0, 5).map(v => (
                     <Link key={v.id} href={`/video/${v.id}`}>
                       <div className="flex gap-3 cursor-pointer group/wn">
-                        <div className="relative w-28 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-[#1a2035]">
-                          <img src={v.thumbnail} alt={v.title}
+                        <div className="relative w-28 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted">
+                          <img
+                            src={v.thumbnail}
+                            alt={v.title}
                             className="w-full h-full object-cover transition-transform duration-200 group-hover/wn:scale-105"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=320&q=60"; }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=320&q=60";
+                            }}
                           />
-                          <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%)" }} />
+                          <div className="absolute inset-0"
+                               style={{ background: "linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 60%)" }} />
                           {v.duration && (
-                            <span className="absolute bottom-1 left-1.5 text-[9px] font-semibold text-white bg-black/60 px-1 py-0.5 rounded">{v.duration}</span>
+                            <span className="absolute bottom-1 left-1.5 text-[9px] font-semibold text-white bg-black/60 px-1 py-0.5 rounded">
+                              {v.duration}
+                            </span>
                           )}
-                          <span className="absolute top-1 right-1 text-[9px] font-bold px-1 py-0.5 rounded"
-                                style={{ background: v.convergenceScore >= 80 ? "rgba(77,200,32,0.85)" : "rgba(200,212,0,0.85)", color: "#101828" }}>
+                          <span
+                            className="absolute top-1 right-1 text-[9px] font-bold px-1 py-0.5 rounded"
+                            style={{
+                              background: v.convergenceScore >= 80 ? "rgba(77,200,32,0.85)" : "rgba(200,212,0,0.85)",
+                              color: "#101828"
+                            }}
+                          >
                             {v.convergenceScore}
                           </span>
                         </div>
@@ -465,7 +735,9 @@ export default function VideoPage() {
                           </p>
                           <div className="flex items-center gap-1.5 mt-1">
                             {v.creator.avatarUrl && (
-                              <img src={v.creator.avatarUrl} alt={v.creator.name}
+                              <img
+                                src={v.creator.avatarUrl}
+                                alt={v.creator.name}
                                 className="w-4 h-4 rounded-full object-cover"
                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                               />

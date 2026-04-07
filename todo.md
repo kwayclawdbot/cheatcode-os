@@ -132,3 +132,12 @@
 - [x] YouTube ingestion: tag generation (topics, asset class, trading style, pill badges)
 - [x] YouTube ingestion: video page content generation (quick take, key insights, tickers discussed)
 - [x] YouTube ingestion: tRPC ingest router + admin UI at /admin/ingest
+
+## VideoPage Enrichment (Apr 7 #8)
+- [x] VideoPage: display LLM-generated quick take (Kai voice, paragraph style)
+- [x] VideoPage: display key insights list with category icons (strategy/analysis/risk/opportunity/education)
+- [x] VideoPage: extracted ticker pills (clickable, navigate to /tickers/:symbol, sentiment color-coded)
+- [x] VideoPage: quality score badge (0-100 from enrichment, shown in sidebar ScoreRing)
+- [x] VideoPage: topic/tag pills + pill badges + skill level badge + content type badge in header
+- [x] VideoPage: Watch Next shelf in sidebar (from Railway related or fallback to top content)
+- [x] tRPC ingest.getVideoEnrichment procedure (fetch from Railway + on-demand LLM if not cached)

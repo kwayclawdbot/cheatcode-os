@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { TRPCError } from "@trpc/server";
@@ -362,5 +362,89 @@ export const ingestRouter = router({
     .input(z.object({ supabaseToken: z.string().min(10), status: z.string().default("pending") }))
     .query(async ({ input }) => {
       return railwayGet(`/admin/queue?status=${input.status}`, input.supabaseToken);
+    }),
+
+  /**
+   * Get enrichment data for a video — fetches from Railway and fills in missing
+   * LLM-generated fields (quick_take, key_insights, tickers, tags) on-demand.
+   * Public endpoint — no auth required.
+   */
+  getVideoEnrichment: publicProcedure
+    .input(z.object({ contentId: z.string().min(1).max(100) }))
+    .query(async ({ input }) => {
+      // Fetch content detail from Railway public API
+      const railwayBase = ENV.railwayApiUrl;
+      const resp = await fetch(`${railwayBase}/content/${encodeURIComponent(input.contentId)}`);
+      if (!resp.ok) {
+        throw new TRPCError({
+          code: resp.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+          message: `Content not found: ${input.contentId}`,
+        });
+      }
+      const detail = await resp.json() as Record<string, unknown>;
+
+      // Check if enrichment is already present
+      const hasQuickTake = typeof detail.quick_take === "string" && (detail.quick_take as string).length > 20;
+      const hasInsights = Array.isArray(detail.key_insights) && (detail.key_insights as unknown[]).length > 0;
+      const hasTickers = Array.isArray(detail.tickers) && (detail.tickers as unknown[]).length > 0;
+
+      // If all enrichment fields are present, return as-is
+      if (hasQuickTake && hasInsights && hasTickers) {
+        return {
+          contentId: input.contentId,
+          fromCache: true,
+          quickTake: detail.quick_take as string,
+          keyInsights: detail.key_insights as Array<{ insight: string; category: string }>,
+          tickers: detail.tickers as Array<{ ticker: string; mention_context: string; sentiment: string; is_primary: boolean }>,
+          topics: (detail.topics as string[] | null) ?? [],
+          skillLevel: (detail.skill_level as string | null) ?? "intermediate",
+          pillBadges: (detail.pill_badges as string[] | null) ?? [],
+          tags: (detail.tags as string[] | null) ?? [],
+          relevanceScore: (detail.relevance_score as number | null) ?? 0,
+          qualityScore: Math.round(((detail.relevance_score as number | null) ?? 0) * 100),
+          contentType: (detail.content_type as string | null) ?? "trading_education",
+        };
+      }
+
+      // On-demand LLM enrichment for videos missing data
+      const title = (detail.title as string | null) ?? "";
+      const description = (detail.description as string | null) ?? "";
+      const channelTitle = (detail.creator_name as string | null) ?? (detail.channel_title as string | null) ?? "";
+      const durationSeconds = (detail.duration_seconds as number | null) ?? 0;
+      const viewCount = (detail.view_count as number | null) ?? 0;
+      const ytTags = (detail.tags as string[] | null) ?? [];
+
+      const llmResult = await runQualityFilter({
+        title,
+        description,
+        channelTitle,
+        durationSeconds,
+        viewCount,
+        tags: ytTags,
+      });
+
+      return {
+        contentId: input.contentId,
+        fromCache: false,
+        quickTake: llmResult.quickTake || (detail.quick_take as string | null) || "",
+        keyInsights: llmResult.keyInsights?.length
+          ? llmResult.keyInsights
+          : (detail.key_insights as Array<{ insight: string; category: string }> | null) ?? [],
+        tickers: hasTickers
+          ? (detail.tickers as Array<{ ticker: string; mention_context: string; sentiment: string; is_primary: boolean }>)
+          : llmResult.tickers.map(t => ({
+              ticker: t.symbol,
+              mention_context: t.context,
+              sentiment: t.sentiment,
+              is_primary: t.isPrimary,
+            })),
+        topics: llmResult.topics?.length ? llmResult.topics : (detail.topics as string[] | null) ?? [],
+        skillLevel: llmResult.skillLevel ?? (detail.skill_level as string | null) ?? "intermediate",
+        pillBadges: llmResult.pillBadges?.length ? llmResult.pillBadges : (detail.pill_badges as string[] | null) ?? [],
+        tags: llmResult.tags?.length ? llmResult.tags : (detail.tags as string[] | null) ?? [],
+        relevanceScore: (detail.relevance_score as number | null) ?? llmResult.score / 100,
+        qualityScore: llmResult.score ?? Math.round(((detail.relevance_score as number | null) ?? 0) * 100),
+        contentType: llmResult.contentType ?? (detail.content_type as string | null) ?? "trading_education",
+      };
     }),
 });
