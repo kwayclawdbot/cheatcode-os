@@ -9,4 +9,7 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   supabaseUrl: process.env.VITE_SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY ?? "",
+  eohdApiKey: process.env.EODHD_API_KEY ?? "",
+  youtubeApiKey: process.env.YOUTUBE_API_KEY ?? "",
+  railwayApiUrl: process.env.RAILWAY_API_URL ?? "https://cheatcode-os-api-production.up.railway.app/api/v1",
 };

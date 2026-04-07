@@ -45,6 +45,7 @@ import FeedPage from "./pages/FeedPage";
 import TraderProfilePage from "./pages/TraderProfilePage";
 import JournalPage from "./pages/JournalPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminIngestPage from "./pages/AdminIngestPage";
 import CoachApplyPage from "./pages/CoachApplyPage";
 import CoachDashboard from "./pages/CoachDashboard";
 import CoachesCornerPage from "./pages/CoachesCornerPage";
@@ -122,6 +123,7 @@ function Router() {
 
       {/* ── Admin ── */}
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/ingest" component={AdminIngestPage} />
 
       {/* ── Coach system ── */}
       <Route path="/coach/apply" component={CoachApplyPage} />

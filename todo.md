@@ -120,3 +120,15 @@
 - [ ] Live EODHD ticker data: replace all mock prices in TerminalPage watchlist with live EODHD quotes
 - [ ] Live EODHD ticker data: replace mock prices in Home ticker rail with live EODHD quotes
 - [ ] YouTube ingestion pipeline: optimize Python backend service and ensure Railway deployment ready
+
+## Live Data + Profile + YouTube Ingestion (Apr 7 #7)
+- [x] Terminal: default to chat tab (not watchlist) on load
+- [x] Terminal watchlist: replace mock prices with live EODHD quotes (real-time polling via tRPC)
+- [ ] Home ticker rail: replace mock prices with live EODHD quotes
+- [x] TraderProfilePage: wire to real Supabase user + tRPC profile data (remove all mock data)
+- [x] Profile: show real stats (XP, level, trades, followers) from Railway API or DB
+- [x] YouTube ingestion pipeline: quality filter via LLM (score 0-100, pass/fail with reason)
+- [x] YouTube ingestion: ticker extraction from title/description/transcript (LLM structured output)
+- [x] YouTube ingestion: tag generation (topics, asset class, trading style, pill badges)
+- [x] YouTube ingestion: video page content generation (quick take, key insights, tickers discussed)
+- [x] YouTube ingestion: tRPC ingest router + admin UI at /admin/ingest

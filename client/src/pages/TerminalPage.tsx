@@ -19,6 +19,7 @@ import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { CheatCodeChart } from "@/components/CheatCodeChart";
 import { useChatChannel } from "@/hooks/useChatChannel";
 import { useAuth } from "@/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MarketMode = "stocks" | "futures" | "forex" | "crypto";
@@ -142,54 +143,6 @@ const MARKET_MODES: Record<MarketMode, {
   },
 };
 
-// ─── Mock Chat Messages ───────────────────────────────────────────────────────
-const MOCK_MESSAGES: Record<string, { user: string; avatar: string; color: string; time: string; text: string; badge?: string }[]> = {
-  "stocks-general": [
-    { user: "TraderKai", avatar: "TK", color: "#4DC820", time: "9:32 AM", text: "NVDA breaking out of the wedge right now 👀 volume confirming", badge: "Pro" },
-    { user: "SwingKing", avatar: "SK", color: "#00AEEF", time: "9:34 AM", text: "I've been in since 840, adding here on the break" },
-    { user: "OptionsFlow", avatar: "OF", color: "#F79009", time: "9:35 AM", text: "Seeing heavy call buying in NVDA 900 strikes for next week. Someone knows something 🔥", badge: "Elite" },
-    { user: "MarketMaven", avatar: "MM", color: "#7B2FBE", time: "9:37 AM", text: "AMD following NVDA as expected. Semi sector rotation is real" },
-    { user: "DayTrader99", avatar: "DT", color: "#E8193C", time: "9:38 AM", text: "TSLA looking weak, holding below VWAP. Short bias for now" },
-    { user: "TraderKai", avatar: "TK", color: "#4DC820", time: "9:41 AM", text: "NVDA 880 is the key level. If it holds, next target 900+", badge: "Pro" },
-    { user: "AlgoTrader", avatar: "AT", color: "#00AEEF", time: "9:42 AM", text: "My algo just triggered a buy signal on SMCI. Unusual volume spike" },
-    { user: "ValueHunter", avatar: "VH", color: "#F79009", time: "9:44 AM", text: "Anyone watching META? Looks like a clean setup forming on the daily" },
-  ],
-  "stocks-flow": [
-    { user: "FlowBot", avatar: "FB", color: "#4DC820", time: "9:30 AM", text: "🚨 UNUSUAL ACTIVITY: NVDA 900C 04/19 — $2.4M sweep, ask side, 3x avg volume", badge: "Bot" },
-    { user: "FlowBot", avatar: "FB", color: "#4DC820", time: "9:31 AM", text: "🚨 UNUSUAL ACTIVITY: AMD 165C 04/26 — $840K sweep, ask side", badge: "Bot" },
-    { user: "OptionsFlow", avatar: "OF", color: "#F79009", time: "9:33 AM", text: "That NVDA sweep is institutional. Not retail. Watch for follow-through", badge: "Elite" },
-    { user: "FlowBot", avatar: "FB", color: "#4DC820", time: "9:35 AM", text: "🚨 BEARISH: TSLA 175P 04/12 — $1.1M block, bid side", badge: "Bot" },
-    { user: "TraderKai", avatar: "TK", color: "#4DC820", time: "9:38 AM", text: "TSLA puts are stacking up. Someone is hedging hard into earnings", badge: "Pro" },
-  ],
-  "futures-general": [
-    { user: "FuturesKing", avatar: "FK", color: "#F79009", time: "9:29 AM", text: "ES holding 5240 support. Bulls need to reclaim 5260 for continuation", badge: "Elite" },
-    { user: "ScalpMaster", avatar: "SM", color: "#00AEEF", time: "9:31 AM", text: "NQ lagging ES today. Divergence worth watching", },
-    { user: "MacroTrader", avatar: "MT", color: "#7B2FBE", time: "9:33 AM", text: "CPI print tomorrow could be the catalyst. Positioning light until then", badge: "Pro" },
-    { user: "FuturesKing", avatar: "FK", color: "#F79009", time: "9:35 AM", text: "Gold breaking out above 2300. Flight to safety bid is real", badge: "Elite" },
-    { user: "OilTrader", avatar: "OT", color: "#E8193C", time: "9:37 AM", text: "CL testing 82 resistance. Supply data at 10:30 AM will be key" },
-  ],
-  "forex-general": [
-    { user: "FXPro", avatar: "FX", color: "#00AEEF", time: "9:28 AM", text: "EUR/USD bouncing off 1.0820 support. Long scalp setup", badge: "Pro" },
-    { user: "PipHunter", avatar: "PH", color: "#4DC820", time: "9:30 AM", text: "DXY showing weakness. Risk-on pairs should benefit today" },
-    { user: "CentralBankWatch", avatar: "CB", color: "#F79009", time: "9:32 AM", text: "Fed speakers today at 2pm. USD could get volatile", badge: "Elite" },
-    { user: "FXPro", avatar: "FX", color: "#00AEEF", time: "9:35 AM", text: "GBP/USD breaking down — UK data miss. Watching 1.2600 as next support", badge: "Pro" },
-  ],
-  "crypto-general": [
-    { user: "CryptoWhale", avatar: "CW", color: "#7B2FBE", time: "9:25 AM", text: "BTC holding 68k. ETF inflows still strong. Bullish structure intact 🚀", badge: "Elite" },
-    { user: "AltSeason", avatar: "AS", color: "#4DC820", time: "9:27 AM", text: "SOL ripping +5% today. Ecosystem activity is insane right now" },
-    { user: "OnChainAnalyst", avatar: "OC", color: "#00AEEF", time: "9:29 AM", text: "BTC exchange outflows at 3-month high. Supply shock incoming?", badge: "Pro" },
-    { user: "CryptoWhale", avatar: "CW", color: "#7B2FBE", time: "9:31 AM", text: "Watching 70k as the next resistance. Break above = price discovery mode", badge: "Elite" },
-    { user: "DeFiDegen", avatar: "DD", color: "#F79009", time: "9:33 AM", text: "AVAX pumping on ecosystem news. Check the TVL growth 📊" },
-    { user: "AltSeason", avatar: "AS", color: "#4DC820", time: "9:35 AM", text: "XRP lagging the market. SEC news overhang still weighing on it" },
-    { user: "CryptoWhale", avatar: "CW", color: "#7B2FBE", time: "9:38 AM", text: "LINK breaking out of a 3-month consolidation on the daily. Watching closely 👀", badge: "Elite" },
-  ],
-  "crypto-btc": [
-    { user: "BitcoinMaxi", avatar: "BM", color: "#F79009", time: "9:20 AM", text: "Halving in 12 days. Historically price peaks 6-12 months after. We're early.", badge: "Elite" },
-    { user: "OnChainAnalyst", avatar: "OC", color: "#00AEEF", time: "9:22 AM", text: "MVRV ratio at 2.1 — historically mid-bull territory. Not overheated yet", badge: "Pro" },
-    { user: "BitcoinMaxi", avatar: "BM", color: "#F79009", time: "9:25 AM", text: "Blackrock IBIT had $400M inflows yesterday. Institutional demand is relentless", badge: "Elite" },
-    { user: "CryptoWhale", avatar: "CW", color: "#7B2FBE", time: "9:28 AM", text: "Key levels: 68k support, 70k resistance, 72k ATH. Clean range.", badge: "Elite" },
-  ],
-};
 
 // ─── CheatCode ALGO Signal Panel ─────────────────────────────────────────────
 function AlgoSignalPanel({ symbol }: { symbol: string }) {
@@ -467,45 +420,46 @@ function WatchlistPanel({ mode, onSelectSymbol, activeSymbol }: {
 }) {
   const config = MARKET_MODES[mode];
   const [search, setSearch] = useState("");
-  const [liveWatchlist, setLiveWatchlist] = useState(config.watchlist);
 
-  // Fetch live prices for stocks mode
-  useEffect(() => {
-    if (mode !== "stocks") { setLiveWatchlist(config.watchlist); return; }
-    const symbols = config.watchlist.map(w => w.symbol).join(",");
-    import("@/lib/api").then(({ fetchQuotes }) => {
-      fetchQuotes(symbols).then((quotes: any[]) => {
-        if (!quotes?.length) return;
-        const qmap = Object.fromEntries(quotes.map(q => [q.symbol, q]));
-        setLiveWatchlist(config.watchlist.map(w => {
-          const q = qmap[w.symbol];
-          if (!q) return w;
-          return {
-            ...w,
-            price: `$${q.price.toFixed(2)}`,
-            change: q.change >= 0 ? `+${q.change.toFixed(2)}` : q.change.toFixed(2),
-            pct: q.change_pct >= 0 ? `+${q.change_pct.toFixed(2)}%` : `${q.change_pct.toFixed(2)}%`,
-            up: q.change_pct >= 0,
-          };
-        }));
-      }).catch(() => {});
+  // Extract raw symbol list for this mode
+  const symbolList = config.watchlist.map(w => w.symbol);
+
+  // Fetch live prices via tRPC → EODHD (server-side, API key stays hidden)
+  const { data: quotesData, isLoading: quotesLoading } = trpc.marketData.quotes.useQuery(
+    { symbols: symbolList },
+    {
+      refetchInterval: 30_000, // refresh every 30s
+      staleTime: 25_000,
+      retry: 2,
+    }
+  );
+
+  // Merge live quotes into watchlist items
+  const liveWatchlist = (() => {
+    if (!quotesData?.length) return config.watchlist;
+    const qmap = Object.fromEntries(quotesData.map((q: any) => [q.symbol, q]));
+    return config.watchlist.map(w => {
+      const q = qmap[w.symbol];
+      if (!q) return w;
+      const price = q.price ?? 0;
+      const change = q.change ?? 0;
+      const pct = q.changePercent ?? 0;
+      const fmtPrice = mode === "forex"
+        ? price.toFixed(4)
+        : mode === "crypto"
+        ? price >= 1000 ? price.toLocaleString("en-US", { maximumFractionDigits: 2 })
+          : price >= 1 ? price.toFixed(2)
+          : price.toFixed(4)
+        : `$${price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+      return {
+        ...w,
+        price: fmtPrice,
+        change: change >= 0 ? `+${change.toFixed(2)}` : change.toFixed(2),
+        pct: pct >= 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`,
+        up: pct >= 0,
+      };
     });
-    // Refresh every 30s
-    const interval = setInterval(() => {
-      import("@/lib/api").then(({ fetchQuotes }) => {
-        fetchQuotes(symbols).then((quotes: any[]) => {
-          if (!quotes?.length) return;
-          const qmap = Object.fromEntries(quotes.map(q => [q.symbol, q]));
-          setLiveWatchlist(prev => prev.map(w => {
-            const q = qmap[w.symbol];
-            if (!q) return w;
-            return { ...w, price: `$${q.price.toFixed(2)}`, change: q.change >= 0 ? `+${q.change.toFixed(2)}` : q.change.toFixed(2), pct: q.change_pct >= 0 ? `+${q.change_pct.toFixed(2)}%` : `${q.change_pct.toFixed(2)}%`, up: q.change_pct >= 0 };
-          }));
-        }).catch(() => {});
-      });
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [mode]);
+  })();
 
   const filtered = liveWatchlist.filter(w =>
     w.symbol.toLowerCase().includes(search.toLowerCase()) ||
@@ -830,7 +784,7 @@ function MobileTerminalTabs({ mode, onSelectSymbol, activeSymbol, isLoggedIn }: 
   activeSymbol: string;
   isLoggedIn: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<"watchlist" | "chat">("watchlist");
+  const [activeTab, setActiveTab] = useState<"watchlist" | "chat">("chat");
   const config = MARKET_MODES[mode];
 
   return (

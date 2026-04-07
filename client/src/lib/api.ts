@@ -397,6 +397,13 @@ export async function fetchLeaderboard(sort = "xp"): Promise<any[]> {
   return apiFetch(`/profile/leaderboard?sort=${sort}`);
 }
 
+export async function fetchUserPosts(handle: string, page = 1): Promise<any[]> {
+  // Fetch posts for a specific user handle
+  return apiFetch<any[]>(`/social/feed?author=${handle}&page=${page}`).catch(() =>
+    apiFetch<any[]>(`/social/feed?tab=discover&page=${page}`)
+  );
+}
+
 // ── Journal ─────────────────────────────────────────────────────────────────
 
 export async function fetchJournalEntries(params?: { ticker?: string; outcome?: string; page?: number }): Promise<any[]> {
