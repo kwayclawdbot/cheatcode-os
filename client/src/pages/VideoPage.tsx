@@ -10,13 +10,180 @@ import {
   TrendingDown, Minus, BookOpen, BarChart2, Brain,
   AlertTriangle, Lightbulb, Target, Wifi
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchContentDetail, fetchContent, normalizeContentCard, trackEvent } from "@/lib/api";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
 import { trpc } from "@/lib/trpc";
+import { useVideoComments } from "@/hooks/useVideoComments";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
+import { getLoginUrl } from "@/const";
+import { MessageCircle, Send, ThumbsUp, Trash2 } from "lucide-react";
+
+// ─── VideoCommentSection ─────────────────────────────────────────────────────
+
+function VideoCommentSection({ videoId }: { videoId: string }) {
+  const { user, isAuthenticated } = useSupabaseAuth();
+  const { comments, connected, postComment, likeComment, deleteComment, isPosting } = useVideoComments(videoId);
+  const [text, setText] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [comments.length]);
+
+  const handleSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || isPosting || !user) return;
+    const initials = (user.email || user.user_metadata?.full_name || "?").slice(0, 2).toUpperCase();
+    const colors = ["#12B76A", "#2E90FA", "#F79009", "#E8193C", "#7C3AED", "#0EA5E9", "#D946EF"];
+    const colorIdx = user.id.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % colors.length;
+    await postComment({
+      body: trimmed,
+      username: user.user_metadata?.full_name || user.email?.split("@")[0] || "Trader",
+      avatarInitials: initials,
+      avatarColor: colors[colorIdx],
+    });
+    setText("");
+  };
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const getAvatar = (userId: string, username: string) => {
+    const colors = ["#12B76A", "#2E90FA", "#F79009", "#E8193C", "#7C3AED", "#0EA5E9", "#D946EF"];
+    const idx = userId.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % colors.length;
+    return { color: colors[idx], initials: (username || "?").slice(0, 2).toUpperCase() };
+  };
+
+  const formatTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-border bg-card">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+        <span className="font-semibold text-sm text-foreground flex items-center gap-2">
+          <MessageCircle size={14} className="text-[#00AEEF]" />
+          Community Discussion
+          {comments.length > 0 && (
+            <span className="text-xs text-muted-foreground font-normal">({comments.length})</span>
+          )}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-[#4DC820]" : "bg-muted-foreground"}`} />
+          <span className="text-[10px] text-muted-foreground">{connected ? "Live" : "Offline"}</span>
+        </div>
+      </div>
+
+      {/* Comment list */}
+      <div className="max-h-80 overflow-y-auto">
+        {comments.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <MessageCircle size={24} className="text-muted-foreground mx-auto mb-2 opacity-40" />
+            <p className="text-sm text-muted-foreground">No comments yet. Be the first to share your take.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {comments.map((msg) => {
+              const isOwn = user?.id === String(msg.userId);
+              return (
+                <div key={msg.id} className="flex gap-3 px-5 py-3.5 group/comment hover:bg-muted/30 transition-colors">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5"
+                    style={{ backgroundColor: msg.avatarColor || "#667085" }}
+                  >
+                    {msg.avatarInitials || "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-xs font-semibold text-foreground">{msg.username}</span>
+                      <span className="text-[10px] text-muted-foreground">{formatTime(typeof msg.createdAt === "string" ? new Date(msg.createdAt).getTime() : msg.createdAt instanceof Date ? msg.createdAt.getTime() : msg.createdAt)}</span>
+                    </div>
+                    <p className="text-sm text-foreground leading-relaxed">{msg.body}</p>
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <button
+                        onClick={() => likeComment(msg.id)}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#4DC820] transition-colors"
+                      >
+                        <ThumbsUp size={10} />
+                        {msg.likeCount > 0 && msg.likeCount}
+                      </button>
+                      {isOwn && (
+                        <button
+                          onClick={() => deleteComment(msg.id)}
+                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#E8193C] transition-colors opacity-0 group-hover/comment:opacity-100"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-border px-4 py-3">
+        {isAuthenticated ? (
+          <div className="flex gap-2 items-end">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+              style={{ backgroundColor: user ? getAvatar(user.id, user.email || "").color : "#667085" }}
+            >
+              {user?.email?.slice(0, 2).toUpperCase() ?? "?"}
+            </div>
+            <div className="flex-1 flex gap-2">
+              <textarea
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onKeyDown={handleKey}
+                placeholder="Share your take on this video..."
+                rows={1}
+                className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:ring-1 focus:ring-[#00AEEF]/40 min-h-[36px] max-h-24"
+                style={{ overflowY: text.includes("\n") || text.length > 80 ? "auto" : "hidden" }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!text.trim() || isPosting}
+                className="w-9 h-9 rounded-xl flex items-center justify-center cc-gradient-bg text-[#101828] disabled:opacity-40 transition-opacity flex-shrink-0"
+              >
+                <Send size={13} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Sign in to join the discussion</p>
+            <a
+              href={getLoginUrl()}
+              className="text-xs font-semibold text-[#00AEEF] hover:underline"
+            >
+              Sign In
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Helper Components ────────────────────────────────────────────────────────
 
@@ -646,6 +813,8 @@ export default function VideoPage() {
                 </div>
               </CollapsibleSection>
             )}
+            {/* ── Community Discussion ─────────────────────────────────── */}
+            <VideoCommentSection videoId={video.id} />
           </div>
 
           {/* ── Sidebar ─────────────────────────────────────────────────── */}

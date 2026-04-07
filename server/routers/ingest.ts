@@ -222,6 +222,96 @@ async function railwayGet(path: string, supabaseToken: string) {
   return resp.json();
 }
 
+// ─── YouTube niche search ───────────────────────────────────────────────────
+
+const NICHE_QUERIES: Record<string, string[]> = {
+  stocks: [
+    "stock market analysis",
+    "best stocks to buy now",
+    "stock trading strategy",
+    "technical analysis stocks",
+    "stock market education",
+  ],
+  forex: [
+    "forex trading strategy",
+    "forex technical analysis",
+    "best forex pairs to trade",
+    "forex market analysis",
+    "forex trading education",
+  ],
+  futures: [
+    "futures trading strategy",
+    "ES NQ futures trading",
+    "futures market analysis",
+    "day trading futures",
+    "futures technical analysis",
+  ],
+  crypto: [
+    "crypto trading strategy",
+    "bitcoin technical analysis",
+    "altcoin trading",
+    "crypto market analysis",
+    "crypto trading education",
+  ],
+  options: [
+    "options trading strategy",
+    "options flow analysis",
+    "how to trade options",
+    "options technical analysis",
+    "options trading education",
+  ],
+  trading: [
+    "trading strategy 2025",
+    "day trading tips",
+    "swing trading strategy",
+    "trading psychology",
+    "how to trade stocks",
+  ],
+};
+
+async function youtubeSearch(query: string, maxResults = 10): Promise<Array<{
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  publishedAt: string;
+  thumbnailUrl: string;
+  description: string;
+}>> {
+  const apiKey = ENV.youtubeApiKey;
+  if (!apiKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "YOUTUBE_API_KEY not configured" });
+  const url = new URL("https://www.googleapis.com/youtube/v3/search");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("q", query);
+  url.searchParams.set("type", "video");
+  url.searchParams.set("videoDuration", "medium");
+  url.searchParams.set("order", "relevance");
+  url.searchParams.set("maxResults", String(maxResults));
+  url.searchParams.set("relevanceLanguage", "en");
+  url.searchParams.set("key", apiKey);
+  const resp = await fetch(url.toString());
+  if (!resp.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `YouTube search failed: ${resp.status}` });
+  const data = await resp.json() as {
+    items?: Array<{
+      id: { videoId: string };
+      snippet: {
+        title: string;
+        channelTitle: string;
+        publishedAt: string;
+        thumbnails: { high?: { url: string }; medium?: { url: string } };
+        description: string;
+      };
+    }>;
+  };
+  return (data.items ?? []).map(item => ({
+    videoId: item.id.videoId,
+    title: item.snippet.title,
+    channelTitle: item.snippet.channelTitle,
+    publishedAt: item.snippet.publishedAt,
+    thumbnailUrl: item.snippet.thumbnails.high?.url ?? item.snippet.thumbnails.medium?.url ?? "",
+    description: item.snippet.description,
+  }));
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const ingestRouter = router({
@@ -446,5 +536,66 @@ export const ingestRouter = router({
         qualityScore: llmResult.score ?? Math.round(((detail.relevance_score as number | null) ?? 0) * 100),
         contentType: llmResult.contentType ?? (detail.content_type as string | null) ?? "trading_education",
       };
+    }),
+
+  /**
+   * Search YouTube by trading niche and return video candidates for review.
+   * Does NOT run quality filter — returns raw search results for the admin to preview.
+   */
+  searchByNiche: protectedProcedure
+    .input(
+      z.object({
+        niche: z.enum(["stocks", "forex", "futures", "crypto", "options", "trading"]),
+        query: z.string().max(200).optional(), // custom query override
+        maxResults: z.number().min(5).max(50).default(20),
+      })
+    )
+    .query(async ({ input }) => {
+      const queries = input.query
+        ? [input.query]
+        : NICHE_QUERIES[input.niche] ?? NICHE_QUERIES.trading;
+      // Use the first query by default, or rotate based on niche
+      const q = queries[0];
+      const results = await youtubeSearch(q, input.maxResults);
+      return {
+        niche: input.niche,
+        query: q,
+        results,
+      };
+    }),
+
+  /**
+   * Bulk analyse multiple video IDs — runs quality filter on each.
+   * Returns pass/fail results for admin review before bulk submit.
+   */
+  bulkAnalyse: protectedProcedure
+    .input(
+      z.object({
+        videoIds: z.array(z.string().min(1).max(50)).min(1).max(20),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const results = await Promise.allSettled(
+        input.videoIds.map(async (videoId) => {
+          const video = await fetchYouTubeVideo(videoId);
+          if (video.durationSeconds > 0 && video.durationSeconds < 180) {
+            return { videoId, video, quality: null, skipped: true, skipReason: "Under 3 minutes" };
+          }
+          const quality = await runQualityFilter(video);
+          return { videoId, video, quality, skipped: false, skipReason: null };
+        })
+      );
+      return results.map((r, i) => {
+        if (r.status === "rejected") {
+          return {
+            videoId: input.videoIds[i],
+            video: null,
+            quality: null,
+            skipped: true,
+            skipReason: r.reason instanceof Error ? r.reason.message : "Unknown error",
+          };
+        }
+        return r.value;
+      });
     }),
 });

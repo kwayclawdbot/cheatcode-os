@@ -208,9 +208,24 @@ export const chatMessages = mysqlTable("chat_messages", {
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
+// ─── Video Comments ─────────────────────────────────────────────────────────────
+export const videoComments = mysqlTable("video_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  videoId: varchar("videoId", { length: 128 }).notNull(),
+  userId: int("userId").notNull(),
+  username: varchar("username", { length: 64 }).notNull(),
+  avatarInitials: varchar("avatarInitials", { length: 4 }).notNull(),
+  avatarColor: varchar("avatarColor", { length: 16 }).notNull(),
+  body: text("body").notNull(),
+  replyToId: int("replyToId"),
+  likeCount: int("likeCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type VideoComment = typeof videoComments.$inferSelect;
+export type InsertVideoComment = typeof videoComments.$inferInsert;
 
-// ─── Coach Applications ───────────────────────────────────────────────────────
-export const coachApplications = mysqlTable("coach_applications", {
+// ─── Coach Applications ─────────────────────────────────────────────────────────
+export const coachApplications= mysqlTable("coach_applications", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),

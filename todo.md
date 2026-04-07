@@ -141,3 +141,14 @@
 - [x] VideoPage: topic/tag pills + pill badges + skill level badge + content type badge in header
 - [x] VideoPage: Watch Next shelf in sidebar (from Railway related or fallback to top content)
 - [x] tRPC ingest.getVideoEnrichment procedure (fetch from Railway + on-demand LLM if not cached)
+
+## Video Comments + Niche Ingestion (Apr 7 #9)
+- [x] VideoPage: real-time comment section below video player (Supabase Realtime broadcast)
+- [x] Video comments: DB schema (videoComments table), tRPC procedures (list, post, delete, like)
+- [x] Video comments: auth-gated input (sign in to comment), optimistic updates
+- [x] Video comments: like/reply threading (flat thread, reply-to supported)
+- [x] Admin ingestion: rebuild UI to search by niche/topic (stocks, forex, futures, crypto, trading)
+- [x] Admin ingestion: YouTube Data API search by query/niche with configurable result count
+- [x] Admin ingestion: quality filter table showing pass/fail per video before bulk submit
+- [x] Admin ingestion: bulk submit approved videos to Railway content API
+- [x] Admin ingestion: niche presets (stocks/forex/futures/crypto/options/general with custom query override)

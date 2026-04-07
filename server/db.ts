@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, profiles, chatMessages, InsertChatMessage } from "../drizzle/schema";
+import { InsertUser, users, profiles, chatMessages, InsertChatMessage, videoComments, InsertVideoComment, VideoComment } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -128,6 +128,52 @@ export async function saveChatMessage(msg: InsertChatMessage) {
   if (!db) return null;
   const result = await db.insert(chatMessages).values(msg);
   return result;
+}
+
+// ─── Video Comment helpers ─────────────────────────────────────────────────────────
+
+export async function getVideoComments(videoId: string, limit = 100): Promise<VideoComment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(videoComments)
+    .where(eq(videoComments.videoId, videoId))
+    .orderBy(desc(videoComments.createdAt))
+    .limit(limit);
+  return rows.reverse(); // oldest first
+}
+
+export async function saveVideoComment(comment: InsertVideoComment): Promise<VideoComment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [result] = await db.insert(videoComments).values(comment);
+  const insertId = (result as any).insertId as number;
+  const [inserted] = await db.select().from(videoComments).where(eq(videoComments.id, insertId));
+  return inserted ?? null;
+}
+
+export async function getVideoCommentById(commentId: number): Promise<VideoComment | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [comment] = await db.select().from(videoComments).where(eq(videoComments.id, commentId));
+  return comment ?? null;
+}
+
+export async function deleteVideoComment(commentId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(videoComments).where(eq(videoComments.id, commentId));
+}
+
+export async function likeVideoComment(commentId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [comment] = await db.select().from(videoComments).where(eq(videoComments.id, commentId));
+  if (!comment) return 0;
+  const newCount = comment.likeCount + 1;
+  await db.update(videoComments).set({ likeCount: newCount }).where(eq(videoComments.id, commentId));
+  return newCount;
 }
 
 // TODO: add feature queries here as your schema grows.

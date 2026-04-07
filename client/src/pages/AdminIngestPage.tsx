@@ -2,66 +2,110 @@
  * AdminIngestPage — /admin/ingest
  *
  * YouTube video ingestion pipeline UI:
- * - Submit a YouTube URL for quality analysis + ingestion
- * - Preview enriched metadata (tickers, tags, topics, pill badges)
- * - Trigger full curation cycle on Railway
- * - View curation queue
+ * - Search top videos by trading niche (stocks, forex, futures, crypto, options, general trading)
+ * - Custom query override for targeted searches
+ * - Bulk quality filter: select videos → run LLM analysis → see pass/fail with scores
+ * - Submit approved videos to Railway content pipeline
+ * - Single URL submission for one-off ingestion
  *
  * Requires: Supabase auth + tier = "admin" in profiles table
  */
-
-import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useState, useMemo } from "react";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Youtube,
   CheckCircle2,
   XCircle,
   Loader2,
-  Play,
-  RefreshCw,
+  Search,
   Tag,
   TrendingUp,
   AlertTriangle,
-  ChevronRight,
   Clock,
-  Eye,
-  ThumbsUp,
   Zap,
   BarChart2,
+  Filter,
+  Send,
+  PlayCircle,
+  Globe,
+  DollarSign,
+  Bitcoin,
+  Activity,
+  Layers,
 } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { getLoginUrl } from "@/const";
-import { useLocation } from "wouter";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type SearchResult = {
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  publishedAt: string;
+  thumbnailUrl: string;
+  description: string;
+};
+
+type AnalysisResult = {
+  videoId: string;
+  video: {
+    title: string;
+    channelTitle: string;
+    durationSeconds: number;
+    viewCount: number;
+    thumbnailUrl: string;
+  } | null;
+  quality: {
+    passes: boolean;
+    score: number;
+    reason: string;
+    contentType: string;
+    skillLevel: string;
+    topics: string[];
+    tickers: Array<{ symbol: string; sentiment: string; context: string; isPrimary: boolean }>;
+    quickTake: string;
+    keyInsights: Array<{ insight: string; category: string }>;
+    pillBadges: string[];
+    tags: string[];
+  } | null;
+  skipped: boolean;
+  skipReason: string | null;
+};
+
+// ─── Niche config ─────────────────────────────────────────────────────────────
+
+const NICHES = [
+  { id: "stocks" as const, label: "Stocks", icon: TrendingUp, color: "#12B76A" },
+  { id: "forex" as const, label: "Forex", icon: Globe, color: "#2E90FA" },
+  { id: "futures" as const, label: "Futures", icon: Activity, color: "#F79009" },
+  { id: "crypto" as const, label: "Crypto", icon: Bitcoin, color: "#F04438" },
+  { id: "options" as const, label: "Options", icon: Layers, color: "#7C3AED" },
+  { id: "trading" as const, label: "General", icon: DollarSign, color: "#0EA5E9" },
+];
 
 // ─── Score Ring ───────────────────────────────────────────────────────────────
+
 function ScoreRing({ score }: { score: number }) {
   const color =
     score >= 85 ? "#4DC820" : score >= 70 ? "#F79009" : score >= 50 ? "#F04438" : "#667085";
   return (
     <div
-      className="flex items-center justify-center rounded-full text-lg font-black"
+      className="flex items-center justify-center rounded-full flex-shrink-0"
       style={{
-        width: 64,
-        height: 64,
+        width: 48,
+        height: 48,
         background: `conic-gradient(${color} ${score * 3.6}deg, #1e2a3a ${score * 3.6}deg)`,
-        boxShadow: `0 0 16px ${color}44`,
       }}
     >
       <div
-        className="flex items-center justify-center rounded-full text-sm font-bold"
-        style={{ width: 48, height: 48, background: "#0d1117", color }}
+        className="flex items-center justify-center rounded-full text-xs font-black"
+        style={{ width: 36, height: 36, background: "#0d1117", color }}
       >
         {score}
       </div>
@@ -69,550 +113,568 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-// ─── Ticker Badge ─────────────────────────────────────────────────────────────
-function TickerBadge({
-  symbol,
-  sentiment,
-  isPrimary,
+// ─── Format helpers ───────────────────────────────────────────────────────────
+
+function fmtDuration(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function fmtViews(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return String(n);
+}
+
+// ─── Search Result Card ───────────────────────────────────────────────────────
+
+function SearchResultCard({
+  result,
+  selected,
+  onToggle,
+  analysis,
 }: {
-  symbol: string;
-  sentiment: string;
-  isPrimary: boolean;
+  result: SearchResult;
+  selected: boolean;
+  onToggle: () => void;
+  analysis?: AnalysisResult;
 }) {
-  const color =
-    sentiment === "bullish" ? "#4DC820" : sentiment === "bearish" ? "#F04438" : "#667085";
+  const passes = analysis?.quality?.passes;
+  const score = analysis?.quality?.score ?? 0;
+
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold"
-      style={{
-        background: `${color}22`,
-        color,
-        border: `1px solid ${color}44`,
-        fontFamily: "var(--font-mono)",
-      }}
+    <div
+      onClick={onToggle}
+      className={`relative rounded-xl border cursor-pointer transition-all ${
+        selected ? "border-[#00AEEF] bg-[#00AEEF]/5" : "border-border bg-card hover:border-muted-foreground/40"
+      }`}
     >
-      {isPrimary && <Zap size={9} />}
-      {symbol}
-    </span>
+      <div className={`absolute top-3 right-3 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+        selected ? "border-[#00AEEF] bg-[#00AEEF]" : "border-muted-foreground/40"
+      }`}>
+        {selected && <CheckCircle2 size={12} className="text-white" />}
+      </div>
+
+      <div className="flex gap-3 p-3">
+        <div className="relative flex-shrink-0 rounded-lg overflow-hidden" style={{ width: 120, height: 68 }}>
+          <img
+            src={result.thumbnailUrl}
+            alt={result.title}
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&q=60"; }}
+          />
+          {analysis && (
+            <div className="absolute top-1 left-1">
+              {analysis.skipped ? (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-800/80 text-gray-300">SKIP</span>
+              ) : passes ? (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#4DC820]/90 text-white">PASS</span>
+              ) : (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#E8193C]/90 text-white">FAIL</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0 pr-6">
+          <p className="text-xs font-semibold text-foreground line-clamp-2 leading-snug mb-1">{result.title}</p>
+          <p className="text-[10px] text-muted-foreground mb-1.5">{result.channelTitle}</p>
+          {analysis?.video && (
+            <div className="flex items-center gap-2">
+              <ScoreRing score={score} />
+              <div>
+                <p className="text-[10px] text-muted-foreground line-clamp-2">{analysis.quality?.reason}</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {analysis.quality?.pillBadges?.slice(0, 2).map(b => (
+                    <span key={b} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{b}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          {!analysis && (
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <Clock size={10} />
+              <span>{new Date(result.publishedAt).toLocaleDateString()}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function AdminIngestPage() {
-  const { user, isAuthenticated, loading } = useAuth();
-  const [, navigate] = useLocation();
-  const [url, setUrl] = useState("");
-  const [forceIngest, setForceIngest] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const [submitResult, setSubmitResult] = useState<any>(null);
-  const [activeView, setActiveView] = useState<"submit" | "queue">("submit");
+  const { isAuthenticated, accessToken } = useSupabaseAuth();
 
-  // Get Supabase token from localStorage
-  const supabaseToken =
-    typeof window !== "undefined"
-      ? localStorage.getItem("sb-access-token") ?? ""
-      : "";
+  // Niche search state
+  const [selectedNiche, setSelectedNiche] = useState<"stocks" | "forex" | "futures" | "crypto" | "options" | "trading">("stocks");
+  const [customQuery, setCustomQuery] = useState("");
+  const [searchEnabled, setSearchEnabled] = useState(false);
 
-  // tRPC mutations
-  const analyseMutation = trpc.ingest.analyseVideo.useMutation({
-    onSuccess: (data) => {
-      setAnalysisResult(data);
-      setSubmitResult(null);
-    },
-  });
+  // Selection + analysis state
+  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
+  const [analysisResults, setAnalysisResults] = useState<Map<string, AnalysisResult>>(new Map());
+  const [isAnalysing, setIsAnalysing] = useState(false);
 
-  const submitMutation = trpc.ingest.submitVideo.useMutation({
-    onSuccess: (data) => {
-      setSubmitResult(data);
-    },
-  });
+  // Single URL submission state
+  const [singleUrl, setSingleUrl] = useState("");
+  const [singleResult, setSingleResult] = useState<AnalysisResult | null>(null);
+  const [singleLoading, setSingleLoading] = useState(false);
 
-  const curationMutation = trpc.ingest.triggerCuration.useMutation();
-  const ingestionMutation = trpc.ingest.triggerIngestion.useMutation();
+  // Submit state
+  const [submitting, setSubmitting] = useState<Set<string>>(new Set());
+  const [submitted, setSubmitted] = useState<Set<string>>(new Set());
 
-  // Queue query
-  const queueQuery = trpc.ingest.getQueue.useQuery(
-    { supabaseToken, status: "pending" },
-    { enabled: activeView === "queue" && !!supabaseToken }
+  // Stable query input
+  const searchInput = useMemo(() => ({
+    niche: selectedNiche,
+    query: customQuery.trim() || undefined,
+    maxResults: 20,
+  }), [selectedNiche, customQuery]);
+
+  const { data: searchData, isLoading: searchLoading, refetch: refetchSearch } = trpc.ingest.searchByNiche.useQuery(
+    searchInput,
+    { enabled: searchEnabled, staleTime: 60_000 }
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0d1117" }}>
-        <Loader2 className="animate-spin text-[#4DC820]" size={32} />
-      </div>
-    );
-  }
+  const bulkAnalyseMutation = trpc.ingest.bulkAnalyse.useMutation();
+  const submitVideoMutation = trpc.ingest.submitVideo.useMutation();
+  const analyseVideoMutation = trpc.ingest.analyseVideo.useMutation();
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: "#0d1117" }}>
-        <p className="text-white text-lg font-semibold">Sign in to access the ingestion panel</p>
-        <Button onClick={() => (window.location.href = getLoginUrl())}>
-          Sign In
-        </Button>
+      <div className="min-h-screen bg-background flex flex-col">
+        <Nav />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <AlertTriangle size={40} className="text-[#F79009] mx-auto mb-3" />
+            <h2 className="text-lg font-bold text-foreground mb-2">Admin Access Required</h2>
+            <p className="text-sm text-muted-foreground mb-4">Sign in with an admin account to access the ingestion pipeline.</p>
+            <Button onClick={() => { window.location.href = getLoginUrl(); }}>Sign In</Button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const handleAnalyse = () => {
-    if (!url.trim()) return;
-    setAnalysisResult(null);
-    setSubmitResult(null);
-    analyseMutation.mutate({ urlOrId: url.trim() });
+  const handleSearch = () => {
+    setSearchEnabled(true);
+    setSelectedVideoIds(new Set());
+    setAnalysisResults(new Map());
+    if (searchEnabled) refetchSearch();
   };
 
-  const handleSubmit = () => {
-    if (!url.trim() || !supabaseToken) return;
-    submitMutation.mutate({ urlOrId: url.trim(), supabaseToken, forceIngest });
+  const toggleSelect = (videoId: string) => {
+    setSelectedVideoIds(prev => {
+      const next = new Set(prev);
+      if (next.has(videoId)) next.delete(videoId);
+      else next.add(videoId);
+      return next;
+    });
   };
 
-  const quality = analysisResult?.quality;
-  const video = analysisResult?.video;
+  const handleBulkAnalyse = async () => {
+    if (selectedVideoIds.size === 0) return;
+    setIsAnalysing(true);
+    try {
+      const results = await bulkAnalyseMutation.mutateAsync({ videoIds: Array.from(selectedVideoIds) });
+      const map = new Map<string, AnalysisResult>(analysisResults);
+      for (const r of results) {
+        if (r.videoId) map.set(r.videoId, r as AnalysisResult);
+      }
+      setAnalysisResults(map);
+    } finally {
+      setIsAnalysing(false);
+    }
+  };
+
+  const handleSubmitVideo = async (videoId: string) => {
+    if (!accessToken) return;
+    setSubmitting(prev => new Set(prev).add(videoId));
+    try {
+      await submitVideoMutation.mutateAsync({ urlOrId: videoId, supabaseToken: accessToken, forceIngest: false });
+      setSubmitted(prev => new Set(prev).add(videoId));
+    } catch (e) {
+      console.error("Submit failed", e);
+    } finally {
+      setSubmitting(prev => { const n = new Set(prev); n.delete(videoId); return n; });
+    }
+  };
+
+  const handleSingleAnalyse = async () => {
+    if (!singleUrl.trim()) return;
+    setSingleLoading(true);
+    setSingleResult(null);
+    try {
+      const result = await analyseVideoMutation.mutateAsync({ urlOrId: singleUrl.trim() });
+      setSingleResult(result as AnalysisResult);
+    } finally {
+      setSingleLoading(false);
+    }
+  };
+
+  const handleSingleSubmit = async () => {
+    if (!singleResult || !accessToken) return;
+    setSubmitting(prev => new Set(prev).add(singleResult.videoId));
+    try {
+      await submitVideoMutation.mutateAsync({ urlOrId: singleResult.videoId, supabaseToken: accessToken, forceIngest: false });
+      setSubmitted(prev => new Set(prev).add(singleResult.videoId));
+    } finally {
+      setSubmitting(prev => { const n = new Set(prev); n.delete(singleResult.videoId); return n; });
+    }
+  };
+
+  const passedVideos = Array.from(analysisResults.values()).filter(r => r.quality?.passes);
+  const failedVideos = Array.from(analysisResults.values()).filter(r => !r.quality?.passes && !r.skipped);
+  const searchResults = searchData?.results ?? [];
 
   return (
-    <div className="min-h-screen" style={{ background: "#0d1117", color: "#e2e8f0" }}>
+    <div className="min-h-screen bg-background">
       <Nav />
-
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #E8193C, #7B2FBE)" }}
-          >
-            <Youtube size={20} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>
-              Content Ingestion
-            </h1>
-            <p className="text-sm" style={{ color: "#667085" }}>
-              Quality-filtered YouTube ingestion pipeline
-            </p>
-          </div>
-          <div className="ml-auto flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setActiveView(activeView === "submit" ? "queue" : "submit")}
-              className="text-xs"
-              style={{ borderColor: "#1e2a3a", color: "#667085", background: "transparent" }}
-            >
-              {activeView === "submit" ? "View Queue" : "Submit Video"}
-            </Button>
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-xl cc-gradient-bg flex items-center justify-center">
+              <Youtube size={18} className="text-[#101828]" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-foreground" style={{ fontFamily: "var(--font-display)" }}>
+                Content Ingestion Pipeline
+              </h1>
+              <p className="text-xs text-muted-foreground">Search by niche → quality filter → submit to Railway</p>
+            </div>
           </div>
         </div>
 
-        {activeView === "submit" ? (
-          <>
-            {/* URL Input */}
-            <Card style={{ background: "#0d1117", border: "1px solid #1e2a3a" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Niche Search */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Niche selector */}
+            <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-white">Submit YouTube Video</CardTitle>
-                <CardDescription style={{ color: "#667085" }}>
-                  Paste a YouTube URL or video ID. The pipeline will analyse quality, extract tickers, and generate tags.
-                </CardDescription>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Search size={14} className="text-[#00AEEF]" />
+                  Search by Niche
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {NICHES.map(n => {
+                    const Icon = n.icon;
+                    return (
+                      <button
+                        key={n.id}
+                        onClick={() => setSelectedNiche(n.id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                          selectedNiche === n.id ? "text-white border-transparent" : "border-border text-muted-foreground hover:border-muted-foreground/60"
+                        }`}
+                        style={selectedNiche === n.id ? { backgroundColor: n.color, borderColor: n.color } : {}}
+                      >
+                        <Icon size={11} />
+                        {n.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="flex gap-2">
                   <Input
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://youtube.com/watch?v=... or video ID"
-                    onKeyDown={(e) => e.key === "Enter" && handleAnalyse()}
-                    style={{
-                      background: "#1a2035",
-                      border: "1px solid #1e2a3a",
-                      color: "#e2e8f0",
-                    }}
+                    value={customQuery}
+                    onChange={e => setCustomQuery(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()}
+                    placeholder={`Custom query (optional, e.g. "SPY options flow analysis")`}
+                    className="text-sm"
                   />
-                  <Button
-                    onClick={handleAnalyse}
-                    disabled={analyseMutation.isPending || !url.trim()}
-                    style={{ background: "#4DC820", color: "#0d1117" }}
-                  >
-                    {analyseMutation.isPending ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      "Analyse"
-                    )}
+                  <Button onClick={handleSearch} disabled={searchLoading} className="flex-shrink-0">
+                    {searchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                    <span className="ml-1.5">Search</span>
                   </Button>
                 </div>
-                {analyseMutation.error && (
-                  <p className="text-xs text-red-400">{analyseMutation.error.message}</p>
+              </CardContent>
+            </Card>
+
+            {/* Search results */}
+            {searchResults.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <PlayCircle size={14} className="text-[#00AEEF]" />
+                      {searchResults.length} Videos Found
+                      {selectedVideoIds.size > 0 && (
+                        <Badge variant="secondary" className="ml-1">{selectedVideoIds.size} selected</Badge>
+                      )}
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (selectedVideoIds.size === searchResults.length) {
+                            setSelectedVideoIds(new Set());
+                          } else {
+                            setSelectedVideoIds(new Set(searchResults.map(r => r.videoId)));
+                          }
+                        }}
+                        className="text-xs"
+                      >
+                        {selectedVideoIds.size === searchResults.length ? "Deselect All" : "Select All"}
+                      </Button>
+                      {selectedVideoIds.size > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={handleBulkAnalyse}
+                          disabled={isAnalysing}
+                          className="text-xs cc-gradient-bg text-[#101828] font-bold"
+                        >
+                          {isAnalysing ? (
+                            <><Loader2 size={12} className="animate-spin mr-1" />Analysing...</>
+                          ) : (
+                            <><Filter size={12} className="mr-1" />Quality Filter ({selectedVideoIds.size})</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 gap-2">
+                    {searchResults.map(result => (
+                      <SearchResultCard
+                        key={result.videoId}
+                        result={result}
+                        selected={selectedVideoIds.has(result.videoId)}
+                        onToggle={() => toggleSelect(result.videoId)}
+                        analysis={analysisResults.get(result.videoId)}
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Passed videos */}
+            {passedVideos.length > 0 && (
+              <Card className="border-[#4DC820]/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2 text-[#4DC820]">
+                    <CheckCircle2 size={14} />
+                    {passedVideos.length} Videos Passed Quality Filter
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {passedVideos.map(r => (
+                    <div key={r.videoId} className="flex items-start gap-3 p-3 rounded-xl bg-[#4DC820]/5 border border-[#4DC820]/20">
+                      <ScoreRing score={r.quality!.score} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground line-clamp-1">{r.video?.title}</p>
+                        <p className="text-[10px] text-muted-foreground mb-1">
+                          {r.video?.channelTitle} · {r.video ? fmtDuration(r.video.durationSeconds) : ""} · {r.video ? fmtViews(r.video.viewCount) : ""} views
+                        </p>
+                        <p className="text-[10px] text-foreground/70 line-clamp-2 mb-1.5">{r.quality?.quickTake}</p>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {r.quality?.pillBadges?.slice(0, 3).map(b => (
+                            <span key={b} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#4DC820]/15 text-[#4DC820]">{b}</span>
+                          ))}
+                          {r.quality?.tickers?.filter(t => t.isPrimary).slice(0, 3).map(t => (
+                            <span key={t.symbol} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{t.symbol}</span>
+                          ))}
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleSubmitVideo(r.videoId)}
+                          disabled={submitting.has(r.videoId) || submitted.has(r.videoId)}
+                          className="text-xs h-7"
+                          style={submitted.has(r.videoId) ? {} : { background: "var(--cc-gradient)", color: "#101828" }}
+                        >
+                          {submitted.has(r.videoId) ? (
+                            <><CheckCircle2 size={11} className="mr-1 text-[#4DC820]" />Submitted</>
+                          ) : submitting.has(r.videoId) ? (
+                            <><Loader2 size={11} className="animate-spin mr-1" />Submitting...</>
+                          ) : (
+                            <><Send size={11} className="mr-1" />Submit to Railway</>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Failed videos */}
+            {failedVideos.length > 0 && (
+              <Card className="border-[#E8193C]/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2 text-[#E8193C]">
+                    <XCircle size={14} />
+                    {failedVideos.length} Videos Failed Quality Filter
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {failedVideos.map(r => (
+                    <div key={r.videoId} className="flex items-center gap-3 p-3 rounded-xl bg-[#E8193C]/5 border border-[#E8193C]/15">
+                      <ScoreRing score={r.quality?.score ?? 0} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground line-clamp-1">{r.video?.title}</p>
+                        <p className="text-[10px] text-muted-foreground">{r.quality?.reason}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSubmitVideo(r.videoId)}
+                        disabled={submitting.has(r.videoId) || submitted.has(r.videoId)}
+                        className="text-[10px] h-7 flex-shrink-0"
+                      >
+                        {submitted.has(r.videoId) ? "Submitted" : "Force Submit"}
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Right: Single URL + Stats */}
+          <div className="space-y-5">
+            {/* Single URL */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Youtube size={14} className="text-[#E8193C]" />
+                  Single Video
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Input
+                  value={singleUrl}
+                  onChange={e => setSingleUrl(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSingleAnalyse()}
+                  placeholder="YouTube URL or video ID"
+                  className="text-sm"
+                />
+                <Button
+                  className="w-full text-sm cc-gradient-bg text-[#101828] font-bold"
+                  onClick={handleSingleAnalyse}
+                  disabled={singleLoading || !singleUrl.trim()}
+                >
+                  {singleLoading ? <><Loader2 size={13} className="animate-spin mr-2" />Analysing...</> : <><Zap size={13} className="mr-2" />Analyse Video</>}
+                </Button>
+
+                {singleResult && (
+                  <div className="rounded-xl border border-border p-3 space-y-2">
+                    {singleResult.skipped ? (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <AlertTriangle size={12} className="text-[#F79009]" />
+                        {singleResult.skipReason}
+                      </div>
+                    ) : singleResult.quality ? (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <ScoreRing score={singleResult.quality.score} />
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              {singleResult.quality.passes ? (
+                                <CheckCircle2 size={12} className="text-[#4DC820]" />
+                              ) : (
+                                <XCircle size={12} className="text-[#E8193C]" />
+                              )}
+                              <span className={`text-xs font-bold ${singleResult.quality.passes ? "text-[#4DC820]" : "text-[#E8193C]"}`}>
+                                {singleResult.quality.passes ? "Passes" : "Fails"} Quality Filter
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{singleResult.quality.reason}</p>
+                          </div>
+                        </div>
+                        {singleResult.quality.quickTake && (
+                          <p className="text-[10px] text-foreground/70 leading-relaxed">{singleResult.quality.quickTake}</p>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {singleResult.quality.pillBadges?.slice(0, 3).map(b => (
+                            <span key={b} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{b}</span>
+                          ))}
+                        </div>
+                        <Button
+                          size="sm"
+                          className="w-full text-xs h-8"
+                          onClick={handleSingleSubmit}
+                          disabled={submitting.has(singleResult.videoId) || submitted.has(singleResult.videoId) || !accessToken}
+                          style={submitted.has(singleResult.videoId) ? {} : { background: "var(--cc-gradient)", color: "#101828" }}
+                        >
+                          {submitted.has(singleResult.videoId) ? (
+                            <><CheckCircle2 size={11} className="mr-1 text-[#4DC820]" />Submitted</>
+                          ) : submitting.has(singleResult.videoId) ? (
+                            <><Loader2 size={11} className="animate-spin mr-1" />Submitting...</>
+                          ) : (
+                            <><Send size={11} className="mr-1" />Submit to Railway</>
+                          )}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Analysis Result */}
-            {analysisResult && !analysisResult.skipped && quality && video && (
-              <div className="mt-6 space-y-4">
-                {/* Video Header */}
-                <div className="flex gap-4 p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                  {video.thumbnailUrl && (
-                    <img
-                      src={video.thumbnailUrl}
-                      alt={video.title}
-                      className="rounded-lg object-cover flex-shrink-0"
-                      style={{ width: 140, height: 80 }}
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white text-sm leading-snug mb-1 line-clamp-2">
-                      {video.title}
-                    </p>
-                    <p className="text-xs mb-2" style={{ color: "#667085" }}>
-                      {video.channelTitle}
-                    </p>
-                    <div className="flex items-center gap-3 text-xs" style={{ color: "#667085" }}>
-                      <span className="flex items-center gap-1">
-                        <Clock size={10} />
-                        {Math.round(video.durationSeconds / 60)}m
+            {/* Stats */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <BarChart2 size={14} className="text-[#00AEEF]" />
+                  Session Stats
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {[
+                    { label: "Videos Found", value: searchResults.length, color: "#2E90FA" },
+                    { label: "Analysed", value: analysisResults.size, color: "#F79009" },
+                    { label: "Passed", value: passedVideos.length, color: "#4DC820" },
+                    { label: "Failed", value: failedVideos.length, color: "#E8193C" },
+                    { label: "Submitted", value: submitted.size, color: "#7C3AED" },
+                  ].map(stat => (
+                    <div key={stat.label} className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">{stat.label}</span>
+                      <span className="text-sm font-bold" style={{ color: stat.color }}>{stat.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* How it works */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">How It Works</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2.5">
+                  {[
+                    { step: "1", text: "Select a niche or enter a custom query" },
+                    { step: "2", text: "Search returns top YouTube results" },
+                    { step: "3", text: "Select videos and run quality filter" },
+                    { step: "4", text: "LLM scores each video 0–100 for trading relevance" },
+                    { step: "5", text: "Submit approved videos to Railway" },
+                    { step: "6", text: "Railway ingests, enriches, and publishes" },
+                  ].map(({ step, text }) => (
+                    <div key={step} className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0 mt-0.5">
+                        {step}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Eye size={10} />
-                        {video.viewCount.toLocaleString()}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <ThumbsUp size={10} />
-                        {video.likeCount.toLocaleString()}
-                      </span>
+                      <p className="text-[11px] text-muted-foreground leading-snug">{text}</p>
                     </div>
-                  </div>
-                  <ScoreRing score={quality.score} />
+                  ))}
                 </div>
-
-                {/* Quality Decision */}
-                <div
-                  className="flex items-start gap-3 p-4 rounded-xl"
-                  style={{
-                    background: quality.passes ? "#4DC82011" : "#F0443811",
-                    border: `1px solid ${quality.passes ? "#4DC82033" : "#F0443833"}`,
-                  }}
-                >
-                  {quality.passes ? (
-                    <CheckCircle2 size={18} className="text-[#4DC820] flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <XCircle size={18} className="text-[#F04438] flex-shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <p
-                      className="text-sm font-semibold mb-0.5"
-                      style={{ color: quality.passes ? "#4DC820" : "#F04438" }}
-                    >
-                      {quality.passes ? "Passes Quality Filter" : "Does Not Pass Quality Filter"}
-                    </p>
-                    <p className="text-xs" style={{ color: "#94a3b8" }}>
-                      {quality.reason}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Quick Take */}
-                {quality.quickTake && (
-                  <div className="p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                    <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
-                      Quick Take
-                    </p>
-                    <p className="text-sm leading-relaxed" style={{ color: "#cbd5e1" }}>
-                      {quality.quickTake}
-                    </p>
-                  </div>
-                )}
-
-                {/* Tickers */}
-                {quality.tickers?.length > 0 && (
-                  <div className="p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                    <p className="text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: "#667085" }}>
-                      <TrendingUp size={11} /> Tickers Mentioned
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {quality.tickers.map((t: any) => (
-                        <div key={t.symbol} className="flex flex-col gap-0.5">
-                          <TickerBadge
-                            symbol={t.symbol}
-                            sentiment={t.sentiment}
-                            isPrimary={t.isPrimary}
-                          />
-                          {t.context && (
-                            <p className="text-[9px] max-w-[100px] truncate" style={{ color: "#667085" }}>
-                              {t.context}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Topics + Pill Badges */}
-                <div className="grid grid-cols-2 gap-3">
-                  {quality.topics?.length > 0 && (
-                    <div className="p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
-                        Topics
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {quality.topics.map((t: string) => (
-                          <Badge
-                            key={t}
-                            variant="secondary"
-                            className="text-[10px]"
-                            style={{ background: "#1e2a3a", color: "#94a3b8" }}
-                          >
-                            {t.replace(/_/g, " ")}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {quality.pillBadges?.length > 0 && (
-                    <div className="p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                      <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
-                        Pill Badges
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {quality.pillBadges.map((b: string) => (
-                          <Badge
-                            key={b}
-                            className="text-[10px]"
-                            style={{ background: "#4DC82022", color: "#4DC820", border: "1px solid #4DC82044" }}
-                          >
-                            {b}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Key Insights */}
-                {quality.keyInsights?.length > 0 && (
-                  <div className="p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                    <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#667085" }}>
-                      Key Insights
-                    </p>
-                    <div className="space-y-2">
-                      {quality.keyInsights.map((ins: any, i: number) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <ChevronRight size={12} className="text-[#4DC820] flex-shrink-0 mt-0.5" />
-                          <p className="text-xs" style={{ color: "#cbd5e1" }}>
-                            {ins.insight}
-                          </p>
-                          <Badge
-                            className="ml-auto text-[9px] flex-shrink-0"
-                            style={{ background: "#1e2a3a", color: "#667085" }}
-                          >
-                            {ins.category}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Tags */}
-                {quality.tags?.length > 0 && (
-                  <div className="p-4 rounded-xl" style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                    <p className="text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: "#667085" }}>
-                      <Tag size={10} /> Tags
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {quality.tags.map((t: string) => (
-                        <span
-                          key={t}
-                          className="text-[10px] px-1.5 py-0.5 rounded"
-                          style={{ background: "#1e2a3a", color: "#667085", fontFamily: "var(--font-mono)" }}
-                        >
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Submit Actions */}
-                <div className="flex items-center gap-3 pt-2">
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={submitMutation.isPending || !supabaseToken}
-                    style={{
-                      background: quality.passes ? "#4DC820" : "#F79009",
-                      color: "#0d1117",
-                    }}
-                  >
-                    {submitMutation.isPending ? (
-                      <Loader2 size={14} className="animate-spin mr-2" />
-                    ) : (
-                      <Play size={14} className="mr-2" />
-                    )}
-                    {quality.passes ? "Submit to Platform" : "Force Submit Anyway"}
-                  </Button>
-                  {!quality.passes && (
-                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: "#667085" }}>
-                      <input
-                        type="checkbox"
-                        checked={forceIngest}
-                        onChange={(e) => setForceIngest(e.target.checked)}
-                        className="rounded"
-                      />
-                      Force ingest (bypass quality filter)
-                    </label>
-                  )}
-                  {!supabaseToken && (
-                    <p className="text-xs text-red-400 flex items-center gap-1">
-                      <AlertTriangle size={11} /> Not signed in — cannot submit
-                    </p>
-                  )}
-                </div>
-
-                {/* Submit Result */}
-                {submitResult && (
-                  <div
-                    className="p-4 rounded-xl"
-                    style={{
-                      background: submitResult.success ? "#4DC82011" : "#F0443811",
-                      border: `1px solid ${submitResult.success ? "#4DC82033" : "#F0443833"}`,
-                    }}
-                  >
-                    <p
-                      className="text-sm font-semibold"
-                      style={{ color: submitResult.success ? "#4DC820" : "#F04438" }}
-                    >
-                      {submitResult.success
-                        ? submitResult.queued
-                          ? "Added to curation queue"
-                          : "Successfully submitted to platform"
-                        : submitResult.message ?? "Submission failed"}
-                    </p>
-                  </div>
-                )}
-                {submitMutation.error && (
-                  <p className="text-xs text-red-400">{submitMutation.error.message}</p>
-                )}
-              </div>
-            )}
-
-            {/* Skipped video */}
-            {analysisResult?.skipped && (
-              <div
-                className="mt-6 p-4 rounded-xl flex items-center gap-3"
-                style={{ background: "#F7900911", border: "1px solid #F7900933" }}
-              >
-                <AlertTriangle size={18} className="text-[#F79009]" />
-                <p className="text-sm" style={{ color: "#F79009" }}>
-                  {analysisResult.skipReason}
-                </p>
-              </div>
-            )}
-
-            <Separator className="my-8" style={{ background: "#1e2a3a" }} />
-
-            {/* Pipeline Controls */}
-            <div className="grid grid-cols-2 gap-4">
-              <Card style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-white flex items-center gap-2">
-                    <RefreshCw size={14} className="text-[#F79009]" />
-                    Curation Cycle
-                  </CardTitle>
-                  <CardDescription style={{ color: "#667085" }} className="text-xs">
-                    Scan all active creators for new content on Railway
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => curationMutation.mutate({ supabaseToken })}
-                    disabled={curationMutation.isPending || !supabaseToken}
-                    className="w-full text-xs"
-                    style={{ borderColor: "#1e2a3a", color: "#F79009", background: "transparent" }}
-                  >
-                    {curationMutation.isPending ? (
-                      <Loader2 size={12} className="animate-spin mr-1" />
-                    ) : null}
-                    {curationMutation.isSuccess ? "Triggered ✓" : "Trigger Curation"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card style={{ background: "#111827", border: "1px solid #1e2a3a" }}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-white flex items-center gap-2">
-                    <BarChart2 size={14} className="text-[#2E90FA]" />
-                    Ingestion Run
-                  </CardTitle>
-                  <CardDescription style={{ color: "#667085" }} className="text-xs">
-                    Process all pending curated items on Railway
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => ingestionMutation.mutate({ supabaseToken })}
-                    disabled={ingestionMutation.isPending || !supabaseToken}
-                    className="w-full text-xs"
-                    style={{ borderColor: "#1e2a3a", color: "#2E90FA", background: "transparent" }}
-                  >
-                    {ingestionMutation.isPending ? (
-                      <Loader2 size={12} className="animate-spin mr-1" />
-                    ) : null}
-                    {ingestionMutation.isSuccess ? "Triggered ✓" : "Trigger Ingestion"}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        ) : (
-          /* Queue View */
-          <div className="space-y-3">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-semibold text-white">Pending Queue</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => queueQuery.refetch()}
-                className="text-xs"
-                style={{ borderColor: "#1e2a3a", color: "#667085", background: "transparent" }}
-              >
-                <RefreshCw size={12} className="mr-1" />
-                Refresh
-              </Button>
-            </div>
-            {queueQuery.isLoading && (
-              <div className="flex justify-center py-8">
-                <Loader2 className="animate-spin text-[#4DC820]" size={24} />
-              </div>
-            )}
-            {queueQuery.error && (
-              <p className="text-xs text-red-400 text-center py-4">
-                {queueQuery.error.message}
-              </p>
-            )}
-            {queueQuery.data && queueQuery.data.length === 0 && (
-              <p className="text-sm text-center py-8" style={{ color: "#667085" }}>
-                No pending items in queue
-              </p>
-            )}
-            {queueQuery.data?.map((item: any) => (
-              <div
-                key={item.id}
-                className="p-4 rounded-xl"
-                style={{ background: "#111827", border: "1px solid #1e2a3a" }}
-              >
-                <p className="text-sm font-medium text-white mb-1">
-                  {item.metadata?.title ?? item.external_id}
-                </p>
-                <p className="text-xs" style={{ color: "#667085" }}>
-                  {item.source_platform} · {new Date(item.created_at).toLocaleDateString()}
-                </p>
-              </div>
-            ))}
+              </CardContent>
+            </Card>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

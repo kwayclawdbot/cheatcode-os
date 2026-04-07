@@ -29,6 +29,13 @@
       "when": 1775580785826,
       "tag": "0003_handy_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775599325127,
+      "tag": "0004_late_richard_fisk",
+      "breakpoints": true
     }
   ]
 }
