@@ -392,13 +392,24 @@ export function Nav() {
           <div className="flex items-center gap-2 h-14">
             {/* Logo */}
             <Link href="/home">
-              <div className="flex items-center gap-2 cursor-pointer flex-shrink-0">
-                <LogoIcon size={28} />
-                <span
-                  className="font-black text-base tracking-tight hidden sm:block"
-                  style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}
-                >
-                  cheat<span className="cc-gradient-text">code</span>
+              <div className="flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                <LogoIcon size={26} />
+                <div className="flex items-baseline gap-0">
+                  <span
+                    className="font-black text-[15px] tracking-tight"
+                    style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}
+                  >
+                    cheat
+                  </span>
+                  <span
+                    className="font-black text-[15px] tracking-tight cc-gradient-text"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    code
+                  </span>
+                </div>
+                <span className="text-[9px] font-bold text-[#2B3245] bg-[#F2F4F7] px-1.5 py-0.5 rounded-md border border-[#EAECF0] tracking-wide">
+                  OS
                 </span>
               </div>
             </Link>
@@ -411,6 +422,7 @@ export function Nav() {
                   return (
                     <Link key={item.href} href={item.href}>
                       <button
+                        data-tour={item.label === "Watch" ? "nav-watch" : item.label === "Community" ? "nav-community" : undefined}
                         className="px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
                         style={{
                           color: isActive ? "#4DC820" : isDark ? "#D0D5DD" : "#344054",
@@ -559,9 +571,11 @@ export function Nav() {
                    style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
                 <div className="flex items-center gap-2">
                   <LogoIcon size={24} />
-                  <span className="font-bold text-sm" style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}>
-                    cheat<span className="cc-gradient-text">code</span>
-                  </span>
+                  <div className="flex items-baseline gap-0">
+                    <span className="font-black text-base tracking-tight" style={{ fontFamily: "var(--font-display)", color: isDark ? "#F9FAFB" : "#101828" }}>cheat</span>
+                    <span className="font-black text-base tracking-tight cc-gradient-text" style={{ fontFamily: "var(--font-display)" }}>code</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-[#2B3245] bg-[#F2F4F7] px-1.5 py-0.5 rounded-md border border-[#EAECF0] tracking-wide">OS</span>
                 </div>
                 <button onClick={() => setMobileOpen(false)}
                         className="w-8 h-8 flex items-center justify-center rounded-lg"

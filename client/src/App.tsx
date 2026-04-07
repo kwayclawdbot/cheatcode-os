@@ -14,7 +14,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useEffect } from "react";
@@ -24,6 +24,8 @@ import { AssetClassProvider } from "./contexts/AssetClassContext";
 import { WatchlistProvider } from "./contexts/WatchlistContext";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
+import { useAuth } from "./_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -52,10 +54,50 @@ import KaiAssistPage from "./pages/KaiAssistPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 import TickerPage from "./pages/TickerPage";
+/**
+ * Redirect new authenticated users to onboarding if they haven't completed it.
+ * Uses two signals:
+ * 1. localStorage flag `cc-onboarding-complete` (set by OnboardingPage on finish)
+ * 2. tRPC watchlist.get — if user has zero watchlist entries, they're likely new
+ */
+function NewUserRedirect() {
+  const { isAuthenticated, loading } = useAuth();
+  const [location, navigate] = useLocation();
+
+  // Only query watchlist if authenticated and not already on onboarding/auth
+  const skip = !isAuthenticated || loading || location.startsWith("/auth") || location === "/onboarding";
+  const { data: watchlist, isLoading: watchlistLoading } = trpc.watchlist.get.useQuery(
+    undefined,
+    { enabled: !skip, retry: false }
+  );
+
+  useEffect(() => {
+    if (loading || !isAuthenticated) return;
+    if (location.startsWith("/auth") || location === "/onboarding") return;
+    if (watchlistLoading) return;
+
+    // Primary: localStorage flag set by OnboardingPage.finish()
+    const done = localStorage.getItem("cc-onboarding-complete");
+    if (done) return;
+
+    // Secondary: if user has no watchlist entries, they haven't onboarded
+    if (watchlist !== undefined && watchlist.length === 0) {
+      navigate("/onboarding");
+    } else if (watchlist === undefined) {
+      // Fallback: no data yet, redirect to onboarding to be safe
+      navigate("/onboarding");
+    }
+  }, [isAuthenticated, loading, location, navigate, watchlist, watchlistLoading]);
+
+  return null;
+}
+
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
-    <Switch>
+    <>
+      <NewUserRedirect />
+      <Switch>
       {/* ── Public landing page ── */}
       <Route path="/1" component={LandingPage} />
 
@@ -114,6 +156,7 @@ function Router() {
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
+    </>
   );
 }
 

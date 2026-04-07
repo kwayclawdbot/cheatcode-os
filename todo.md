@@ -94,3 +94,17 @@
 - [x] Remove duplicate asset filter bar in Community page (rely on main nav filter)
 - [x] Move Leaderboard nav item under Community dropdown, remove from Intelligence dropdown
 - [x] Mobile menu: subitems hidden until parent item clicked to expand (accordion style)
+- [x] Restore original complete logo + wordmark in Nav (from earliest git history)
+
+## Auth + Onboarding + Kai Walkthrough (Apr 7 #3)
+- [x] Fix logo display on mobile — show icon + wordmark on all screen sizes
+- [x] Sign in page — polished CheatCode-branded auth page (Kai welcome message, Manus OAuth)
+- [x] Sign up page — same OAuth flow with "Create Free Account" CTA
+- [x] Multi-step onboarding flow — 7 screens with Kai voice bubbles on each step
+- [x] Kai-guided interactive app walkthrough — KaiWalkthrough component with 9-step tooltip tour
+- [x] Trigger onboarding redirect for new users after first sign in (already in OnboardingPage finish())
+- [x] Trigger Kai walkthrough on first visit to Home after onboarding (cc-onboarding-complete flag)
+
+## Auth Gap Fixes (Apr 7 #4)
+- [x] New-user onboarding redirect: after auth.me succeeds, check if user is new (no watchlist/profile data) and redirect to /onboarding
+- [x] Sign-up flow: after OAuth, detect first-time users and route to onboarding (not just Home)

@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
+import { KaiWalkthrough } from "@/components/kai/KaiWalkthrough";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -874,7 +875,7 @@ function DiscoverySidebar({ topTraders, radarTickers }: { topTraders: any[]; rad
 
       {/* Kai's Radar mini */}
       {radarTickers.length > 0 && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div data-tour="kai-radar" className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-4 py-3 flex items-center gap-2" style={{ background: "linear-gradient(90deg, #2B3245 0%, #1a2035 100%)" }}>
             <Flame size={14} className="text-[#C8D400]" />
             <span className="font-bold text-sm text-white" style={{ fontFamily: "var(--font-display)" }}>Kai's Radar</span>
@@ -1077,6 +1078,7 @@ export default function Home() {
           <div className="-mx-3 sm:mx-0 px-3 sm:px-0">
           <div
             ref={tickerRailRef}
+            data-tour="ticker-rail"
             className="flex gap-3 overflow-x-auto pb-2"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
@@ -1114,14 +1116,17 @@ export default function Home() {
 
           {/* Left: Community Feed */}
           <div>
-            <ComposeBar onPost={handleNewPost} />
+            <div data-tour="compose-bar">
+              <ComposeBar onPost={handleNewPost} />
+            </div>
 
             {/* Feed filter tabs — Trending first */}
-            <div className="flex items-center gap-0.5 mb-4 border-b border-border overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <div data-tour="feed-tabs" className="flex items-center gap-0.5 mb-4 border-b border-border overflow-x-auto" style={{ scrollbarWidth: "none" }}>
               {FEED_TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setFeedTab(tab.id)}
+                  data-tour={tab.id === "wall_of_fame" ? "wall-of-fame-tab" : undefined}
                   className="px-3 py-2 text-xs font-bold transition-colors relative whitespace-nowrap flex-shrink-0"
                   style={{ color: feedTab === tab.id ? "#4DC820" : "var(--muted-foreground)" }}
                 >
@@ -1320,6 +1325,7 @@ export default function Home() {
       </div>
 
       <KaiChat />
+      <KaiWalkthrough />
     </div>
   );
 }

@@ -237,6 +237,7 @@ function AssetsScreen({ selected, onToggle, onNext }: {
       onNext={onNext}
       nextDisabled={selected.length === 0}
       nextLabel="Continue"
+      kaiMessage="Pick the markets you're active in. I'll use this to filter your feed, surface relevant setups, and match you with traders who trade the same instruments."
     >
       <div className="grid grid-cols-2 gap-3">
         {ASSET_TILES.map((tile) => {
@@ -291,6 +292,7 @@ function StyleScreen({ selected, onSelect, onNext }: {
       subtitle="Pick your primary approach — this defines your community and content."
       onNext={onNext}
       nextDisabled={!selected}
+      kaiMessage="Your style shapes everything — the content you see, the traders you get matched with, and how I frame my analysis for you. Be honest, you can always change it later."
     >
       <div className="flex flex-col gap-3">
         {STYLE_TILES.map((tile) => {
@@ -342,6 +344,7 @@ function ExperienceScreen({ selected, onSelect, onNext }: {
       subtitle="Be honest — we'll match you with the right content and community."
       onNext={onNext}
       nextDisabled={!selected}
+      kaiMessage="No judgment here. Knowing your experience level helps me calibrate how I explain things — I won't bore veterans with basics or overwhelm beginners with advanced concepts."
     >
       <div className="flex flex-col gap-3">
         {EXPERIENCE_LEVELS.map((level, idx) => {
@@ -413,6 +416,7 @@ function WatchlistScreen({ assets, watchlist, onToggle, onNext }: {
       onNext={onNext}
       nextDisabled={watchlist.length === 0}
       nextLabel={`Continue with ${watchlist.length} ticker${watchlist.length !== 1 ? "s" : ""}`}
+      kaiMessage="These are the tickers I'll watch for you. I'll flag breakouts, earnings plays, and community buzz the moment they happen. Add as many as you want — you can edit this anytime from your profile."
     >
       {/* Search input */}
       <div className="relative mb-4">
@@ -486,6 +490,7 @@ function FollowScreen({ following, onToggle, onNext }: {
       onNext={onNext}
       nextDisabled={following.length === 0}
       nextLabel={`Follow ${following.length} trader${following.length !== 1 ? "s" : ""} & Continue`}
+      kaiMessage="I picked these based on your style and markets. These are real traders with verified track records — their posts and trade ideas will show up in your For You feed."
     >
       <div className="flex flex-col gap-3">
         {SUGGESTED_TRADERS.map(trader => {
@@ -557,6 +562,7 @@ function BrokerScreen({ connected, onConnect, onSkip }: {
       nextLabel={connected ? "Connected! Continue →" : "Connect & Earn +500 XP"}
       showSkip
       onSkip={onSkip}
+      kaiMessage="Connecting a broker unlocks your Verified P&L badge, Trading Journal, and lets me analyze your actual trades. It's optional — you can always connect later from your profile settings."
     >
       {/* XP incentive banner */}
       <div
@@ -605,6 +611,7 @@ function OnboardingShell({
   nextLabel = "Continue",
   showSkip,
   onSkip,
+  kaiMessage,
 }: {
   step: number;
   title: string;
@@ -615,6 +622,7 @@ function OnboardingShell({
   nextLabel?: string;
   showSkip?: boolean;
   onSkip?: () => void;
+  kaiMessage?: string;
 }) {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
@@ -643,6 +651,27 @@ function OnboardingShell({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >
+          {/* Kai message bubble */}
+          {kaiMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.4 }}
+              className="flex items-start gap-3 mb-5 p-4 rounded-2xl"
+              style={{ background: "linear-gradient(135deg, #EDFBE6, #E6F7FD)", border: "1px solid #A9EFC5" }}
+            >
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white"
+                style={{ background: "linear-gradient(135deg, #00AEEF, #4DC820)" }}
+              >
+                K
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-[#1A5C0A] mb-0.5">Kai</p>
+                <p className="text-xs text-[#344054] leading-relaxed">{kaiMessage}</p>
+              </div>
+            </motion.div>
+          )}
           <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "Sora, sans-serif", color: "var(--foreground)" }}>
             {title}
           </h2>
