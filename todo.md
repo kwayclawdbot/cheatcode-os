@@ -67,3 +67,4 @@
 - [x] Add "Watch" as its own top-level nav tab
 - [x] Add "Community" as its own top-level nav tab
 - [x] Rename "Feed" nav tab to "Home"
+- [x] Add prominent sparkline line chart to the right side of each ticker section header row in the Home feed (SOFI, BYD etc.)

@@ -1095,9 +1095,12 @@ export default function Home() {
                             <p className="text-[10px] text-muted-foreground">{rt.timeframe} · {Math.round(rt.score * 1.5)} community posts</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <MiniSparkline symbol={rt.symbol} width={80} height={36} />
-                          <span className="text-[10px] font-bold text-[#4DC820] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                        <div className="flex items-center gap-3">
+                          {/* Prominent sparkline chart — always visible on the right */}
+                          <div className="flex-shrink-0" style={{ width: 120, height: 48 }}>
+                            <MiniSparkline symbol={rt.symbol} width={120} height={48} />
+                          </div>
+                          <span className="text-[10px] font-bold text-[#4DC820] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
                             View <ArrowUpRight size={10} />
                           </span>
                         </div>
