@@ -230,28 +230,35 @@ export default function TraderProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<"posts" | "trades" | "stats" | "badges">("posts");
 
-  // Fetch real profile from API
+  // Fetch real profile from API — use fetchMyProfile for "me" handle
   useEffect(() => {
-    import("@/lib/api").then(({ fetchTraderProfile }) => {
-      fetchTraderProfile(handle).then((data: any) => {
-        if (data && !data.detail) {
-          setProfile({
-            ...profile,
-            name: data.display_name || profile.name,
-            handle: `@${data.handle || handle}`,
-            avatar: data.avatar_url || profile.avatar,
-            style: data.trading_style || profile.style,
-            xp: data.xp || 0,
-            followers: data.follower_count || 0,
-            following: data.following_count || 0,
-            totalTrades: data.total_trades || 0,
-            winRate: data.win_rate || 0,
-            bio: data.bio || profile.bio,
-          });
-          setIsFollowing(data.is_following || false);
-        }
-      }).catch(() => {});
-    });
+    const isMeHandle = handle === "me";
+    const applyData = (data: any, isMe: boolean) => {
+      if (!data || data.detail) return;
+      setProfile(prev => ({
+        ...prev,
+        name: data.display_name || data.name || prev.name,
+        handle: `@${data.handle || (isMe ? "me" : handle)}`,
+        avatar: data.avatar_url || prev.avatar,
+        style: data.trading_style || prev.style,
+        xp: data.xp || 0,
+        followers: data.follower_count || 0,
+        following: data.following_count || 0,
+        totalTrades: data.total_trades || 0,
+        winRate: data.win_rate || 0,
+        bio: data.bio || prev.bio,
+      }));
+      if (!isMe) setIsFollowing(data.is_following || false);
+    };
+    if (isMeHandle) {
+      import("@/lib/api").then(({ fetchMyProfile }) => {
+        fetchMyProfile().then(data => applyData(data, true)).catch(() => {});
+      });
+    } else {
+      import("@/lib/api").then(({ fetchTraderProfile }) => {
+        fetchTraderProfile(handle).then(data => applyData(data, false)).catch(() => {});
+      });
+    }
   }, [handle]);
 
   const PROFILE_TABS = [

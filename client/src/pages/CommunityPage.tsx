@@ -134,6 +134,68 @@ function PostCard({ post, onReact, onTickerClick }: {
 }) {
   const [showLevels, setShowLevels] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [reposted, setReposted] = useState(false);
+  const [localReposts, setLocalReposts] = useState(post.reposts);
+  const [localComments, setLocalComments] = useState(post.comments);
+
+  const handleToggleComments = () => {
+    const next = !showComments;
+    setShowComments(next);
+    if (next && !commentsLoaded) {
+      setCommentsLoaded(true);
+      import("@/lib/api").then(({ fetchComments }) => {
+        fetchComments(post.id).then((data: any[]) => {
+          setComments(Array.isArray(data) ? data : []);
+        }).catch(() => {});
+      });
+    }
+  };
+
+  const handleSubmitComment = () => {
+    if (!commentText.trim()) return;
+    const body = commentText.trim();
+    setCommentText("");
+    setLocalComments(c => c + 1);
+    setComments(prev => [{ id: Date.now().toString(), body, user: { name: "You", handle: "@you" }, created_at: new Date().toISOString() }, ...prev]);
+    import("@/lib/api").then(({ createComment }) => {
+      createComment(post.id, body).catch(() => {});
+    });
+    toast.success("Comment posted! +5 XP");
+  };
+
+  const handleReshare = () => {
+    if (reposted) return;
+    setReposted(true);
+    setLocalReposts(r => r + 1);
+    import("@/lib/api").then(({ repostPost }) => {
+      repostPost(post.id).catch(() => { setReposted(false); setLocalReposts(r => r - 1); });
+    });
+    toast.success("Reshared! +10 XP");
+  };
+
+  const handleBookmark = () => {
+    const next = !bookmarked;
+    setBookmarked(next);
+    import("@/lib/api").then(({ bookmarkPost }) => {
+      bookmarkPost(post.id).catch(() => setBookmarked(!next));
+    });
+    toast.success(next ? "Saved to bookmarks" : "Removed from bookmarks");
+  };
+
+  const handleShare = () => {
+    const url = `${window.location.origin}/community?post=${post.id}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => toast.success("Link copied!")).catch(() => toast.success("Link copied!"));
+    } else {
+      toast.success("Link: " + url);
+    }
+  };
+
   const typeConfig = POST_TYPE_CONFIG[post.type];
   const sentColor = post.sentiment === "bullish" ? "#4DC820" : post.sentiment === "bearish" ? "#E8193C" : "#F79009";
   const displayText = post.text || post.thesis || "";
@@ -263,20 +325,90 @@ function PostCard({ post, onReact, onTickerClick }: {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-            <MessageCircle size={12} /> {post.comments}
+          <button
+            onClick={handleToggleComments}
+            className="flex items-center gap-1 text-[11px] transition-colors"
+            style={{ color: showComments ? "#4DC820" : "var(--muted-foreground)" }}
+          >
+            <MessageCircle size={12} /> {localComments}
           </button>
-          <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-[#4DC820] transition-colors">
-            <Repeat2 size={12} /> {post.reposts}
+          <button
+            onClick={handleReshare}
+            className="flex items-center gap-1 text-[11px] transition-colors"
+            style={{ color: reposted ? "#4DC820" : "var(--muted-foreground)" }}
+            title={reposted ? "Already reshared" : "Reshare"}
+          >
+            <Repeat2 size={12} /> {localReposts}
           </button>
-          <button className="text-muted-foreground hover:text-foreground transition-colors">
-            <Bookmark size={12} />
+          <button
+            onClick={handleBookmark}
+            className="transition-colors"
+            style={{ color: bookmarked ? "#4DC820" : "var(--muted-foreground)" }}
+            title={bookmarked ? "Remove bookmark" : "Save"}
+          >
+            <Bookmark size={12} fill={bookmarked ? "#4DC820" : "none"} />
           </button>
-          <button className="text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={handleShare}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Copy link"
+          >
             <Share2 size={12} />
           </button>
         </div>
       </div>
+      {/* Inline comment thread */}
+      <AnimatePresence>
+        {showComments && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-2 border-t border-border mt-1.5 space-y-2">
+              <div className="flex gap-2">
+                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground flex-shrink-0 mt-0.5">
+                  Y
+                </div>
+                <div className="flex-1 flex gap-1.5">
+                  <input
+                    type="text"
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmitComment(); } }}
+                    placeholder="Add a comment…"
+                    className="flex-1 text-xs bg-muted rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors"
+                  />
+                  {commentText.trim() && (
+                    <button
+                      onClick={handleSubmitComment}
+                      className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg cc-gradient-bg text-[#101828] flex-shrink-0"
+                    >
+                      Post
+                    </button>
+                  )}
+                </div>
+              </div>
+              {comments.map((c: any) => (
+                <div key={c.id} className="flex gap-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 mt-0.5"
+                       style={{ background: "#4DC820" }}>
+                    {(c.user?.name || "T")[0]}
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-[11px] font-bold text-foreground">{c.user?.name || "Trader"} </span>
+                    <span className="text-[11px] text-muted-foreground">{c.body}</span>
+                  </div>
+                </div>
+              ))}
+              {commentsLoaded && comments.length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-1">No comments yet. Be first!</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

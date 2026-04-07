@@ -28,6 +28,14 @@
 - [x] LearnPage updated with YouTube University CTA section
 - [x] TypeScript: zero errors (fresh tsc --noEmit confirms clean)
 
+## Active Issues (Priority)
+- [x] Fix comment button on posts - inline comment thread with input, loads real comments from API
+- [x] Fix reshare button on posts - calls repostPost() API, optimistic update with toast
+- [x] Fix share button on posts - copies post link to clipboard with toast
+- [x] Fix save/bookmark button on posts - calls bookmarkPost() API, toggles state
+- [x] Fix user level badge inconsistency - TraderProfilePage now uses fetchMyProfile() for /traders/me handle; Nav already fetches real XP
+- [x] Redesign Home page to be community-first: live feed + compose bar + market pulse sidebar + watch shelf below fold
+
 ## Remaining / Future Work
 - [ ] XP persistence - XP earning actions need to trigger Railway API calls
 - [ ] Level badges - Display user level badges in nav and on posts

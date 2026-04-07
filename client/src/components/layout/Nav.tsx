@@ -220,6 +220,18 @@ function LearnDropdown({
 
 // ─── Main Nav ─────────────────────────────────────────────────────────────────
 
+const XP_LEVELS_NAV = [
+  { level: 1, name: "Rookie",     minXP: 0,     color: "#667085", emoji: "🌱" },
+  { level: 2, name: "Apprentice", minXP: 500,   color: "#00AEEF", emoji: "📚" },
+  { level: 3, name: "Trader",     minXP: 1500,  color: "#7B2FBE", emoji: "📈" },
+  { level: 4, name: "Veteran",    minXP: 4000,  color: "#F79009", emoji: "⚔️" },
+  { level: 5, name: "Elite",      minXP: 10000, color: "#E8193C", emoji: "🔥" },
+  { level: 6, name: "Legend",     minXP: 25000, color: "#4DC820", emoji: "👑" },
+];
+function getNavLevel(xp: number) {
+  return XP_LEVELS_NAV.slice().reverse().find(l => xp >= l.minXP) || XP_LEVELS_NAV[0];
+}
+
 export function Nav() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
@@ -228,6 +240,8 @@ export function Nav() {
   const { user, isAuthenticated, signOut } = useAuth();
   const userInitial = user?.user_metadata?.full_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
   const userHandle = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "My Profile";
+  const [userXP, setUserXP] = useState(0);
+  const [userHandle2, setUserHandle2] = useState("");
 
   useEffect(() => { setMobileOpen(false); }, [location]);
 
@@ -235,6 +249,21 @@ export function Nav() {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
+
+  // Fetch real XP from Railway API when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    import("@/lib/api").then(({ fetchMyProfile }) => {
+      fetchMyProfile().then((data: any) => {
+        if (data && !data.detail) {
+          setUserXP(data.xp || 0);
+          if (data.handle) setUserHandle2(data.handle);
+        }
+      }).catch(() => {});
+    });
+  }, [isAuthenticated]);
+
+  const navLevel = getNavLevel(userXP);
 
   return (
     <>
@@ -339,11 +368,14 @@ export function Nav() {
 
               {isAuthenticated ? (
                 <Link href="/traders/me">
-                  <div
-                    className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-xs font-bold cursor-pointer hover:opacity-80 transition-opacity"
-                    style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}
-                  >
-                    {userInitial}
+                  <div className="hidden sm:flex flex-col items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity" title={`${navLevel.name} · ${userXP.toLocaleString()} XP`}>
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                      style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}
+                    >
+                      {userInitial}
+                    </div>
+                    <span className="text-[8px] font-bold leading-none" style={{ color: navLevel.color }}>{navLevel.name}</span>
                   </div>
                 </Link>
               ) : (
@@ -414,11 +446,13 @@ export function Nav() {
                    style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                      style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)" }}>
-                  U
+                  {userInitial}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm truncate" style={{ color: isDark ? "#F9FAFB" : "#101828" }}>My Profile</p>
-                  <p className="text-xs truncate" style={{ color: isDark ? "#98A2B3" : "#667085" }}>Rookie · 0 XP</p>
+                  <p className="font-bold text-sm truncate" style={{ color: isDark ? "#F9FAFB" : "#101828" }}>{userHandle}</p>
+                  <p className="text-xs truncate font-semibold" style={{ color: navLevel.color }}>
+                    {navLevel.emoji} {navLevel.name} · {userXP.toLocaleString()} XP
+                  </p>
                 </div>
                 <Link href="/traders/me">
                   <ChevronRight size={16} style={{ color: isDark ? "#98A2B3" : "#667085" }} />
