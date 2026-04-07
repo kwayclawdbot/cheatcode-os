@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, profiles } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -87,6 +87,26 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+// ─── Watchlist helpers ───────────────────────────────────────────────────────
+
+export async function getWatchlist(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ watchlist: profiles.watchlist }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
+  return rows[0]?.watchlist ?? [];
+}
+
+export async function setWatchlist(userId: number, symbols: string[]): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(profiles).set({ watchlist: symbols }).where(eq(profiles.userId, userId));
+  } else {
+    await db.insert(profiles).values({ userId, watchlist: symbols });
+  }
 }
 
 // TODO: add feature queries here as your schema grows.

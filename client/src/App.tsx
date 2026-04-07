@@ -21,6 +21,7 @@ import { useEffect } from "react";
 import { syncCreatorRegistry } from "./lib/creatorRegistry";
 import { AuthProvider } from "./contexts/AuthContext";
 import { AssetClassProvider } from "./contexts/AssetClassContext";
+import { WatchlistProvider } from "./contexts/WatchlistContext";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
 
@@ -126,10 +127,12 @@ function App() {
       <ThemeProvider defaultTheme="dark" switchable>
         <AuthProvider>
           <AssetClassProvider>
+            <WatchlistProvider>
             <TooltipProvider>
               <Toaster />
               <Router />
             </TooltipProvider>
+            </WatchlistProvider>
           </AssetClassProvider>
         </AuthProvider>
       </ThemeProvider>

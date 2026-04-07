@@ -72,3 +72,25 @@
 - [x] Fix mobile layout overflow — all components fit correctly in containers on mobile
 - [x] Make each ticker row clickable to ticker detail/analysis page
 - [x] Add live price next to ticker name in feed ticker rows
+
+## Feature Batch 3 (Apr 7 2026)
+- [x] Image upload for Wall of Fame posts (S3 upload, preview, attach to post)
+- [x] Image and video upload for all post types in compose bar
+- [x] Ensure all ticker logos load correctly (TickerLogo component fallback/universal)
+- [x] Watchlist-driven For You feed — store user watchlist, filter feed by watchlist tickers; prompt to add if empty
+- [x] Watchlist add/remove UI in profile settings or dashboard
+- [x] Market filter buttons (All Markets / Stocks / Futures / Forex / Crypto) work site-wide
+- [x] Remove duplicate community asset trending filter (rely on main market filter)
+- [x] Move Leaderboard nav item under Community, remove from Kai Analysis dropdown
+- [x] Mobile menu: subitems hidden until parent item clicked to expand/collapse
+
+## Feature Batch (Apr 7 #2)
+- [x] Image upload for Wall of Fame posts (S3 upload, image preview in post card)
+- [x] Image and video upload for regular posts (compose bar attachment button)
+- [x] Fix TickerLogo to reliably import logos for all tickers (fallback chain)
+- [x] Watchlist feature: DB table, tRPC add/remove procedures, profile settings UI
+- [x] For You feed: show posts/content filtered by user watchlist tickers; prompt to add if empty
+- [x] Market filter buttons (All Markets / Stocks / Futures / Forex / Crypto) work site-wide
+- [x] Remove duplicate asset filter bar in Community page (rely on main nav filter)
+- [x] Move Leaderboard nav item under Community dropdown, remove from Intelligence dropdown
+- [x] Mobile menu: subitems hidden until parent item clicked to expand (accordion style)

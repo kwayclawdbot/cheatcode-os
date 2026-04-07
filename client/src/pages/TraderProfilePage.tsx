@@ -11,12 +11,15 @@ import { motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, BarChart2, Award, Zap, Star,
   Users, BookOpen, MessageCircle, Settings, Share2,
-  CheckCircle, Lock, ChevronRight, Calendar, Target
+  CheckCircle, Lock, ChevronRight, Calendar, Target, Plus, X as XIcon, Eye
 } from "lucide-react";
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
+import { useWatchlist } from "@/contexts/WatchlistContext";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
 
@@ -228,7 +231,37 @@ export default function TraderProfilePage() {
   const level = getLevel(profile.xp);
 
   const [isFollowing, setIsFollowing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"posts" | "trades" | "stats" | "badges">("posts");
+  const [activeTab, setActiveTab] = useState<"posts" | "trades" | "stats" | "badges" | "watchlist">("posts");
+  const { isAuthenticated } = useAuth();
+  const { watchlist: localWatchlist, toggleWatch, isWatched } = useWatchlist();
+  const [watchlistInput, setWatchlistInput] = useState("");
+
+  // Sync watchlist to server
+  const addMutation = trpc.watchlist.add.useMutation({
+    onSuccess: () => toast.success("Added to watchlist"),
+    onError: () => toast.error("Failed to add ticker"),
+  });
+  const removeMutation = trpc.watchlist.remove.useMutation({
+    onSuccess: () => toast.success("Removed from watchlist"),
+    onError: () => toast.error("Failed to remove ticker"),
+  });
+
+  const handleAddTicker = () => {
+    const sym = watchlistInput.trim().toUpperCase();
+    if (!sym) return;
+    if (localWatchlist.includes(sym)) {
+      toast.info(`${sym} is already in your watchlist`);
+      return;
+    }
+    toggleWatch(sym);
+    if (isAuthenticated) addMutation.mutate({ symbol: sym });
+    setWatchlistInput("");
+  };
+
+  const handleRemoveTicker = (sym: string) => {
+    toggleWatch(sym);
+    if (isAuthenticated) removeMutation.mutate({ symbol: sym });
+  };
 
   // Fetch real profile from API — use fetchMyProfile for "me" handle
   useEffect(() => {
@@ -261,11 +294,14 @@ export default function TraderProfilePage() {
     }
   }, [handle]);
 
+  const isMeProfile = handle === "me";
+
   const PROFILE_TABS = [
     { id: "posts" as const, label: "Posts" },
     { id: "trades" as const, label: "Trade Ideas" },
     { id: "stats" as const, label: "Stats" },
     { id: "badges" as const, label: "Badges" },
+    ...(isMeProfile ? [{ id: "watchlist" as const, label: "Watchlist" }] : []),
   ];
 
   return (
@@ -582,6 +618,78 @@ export default function TraderProfilePage() {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Watchlist Tab — only visible on own profile (/traders/me) */}
+        {activeTab === "watchlist" && (
+          <div className="pb-16">
+            <div className="mb-4">
+              <h2 className="text-base font-bold mb-1" style={{ color: "var(--foreground)" }}>My Watchlist</h2>
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>Tickers you follow power your "For You" feed on the Home page.</p>
+            </div>
+
+            {/* Add ticker input */}
+            <div className="flex gap-2 mb-5">
+              <input
+                type="text"
+                value={watchlistInput}
+                onChange={e => setWatchlistInput(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === "Enter" && handleAddTicker()}
+                placeholder="Add ticker (e.g. NVDA)"
+                maxLength={10}
+                className="flex-1 px-3 py-2 rounded-xl border text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-[#4DC820]"
+                style={{
+                  background: "var(--card)",
+                  borderColor: "var(--border)",
+                  color: "var(--foreground)",
+                }}
+              />
+              <button
+                onClick={handleAddTicker}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm"
+                style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}
+              >
+                <Plus size={14} />
+                Add
+              </button>
+            </div>
+
+            {/* Watchlist grid */}
+            {localWatchlist.length === 0 ? (
+              <div className="text-center py-12">
+                <Eye size={32} className="mx-auto mb-3 opacity-30" style={{ color: "var(--muted-foreground)" }} />
+                <p className="text-sm font-semibold" style={{ color: "var(--muted-foreground)" }}>Your watchlist is empty</p>
+                <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>Add tickers above to personalize your For You feed</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {localWatchlist.map(sym => (
+                  <div
+                    key={sym}
+                    className="flex items-center gap-3 p-3 rounded-xl border group"
+                    style={{ background: "var(--card)", borderColor: "var(--border)" }}
+                  >
+                    <TickerLogo symbol={sym} size={32} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-sm truncate" style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--foreground)" }}>
+                        {sym}
+                      </p>
+                      <Link href={`/tickers/${sym}`}>
+                        <span className="text-[10px] font-semibold" style={{ color: "#4DC820" }}>View →</span>
+                      </Link>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveTicker(sym)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded-full"
+                      style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
+                    >
+                      <XIcon size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

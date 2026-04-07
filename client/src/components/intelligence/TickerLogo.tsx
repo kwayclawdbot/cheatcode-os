@@ -1,9 +1,11 @@
 // TickerLogo — displays company logos, crypto icons, or symbolic icons for all ticker types
-// Sources:
-//   Stocks/ETFs/Crypto with Parqet support: assets.parqet.com/logos/symbol/{SYMBOL}?format=jpg
-//   Forex: flag emoji pairs rendered as SVG text
-//   Futures/Commodities: custom inline SVG icons
-//   Fallback: colored initials badge
+// Sources (in priority order):
+//   1. Crypto: CoinGecko (most reliable for crypto)
+//   2. Stocks/ETFs: Finnhub static CDN (covers SOFI, BYD, most US stocks)
+//   3. Stocks/ETFs: Parqet CDN fallback
+//   4. Forex: flag emoji pairs rendered as SVG text
+//   5. Futures/Commodities: custom inline SVG icons
+//   6. Fallback: colored initials badge
 
 import { useState } from "react";
 
@@ -17,7 +19,6 @@ const CURRENCY_FLAGS: Record<string, string> = {
 };
 
 // ─── Futures / commodity icon map ─────────────────────────────────────────────
-// Each returns an inline SVG path or emoji character
 const FUTURES_ICONS: Record<string, { icon: string; label: string; bg: string }> = {
   ES:  { icon: "📈", label: "S&P 500", bg: "#1a56db" },
   NQ:  { icon: "💻", label: "Nasdaq",  bg: "#7c3aed" },
@@ -37,8 +38,7 @@ const FUTURES_ICONS: Record<string, { icon: string; label: string; bg: string }>
   VX:  { icon: "⚡", label: "VIX",     bg: "#dc2626" },
 };
 
-// ─── Crypto tickers that need CoinGecko fallback ───────────────────────────────
-// These are crypto tickers that Parqet may not have
+// ─── Crypto: CoinGecko URLs ───────────────────────────────────────────────────
 const CRYPTO_COINGECKO: Record<string, string> = {
   BTC:  "https://assets.coingecko.com/coins/images/1/thumb/bitcoin.png",
   ETH:  "https://assets.coingecko.com/coins/images/279/thumb/ethereum.png",
@@ -54,20 +54,8 @@ const CRYPTO_COINGECKO: Record<string, string> = {
   LTC:  "https://assets.coingecko.com/coins/images/2/thumb/litecoin.png",
 };
 
-// ─── Parqet-confirmed tickers (200 OK) ────────────────────────────────────────
-const PARQET_SUPPORTED = new Set([
-  "NVDA","SPY","QQQ","MSFT","NFLX","AVGO","SOXL","AMD","GLD",
-  "ES","CL","SOL","BTC","PLTR","TSLA","AAPL","AMZN",
-  "GOOGL","META","BABA","UBER","LYFT","SNAP","TWTR","COIN",
-  "JPM","GS","BAC","WFC","C","MS","V","MA","PYPL",
-  "JNJ","PFE","MRNA","ABBV","UNH","CVS",
-  "XOM","CVX","OXY","BP",
-  "NFLX","DIS","CMCSA","T","VZ",
-  "WMT","TGT","COST","HD","LOW",
-  "BA","LMT","RTX","NOC",
-  "GE","CAT","MMM","HON",
-  "SPY","QQQ","IWM","DIA","GLD","SLV","USO","TLT","HYG",
-]);
+// ─── Tickers that Finnhub does NOT have (use Parqet directly) ─────────────────
+const SKIP_FINNHUB = new Set(["META", "GOOGL", "GOOG", "AMZN"]);
 
 interface TickerLogoProps {
   symbol: string;
@@ -86,8 +74,14 @@ function parseForexPair(symbol: string): [string, string] | null {
   return null;
 }
 
+/** Consistent hue from ticker string for fallback badge */
+function tickerHue(sym: string) {
+  return sym.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+}
+
 export function TickerLogo({ symbol, size = 28, className = "" }: TickerLogoProps) {
-  const [imgError, setImgError] = useState(false);
+  const [finnhubError, setFinnhubError] = useState(false);
+  const [parqetError, setParqetError] = useState(false);
   const [cgError, setCgError] = useState(false);
 
   const sym = symbol.toUpperCase();
@@ -138,9 +132,25 @@ export function TickerLogo({ symbol, size = 28, className = "" }: TickerLogoProp
     );
   }
 
-  // ── Stocks/ETFs: try Parqet CDN ───────────────────────────────────────────
+  // ── Stocks/ETFs: try Finnhub CDN first (covers SOFI, BYD, most US stocks) ─
+  const finnhubUrl = `https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/${encodeURIComponent(sym)}.png`;
+  if (!SKIP_FINNHUB.has(sym) && !finnhubError) {
+    return (
+      <img
+        src={finnhubUrl}
+        alt={sym}
+        width={size}
+        height={size}
+        className={`rounded-full object-cover flex-shrink-0 ${className}`}
+        onError={() => setFinnhubError(true)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
+  // ── Stocks/ETFs: try Parqet CDN as fallback ───────────────────────────────
   const parqetUrl = `https://assets.parqet.com/logos/symbol/${encodeURIComponent(sym)}?format=jpg`;
-  if (!imgError) {
+  if (!parqetError) {
     return (
       <img
         src={parqetUrl}
@@ -148,7 +158,7 @@ export function TickerLogo({ symbol, size = 28, className = "" }: TickerLogoProp
         width={size}
         height={size}
         className={`rounded-full object-cover flex-shrink-0 ${className}`}
-        onError={() => setImgError(true)}
+        onError={() => setParqetError(true)}
         style={{ width: size, height: size }}
       />
     );
@@ -156,8 +166,7 @@ export function TickerLogo({ symbol, size = 28, className = "" }: TickerLogoProp
 
   // ── Fallback: colored initials badge ─────────────────────────────────────
   const initials = sym.slice(0, 2);
-  // Generate a consistent hue from the symbol string
-  const hue = sym.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+  const hue = tickerHue(sym);
   return (
     <div
       className={`flex items-center justify-center rounded-full font-black flex-shrink-0 ${className}`}

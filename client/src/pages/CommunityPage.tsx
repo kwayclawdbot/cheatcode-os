@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAssetClass } from "@/contexts/AssetClassContext";
+import { useWatchlist } from "@/contexts/WatchlistContext";
+import { MediaUploader } from "@/components/shared/MediaUploader";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchRadar, fetchTicker, fetchContent, fetchContentByTicker } from "@/lib/api";
 import { SparklineChart } from "@/components/intelligence/SparklineChart";
@@ -30,6 +32,7 @@ import { TickerLogo } from "@/components/intelligence/TickerLogo";
 type PostType = "trade_idea" | "pl_share" | "market_take" | "question";
 type Sentiment = "bullish" | "bearish" | "neutral";
 type AssetClass = "all" | "stocks" | "forex" | "futures" | "crypto";
+interface UploadedMedia { url: string; mimetype: string; }
 type TickerTab = "feed" | "signal" | "videos" | "sentiment";
 type FeedFilter = "trending" | "following" | "latest" | "trade_ideas";
 
@@ -54,6 +57,8 @@ interface Post {
   reactions: Reaction[];
   comments: number;
   reposts: number;
+  mediaUrl?: string;
+  mediaMimetype?: string;
 }
 
 // ─── Seed posts ───────────────────────────────────────────────────────────────
@@ -255,6 +260,17 @@ function PostCard({ post, onReact, onTickerClick }: {
         </div>
       </div>
 
+      {/* Media attachment */}
+      {post.mediaUrl && (
+        <div className="mb-2 rounded-xl overflow-hidden border border-border">
+          {post.mediaMimetype?.startsWith("video/") ? (
+            <video src={post.mediaUrl} controls className="w-full max-h-64 object-cover" />
+          ) : (
+            <img src={post.mediaUrl} alt="Post attachment" className="w-full max-h-64 object-cover" />
+          )}
+        </div>
+      )}
+
       {/* P&L badge */}
       {post.type === "pl_share" && post.pnl && (
         <div className="inline-flex items-center gap-2 mb-2 px-2.5 py-1 rounded-lg bg-muted">
@@ -424,10 +440,11 @@ function PostCard({ post, onReact, onTickerClick }: {
 
 // ─── Collapsible Compose Box ──────────────────────────────────────────────────
 
-function ComposeBox({ onPost, prefillTicker }: { onPost: (text: string) => void; prefillTicker?: string }) {
+function ComposeBox({ onPost, prefillTicker, defaultType }: { onPost: (text: string, media?: UploadedMedia) => void; prefillTicker?: string; defaultType?: PostType }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [type, setType] = useState<PostType>("market_take");
+  const [type, setType] = useState<PostType>(defaultType || "market_take");
+  const [media, setMedia] = useState<UploadedMedia | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -470,7 +487,7 @@ function ComposeBox({ onPost, prefillTicker }: { onPost: (text: string) => void;
                 rows={3}
                 className="w-full text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none bg-transparent leading-relaxed"
               />
-              <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border">
+                <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border flex-wrap">
                 <div className="flex gap-1 flex-wrap">
                   {(["trade_idea", "pl_share", "market_take", "question"] as PostType[]).map(t => (
                     <button
@@ -486,14 +503,19 @@ function ComposeBox({ onPost, prefillTicker }: { onPost: (text: string) => void;
                     </button>
                   ))}
                 </div>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <button onClick={() => { setOpen(false); setText(""); }}
+                <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+                  <MediaUploader
+                    onUploaded={setMedia}
+                    onRemove={() => setMedia(null)}
+                    currentMedia={media}
+                  />
+                  <button onClick={() => { setOpen(false); setText(""); setMedia(null); }}
                           className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1">
                     Cancel
                   </button>
                   <button
-                    onClick={() => { if (text.trim()) { onPost(text); setText(""); setOpen(false); toast.success("Posted! +25 XP"); } }}
-                    disabled={!text.trim()}
+                    onClick={() => { if (text.trim() || media) { onPost(text, media || undefined); setText(""); setMedia(null); setOpen(false); toast.success("Posted! +25 XP"); } }}
+                    disabled={!text.trim() && !media}
                     className="text-[10px] font-bold px-3 py-1.5 rounded-lg cc-gradient-bg text-[#101828] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
                   >
                     <Zap size={10} /> Post
@@ -1019,7 +1041,7 @@ export default function CommunityPage() {
     });
   };
 
-  const handlePost = (text: string) => {
+  const handlePost = (text: string, media?: UploadedMedia) => {
     const newPost: Post = {
       id: Date.now().toString(), type: "market_take",
       assetClass: activeAsset === "all" ? "stocks" : activeAsset,
@@ -1027,11 +1049,13 @@ export default function CommunityPage() {
       timestamp: "Just now", text,
       reactions: [{ emoji: "🔥", label: "Bullish", count: 0 }, { emoji: "❤️", label: "Like", count: 0 }],
       comments: 0, reposts: 0,
+      mediaUrl: media?.url,
+      mediaMimetype: media?.mimetype,
     };
     setPosts(prev => [newPost, ...prev]);
     // Persist to Railway API
     import("@/lib/api").then(({ createPost }) => {
-      createPost({ post_type: "market_take", body: text }).catch(() => {});
+      createPost({ post_type: "market_take", body: text, screenshot_url: media?.url }).catch(() => {});
     });
   };
 
@@ -1072,28 +1096,11 @@ export default function CommunityPage() {
           boxShadow: "0 1px 8px rgba(0,0,0,0.08)",
         }}
       >
-        {/* Header: Trending label + scrollable asset tabs + actions */}
+        {/* Header: Trending label + actions (asset filter removed — use global nav filter) */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-2 pb-1">
-          {/* Row 1: Trending + scrollable tabs + collapse toggle */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground flex-shrink-0">Trending</span>
-            {/* Scrollable tab strip — no wrapping */}
-            <div className="flex items-center gap-0.5 overflow-x-auto flex-1 min-w-0" style={{ scrollbarWidth: "none" }}>
-              {ASSET_TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => tab.id === "all" ? selectAllAssets() : toggleAssetClass(tab.id as "stocks" | "futures" | "forex" | "crypto")}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md transition-all flex-shrink-0"
-                  style={{
-                    background: activeAsset === tab.id ? "rgba(77,200,32,0.12)" : "transparent",
-                    color: activeAsset === tab.id ? "#4DC820" : "var(--muted-foreground)",
-                    border: activeAsset === tab.id ? "1px solid rgba(77,200,32,0.3)" : "1px solid transparent",
-                  }}
-                >
-                  {tab.icon} {tab.label}
-                </button>
-              ))}
-            </div>
+            <div className="flex-1" />
             {/* Right actions — always visible, no wrapping */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <form onSubmit={handleTickerSearch} className="relative hidden sm:block">

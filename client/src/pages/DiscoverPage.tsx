@@ -1,10 +1,10 @@
 // DiscoverPage — Ticker discovery hub
 // Design: Robinhood/Spotify hybrid — clean rows, sparklines, score badges
 // Layout: Full-width header, two-column bullish/bearish lists, watchlist sidebar
-// Data: Live Kai Radar API + Yahoo Finance sparklines
-
-import { useState, useEffect } from "react";
+// Data: Live Kai Radar API + Yahoo Finance sparkline
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
+import { useAssetClass } from "@/contexts/AssetClassContext";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Star, StarOff, Search, Filter,
@@ -189,7 +189,13 @@ function TickerListRow({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DiscoverPage() {
-  const [activeAsset, setActiveAsset] = useState<AssetClass>("all");
+  const { selected: globalSelected, isAll: globalIsAll, toggle: toggleAssetClass, selectAll: selectAllAssets } = useAssetClass();
+  // Map global multi-select to local single AssetClass for backward compat
+  const activeAsset: AssetClass = globalIsAll ? "all" : (globalSelected[0] as AssetClass) ?? "all";
+  const setActiveAsset = (id: AssetClass) => {
+    if (id === "all") selectAllAssets();
+    else toggleAssetClass(id as any);
+  };
   const [sortBy, setSortBy] = useState<SortBy>("score");
   const [searchQuery, setSearchQuery] = useState("");
   const [watchlist, setWatchlist] = useState<string[]>(() => {

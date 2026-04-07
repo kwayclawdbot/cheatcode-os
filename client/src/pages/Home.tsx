@@ -17,7 +17,7 @@ import {
   TrendingUp, TrendingDown, MessageCircle, Repeat2,
   Bookmark, Share2, Flame, ChevronRight, ChevronLeft,
   ArrowUpRight, Users, Hash, Zap, Send, Play,
-  Trophy, Star,
+  Trophy, Star, Image, Video, X as XIcon, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
@@ -32,6 +32,7 @@ import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { MiniSparkline } from "@/components/shared/MiniSparkline";
 import { useAssetClass } from "@/contexts/AssetClassContext";
+import { trpc } from "@/lib/trpc";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
 const XP_LEVELS = [
@@ -204,6 +205,8 @@ interface Post {
   thesis?: string;
   outcome?: "win" | "loss";
   pnl?: string;
+  mediaUrl?: string;
+  mediaType?: "image" | "video";
   reactions: { emoji: string; label: string; count: number; active?: boolean }[];
   comments: number;
   reposts: number;
@@ -373,6 +376,18 @@ function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (t
         </p>
       )}
 
+      {/* Media attachment */}
+      {post.mediaUrl && post.mediaType === "image" && (
+        <div className="mb-3 rounded-xl overflow-hidden border border-border">
+          <img src={post.mediaUrl} alt="Post attachment" className="w-full max-h-80 object-cover" />
+        </div>
+      )}
+      {post.mediaUrl && post.mediaType === "video" && (
+        <div className="mb-3 rounded-xl overflow-hidden border border-border">
+          <video src={post.mediaUrl} controls className="w-full max-h-80" />
+        </div>
+      )}
+
       {/* Trade levels */}
       {post.type === "trade_idea" && (post.entry || post.target || post.stop) && (
         <div className="mb-3">
@@ -472,17 +487,57 @@ function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (t
 }
 
 // ─── Compose Bar ──────────────────────────────────────────────────────────────
-function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void }) {
+function ComposeBar({ onPost }: { onPost: (text: string, type: PostType, mediaUrl?: string, mediaType?: "image" | "video") => void }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [type, setType] = useState<PostType>("market_take");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"image" | "video">("image");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { isAuthenticated } = useAuth();
 
-  const handlePost = () => {
-    if (!text.trim()) return;
-    onPost(text.trim(), type);
-    setText("");
-    setOpen(false);
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isVideo = file.type.startsWith("video/");
+    setMediaFile(file);
+    setMediaType(isVideo ? "video" : "image");
+    const url = URL.createObjectURL(file);
+    setMediaPreview(url);
+    // Auto-switch to Wall of Fame for images on pl_share context
+    if (type === "market_take" && !isVideo) setType("pl_share");
+  };
+
+  const clearMedia = () => {
+    setMediaFile(null);
+    setMediaPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handlePost = async () => {
+    if (!text.trim() && !mediaFile) return;
+    setUploading(true);
+    try {
+      let uploadedUrl: string | undefined;
+      if (mediaFile) {
+        const formData = new FormData();
+        formData.append("file", mediaFile);
+        const res = await fetch("/api/upload", { method: "POST", body: formData, credentials: "include" });
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        uploadedUrl = data.url;
+      }
+      onPost(text.trim(), type, uploadedUrl, mediaFile ? mediaType : undefined);
+      setText("");
+      clearMedia();
+      setOpen(false);
+    } catch (err) {
+      toast.error("Upload failed — please try again");
+    } finally {
+      setUploading(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -503,6 +558,7 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
         </button>
       ) : (
         <div className="space-y-2">
+          {/* Post type selector */}
           <div className="flex gap-1.5 flex-wrap">
             {(Object.entries(POST_TYPE_CONFIG) as [PostType, { label: string; color: string; bg: string }][]).map(([key, cfg]) => (
               <button
@@ -519,23 +575,81 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
               </button>
             ))}
           </div>
+
+          {/* Wall of Fame hint */}
+          {type === "pl_share" && (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-[10px] font-semibold" style={{ background: "rgba(0,196,122,0.08)", color: "#00C47A" }}>
+              <Trophy size={11} />
+              Attach a profit screenshot to make it Wall of Fame worthy!
+            </div>
+          )}
+
           <textarea
             autoFocus
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder={
               type === "trade_idea" ? "Describe your setup — ticker, entry, target, stop, thesis…" :
-              type === "pl_share" ? "Share your Wall of Fame moment — what did you trade and how did it go?" :
+              type === "pl_share" ? "What did you trade? Share the story behind the win…" :
               type === "market_take" ? "What's your read on the market right now?" :
               "Ask the community a question…"
             }
             rows={3}
             className="w-full text-sm bg-muted rounded-lg px-3 py-2 text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors resize-none"
           />
-          <div className="flex justify-between items-center">
-            <button onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-            <button onClick={handlePost} disabled={!text.trim()} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cc-gradient-bg text-[#101828] disabled:opacity-40 transition-opacity">
-              <Send size={11} /> Post
+
+          {/* Media preview */}
+          {mediaPreview && (
+            <div className="relative rounded-xl overflow-hidden border border-border">
+              {mediaType === "image" ? (
+                <img src={mediaPreview} alt="Preview" className="w-full max-h-48 object-cover" />
+              ) : (
+                <video src={mediaPreview} className="w-full max-h-48" controls />
+              )}
+              <button
+                onClick={clearMedia}
+                className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
+              >
+                <XIcon size={12} className="text-white" />
+              </button>
+            </div>
+          )}
+
+          {/* Bottom bar: media attach + cancel + post */}
+          <div className="flex items-center gap-2">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+              style={{ color: "var(--muted-foreground)" }}
+              title="Attach image or video"
+            >
+              <Image size={12} /> Photo
+            </button>
+            <button
+              onClick={() => { if (fileInputRef.current) { fileInputRef.current.accept = "video/mp4,video/webm"; fileInputRef.current.click(); setTimeout(() => { if (fileInputRef.current) fileInputRef.current.accept = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"; }, 500); } }}
+              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+              style={{ color: "var(--muted-foreground)" }}
+              title="Attach video"
+            >
+              <Video size={12} /> Video
+            </button>
+            <div className="flex-1" />
+            <button onClick={() => { setOpen(false); clearMedia(); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+            <button
+              onClick={handlePost}
+              disabled={(!text.trim() && !mediaFile) || uploading}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cc-gradient-bg text-[#101828] disabled:opacity-40 transition-opacity"
+            >
+              {uploading ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+              {uploading ? "Posting…" : "Post"}
             </button>
           </div>
         </div>
@@ -799,6 +913,7 @@ export default function Home() {
   const { theme } = useTheme();
   const [, navigate] = useLocation();
   const tickerRailRef = useRef<HTMLDivElement>(null);
+  const { isAuthenticated } = useAuth();
 
   const { matchesTicker, isAll } = useAssetClass();
 
@@ -808,10 +923,16 @@ export default function Home() {
   const [feedLoading, setFeedLoading] = useState(true);
 
   // Live quotes for ticker rail
-  const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({});
+  const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({})
 
   const { data: radarData } = useApi(fetchRadar, null);
   const { data: leaderboardData } = useApi(fetchLeaderboard, []);
+
+  // Watchlist — used for "For You" feed
+  const { data: watchlistData, refetch: refetchWatchlist } = trpc.watchlist.get.useQuery(undefined, { enabled: isAuthenticated });
+  const watchlist: string[] = watchlistData ?? [];
+  const addToWatchlist = trpc.watchlist.add.useMutation({ onSuccess: () => refetchWatchlist() });
+  const removeFromWatchlist = trpc.watchlist.remove.useMutation({ onSuccess: () => refetchWatchlist() });
 
   const allRadarTickers = radarData
     ? [...(radarData.critical || []), ...(radarData.high_conviction || []), ...(radarData.watch || [])]
@@ -845,7 +966,7 @@ export default function Home() {
     setFeedLoading(true);
     const tabMap: Record<string, string> = {
       trending: "trending",
-      for_you: "discover",
+      for_you: watchlist.length > 0 ? `for_you&tickers=${watchlist.join(",")}` : "discover",
       trade_ideas: "trade_ideas",
       wall_of_fame: "pl_shares",
     };
@@ -888,19 +1009,21 @@ export default function Home() {
     }).catch(() => { setPosts(SEED_POSTS); }).finally(() => setFeedLoading(false));
   }, [feedTab]);
 
-  const handleNewPost = (text: string, type: PostType) => {
+  const handleNewPost = (text: string, type: PostType, mediaUrl?: string, mediaType?: "image" | "video") => {
     const newPost: Post = {
       id: Date.now().toString(),
       type,
       user: { name: "You", handle: "@you", initials: "Y", color: "#4DC820", style: "Trader", level: "Rookie", levelColor: "#667085" },
       timestamp: "now",
       text,
+      mediaUrl,
+      mediaType,
       reactions: [{ emoji: "🔥", label: "Bullish", count: 0 }],
       comments: 0,
       reposts: 0,
     };
     setPosts(prev => [newPost, ...prev]);
-    createPost({ body: text, post_type: type }).catch(() => {});
+    createPost({ body: text, post_type: type, screenshot_url: mediaUrl }).catch(() => {});
     toast.success(`Posted! +${type === "trade_idea" ? "25" : type === "pl_share" ? "20" : "10"} XP`);
   };
 
@@ -1032,9 +1155,36 @@ export default function Home() {
 
             {/* For You header */}
             {feedTab === "for_you" && (
-              <div className="flex items-center gap-2 mb-4 p-3 rounded-xl" style={{ background: "rgba(123,47,190,0.06)", border: "1px solid rgba(123,47,190,0.15)" }}>
-                <Star size={16} style={{ color: "#7B2FBE" }} />
-                <p className="text-xs text-muted-foreground">Personalized based on your watchlist and trading style.</p>
+              <div className="mb-4">
+                {isAuthenticated && watchlist.length === 0 ? (
+                  // Empty watchlist prompt
+                  <div className="p-4 rounded-xl border border-dashed border-border text-center" style={{ background: "rgba(123,47,190,0.04)" }}>
+                    <Star size={22} className="mx-auto mb-2" style={{ color: "#7B2FBE" }} />
+                    <p className="text-sm font-bold text-foreground mb-1">Your watchlist is empty</p>
+                    <p className="text-xs text-muted-foreground mb-3">Add tickers to your watchlist to see personalized content here.</p>
+                    <div className="flex flex-wrap gap-1.5 justify-center mb-3">
+                      {["NVDA", "TSLA", "AAPL", "BTC", "SPY", "AMD"].map(sym => (
+                        <button
+                          key={sym}
+                          onClick={() => { addToWatchlist.mutate({ symbol: sym }); toast.success(`${sym} added to watchlist`); }}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-border hover:border-[#7B2FBE] hover:text-[#7B2FBE] transition-colors"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          + {sym}
+                        </button>
+                      ))}
+                    </div>
+                    <Link href="/discover">
+                      <button className="text-xs font-bold text-[#7B2FBE] hover:underline">Browse all tickers →</button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: "rgba(123,47,190,0.06)", border: "1px solid rgba(123,47,190,0.15)" }}>
+                    <Star size={14} style={{ color: "#7B2FBE" }} />
+                    <p className="text-xs text-muted-foreground flex-1">Showing posts for your watchlist: {watchlist.map(s => <span key={s} className="font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${s} </span>)}</p>
+                    <Link href="/profile/me"><button className="text-[10px] font-bold text-[#7B2FBE] hover:underline flex-shrink-0">Edit</button></Link>
+                  </div>
+                )}
               </div>
             )}
 
