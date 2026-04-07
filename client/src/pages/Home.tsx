@@ -1,20 +1,13 @@
 /**
- * CheatCode OS — Home Page (Social-First Redesign)
+ * CheatCode OS — Home Page (Social-First Redesign v2)
  *
- * Vision: Bloomberg Terminal meets Twitter meets Robinhood.
- * Tickers are social objects. Traders are the content creators.
- * The home page surfaces both simultaneously.
- *
- * Layout:
- *   ┌─────────────────────────────────────────────────────────┐
- *   │  Trending Tickers Rail (horizontal scroll, social data) │
- *   ├──────────────────────────────┬──────────────────────────┤
- *   │  Community Feed              │  Discovery Sidebar       │
- *   │  - Compose bar               │  - Top Traders to Follow │
- *   │  - Filter tabs               │  - Trending Topics       │
- *   │  - Live posts                │  - Active Rooms          │
- *   │    (with full identity)      │  - Market Pulse          │
- *   └──────────────────────────────┴──────────────────────────┘
+ * Changes in v2:
+ * - Sparkline chart prominently on the right side of each ticker card
+ * - Gradient sentiment bar (volt/teal-blue-green bullish, orange-red bearish heat)
+ * - "Trending" is the primary/default feed tab; "For You" is secondary
+ * - "P&L" tab renamed to "Wall of Fame"
+ * - Video shelves: mixed-ticker Trending and For You rows (not per-ticker only)
+ * - Video thumbnails have ticker pill badge overlays
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -23,8 +16,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, MessageCircle, Repeat2,
   Bookmark, Share2, Flame, ChevronRight, ChevronLeft,
-  ArrowUpRight, Users, Hash, Zap, Send, Plus,
-  BarChart2, Activity, Globe, DollarSign, Bitcoin,
+  ArrowUpRight, Users, Hash, Zap, Send, Play,
+  Trophy, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
@@ -32,7 +25,7 @@ import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  fetchFeed, fetchRadar, fetchMarketSummary, fetchLeaderboard, fetchQuotes, fetchContentByTicker,
+  fetchFeed, fetchRadar, fetchLeaderboard, fetchQuotes, fetchContent,
   likePost, repostPost, bookmarkPost, createPost, createComment, fetchComments, normalizeContentCard,
 } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
@@ -40,7 +33,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { MiniSparkline } from "@/components/shared/MiniSparkline";
 import { useAssetClass } from "@/contexts/AssetClassContext";
 
-// ─── XP Level System (shared) ─────────────────────────────────────────────────
+// ─── XP Level System ──────────────────────────────────────────────────────────
 const XP_LEVELS = [
   { level: 1, name: "Rookie",     minXP: 0,     color: "#667085", emoji: "🌱" },
   { level: 2, name: "Apprentice", minXP: 500,   color: "#00AEEF", emoji: "📚" },
@@ -56,10 +49,10 @@ function getLevel(xp: number) {
 // ─── Post Types ───────────────────────────────────────────────────────────────
 type PostType = "trade_idea" | "pl_share" | "market_take" | "question";
 const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string; bg: string }> = {
-  trade_idea:  { label: "Trade Idea",  color: "#00AEEF", bg: "#E6F7FD" },
-  pl_share:    { label: "P&L Share",   color: "#4DC820", bg: "#EDFBE6" },
-  market_take: { label: "Market Take", color: "#7B2FBE", bg: "#F3E8FF" },
-  question:    { label: "Question",    color: "#667085", bg: "#F2F4F7" },
+  trade_idea:  { label: "Trade Idea",   color: "#00AEEF", bg: "#E6F7FD" },
+  pl_share:    { label: "Wall of Fame", color: "#4DC820", bg: "#EDFBE6" },
+  market_take: { label: "Market Take",  color: "#7B2FBE", bg: "#F3E8FF" },
+  question:    { label: "Question",     color: "#667085", bg: "#F2F4F7" },
 };
 
 // ─── Trending Ticker Card ─────────────────────────────────────────────────────
@@ -67,37 +60,70 @@ interface TickerSocialCard {
   symbol: string;
   price: number;
   change_pct: number;
-  bullish_pct: number; // % of posts that are bullish
+  bullish_pct: number;
   post_count: number;
   top_traders: { name: string; initials: string; color: string }[];
 }
 
-// Static trending tickers with community sentiment (will be enriched by API)
 const TRENDING_TICKERS: TickerSocialCard[] = [
   { symbol: "NVDA", price: 875.40, change_pct: 2.34, bullish_pct: 78, post_count: 142, top_traders: [{ name: "Alex Kim", initials: "AK", color: "#00AEEF" }, { name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
   { symbol: "TSLA", price: 172.80, change_pct: -1.82, bullish_pct: 41, post_count: 98, top_traders: [{ name: "Sam Rivera", initials: "SR", color: "#7B2FBE" }, { name: "Maya Chen", initials: "MC", color: "#F79009" }] },
-  { symbol: "SPY",  price: 520.15, change_pct: 0.47, bullish_pct: 62, post_count: 87, top_traders: [{ name: "Derek Walsh", initials: "DW", color: "#E8193C" }, { name: "Taylor Morgan", initials: "TM", color: "#00AEEF" }] },
-  { symbol: "AAPL", price: 189.30, change_pct: 0.91, bullish_pct: 71, post_count: 76, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }, { name: "Alex Kim", initials: "AK", color: "#00AEEF" }] },
-  { symbol: "AMD",  price: 158.60, change_pct: 3.12, bullish_pct: 84, post_count: 64, top_traders: [{ name: "Maya Chen", initials: "MC", color: "#F79009" }, { name: "Sam Rivera", initials: "SR", color: "#7B2FBE" }] },
+  { symbol: "SPY",  price: 520.15, change_pct: 0.47, bullish_pct: 62, post_count: 87, top_traders: [{ name: "Derek Walsh", initials: "DW", color: "#E8193C" }] },
+  { symbol: "AAPL", price: 189.30, change_pct: 0.91, bullish_pct: 71, post_count: 76, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
+  { symbol: "AMD",  price: 158.60, change_pct: 3.12, bullish_pct: 84, post_count: 64, top_traders: [{ name: "Maya Chen", initials: "MC", color: "#F79009" }] },
   { symbol: "QQQ",  price: 444.20, change_pct: 0.60, bullish_pct: 67, post_count: 55, top_traders: [{ name: "Derek Walsh", initials: "DW", color: "#E8193C" }] },
-  { symbol: "META", price: 512.70, change_pct: 1.45, bullish_pct: 73, post_count: 48, top_traders: [{ name: "Taylor Morgan", initials: "TM", color: "#00AEEF" }, { name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
-  { symbol: "BTC",  price: 68420, change_pct: 2.18, bullish_pct: 81, post_count: 93, top_traders: [{ name: "Maya Chen", initials: "MC", color: "#F79009" }, { name: "Alex Kim", initials: "AK", color: "#00AEEF" }] },
-  { symbol: "PLTR", price: 24.50, change_pct: 4.21, bullish_pct: 89, post_count: 41, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
+  { symbol: "META", price: 512.70, change_pct: 1.45, bullish_pct: 73, post_count: 48, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
+  { symbol: "BTC",  price: 68420,  change_pct: 2.18, bullish_pct: 81, post_count: 93, top_traders: [{ name: "Maya Chen", initials: "MC", color: "#F79009" }] },
+  { symbol: "PLTR", price: 24.50,  change_pct: 4.21, bullish_pct: 89, post_count: 41, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
   { symbol: "MSFT", price: 415.80, change_pct: 0.33, bullish_pct: 69, post_count: 38, top_traders: [{ name: "Sam Rivera", initials: "SR", color: "#7B2FBE" }] },
 ];
 
+// ─── Gradient Sentiment Bar ───────────────────────────────────────────────────
+// Bullish: volt green → teal → cyan (energetic, electric)
+// Bearish: orange → red-orange → red (heat gradient)
+function SentimentBar({ bullish_pct }: { bullish_pct: number }) {
+  const bearish_pct = 100 - bullish_pct;
+  return (
+    <div className="mb-1.5">
+      <div className="flex justify-between text-[9px] font-bold mb-0.5">
+        <span style={{ color: "#00E5A0" }}>⚡ {bullish_pct}%</span>
+        <span style={{ color: "#FF6B35" }}>🐻 {bearish_pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden flex" style={{ background: "#F2F4F7" }}>
+        {bullish_pct > 0 && (
+          <div
+            className="h-full rounded-l-full"
+            style={{
+              width: `${bullish_pct}%`,
+              background: "linear-gradient(90deg, #00E5A0 0%, #00C4CC 50%, #0EA5E9 100%)",
+            }}
+          />
+        )}
+        {bearish_pct > 0 && (
+          <div
+            className="h-full rounded-r-full"
+            style={{
+              width: `${bearish_pct}%`,
+              background: "linear-gradient(90deg, #FF6B35 0%, #F04438 60%, #C8001A 100%)",
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; onClick: () => void }) {
   const isUp = ticker.change_pct >= 0;
-  const bearish_pct = 100 - ticker.bullish_pct;
 
   return (
     <motion.button
-      whileHover={{ y: -2, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+      whileHover={{ y: -2, boxShadow: "0 6px 20px rgba(0,0,0,0.10)" }}
       onClick={onClick}
-      className="flex-shrink-0 w-48 p-3 rounded-xl border border-border bg-card text-left cursor-pointer transition-colors hover:border-border/60"
+      className="flex-shrink-0 w-52 p-3 rounded-xl border border-border bg-card text-left cursor-pointer transition-colors hover:border-border/60"
     >
       {/* Header: logo + symbol + change badge */}
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <TickerLogo symbol={ticker.symbol} size={18} />
           <span className="font-black text-sm text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
@@ -107,8 +133,8 @@ function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; o
         <span
           className="text-[10px] font-bold flex items-center gap-0.5 px-1.5 py-0.5 rounded-full"
           style={{
-            color: isUp ? "#4DC820" : "#E8193C",
-            background: isUp ? "rgba(77,200,32,0.12)" : "rgba(232,25,60,0.12)",
+            color: isUp ? "#00C47A" : "#E8193C",
+            background: isUp ? "rgba(0,196,122,0.12)" : "rgba(232,25,60,0.12)",
           }}
         >
           {isUp ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
@@ -116,25 +142,18 @@ function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; o
         </span>
       </div>
 
-      {/* Price + Sparkline side by side */}
-      <div className="flex items-end justify-between mb-2">
-        <p className="text-base font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-          {ticker.price > 0 ? `$${ticker.price.toLocaleString()}` : "—"}
+      {/* Price left + Sparkline right — side by side, sparkline takes right 40% */}
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <p className="text-lg font-black text-foreground leading-none" style={{ fontFamily: "var(--font-mono)" }}>
+          {ticker.price > 0 ? `$${ticker.price > 999 ? ticker.price.toLocaleString() : ticker.price.toFixed(2)}` : "—"}
         </p>
-        <MiniSparkline symbol={ticker.symbol} width={64} height={28} />
+        <div className="flex-shrink-0" style={{ width: 80, height: 36 }}>
+          <MiniSparkline symbol={ticker.symbol} width={80} height={36} />
+        </div>
       </div>
 
-      {/* Community sentiment bar */}
-      <div className="mb-1.5">
-        <div className="flex justify-between text-[9px] font-bold mb-0.5">
-          <span style={{ color: "#4DC820" }}>🔥 {ticker.bullish_pct}%</span>
-          <span style={{ color: "#E8193C" }}>🐻 {bearish_pct}%</span>
-        </div>
-        <div className="h-1 rounded-full overflow-hidden bg-muted flex">
-          <div className="h-full" style={{ width: `${ticker.bullish_pct}%`, background: "#4DC820" }} />
-          <div className="h-full" style={{ width: `${bearish_pct}%`, background: "#E8193C" }} />
-        </div>
-      </div>
+      {/* Gradient sentiment bar */}
+      <SentimentBar bullish_pct={ticker.bullish_pct} />
 
       {/* Post count + top trader avatars */}
       <div className="flex items-center justify-between">
@@ -158,7 +177,7 @@ function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; o
   );
 }
 
-// ─── Post Card (Full Identity) ────────────────────────────────────────────────
+// ─── Post Card ────────────────────────────────────────────────────────────────
 interface Post {
   id: string;
   type: PostType;
@@ -227,13 +246,7 @@ const SEED_POSTS: Post[] = [
   },
 ];
 
-function SocialPostCard({
-  post,
-  onTickerClick,
-}: {
-  post: Post;
-  onTickerClick: (ticker: string) => void;
-}) {
+function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (ticker: string) => void }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<any[]>([]);
@@ -246,7 +259,7 @@ function SocialPostCard({
   const [expanded, setExpanded] = useState(false);
 
   const typeConfig = POST_TYPE_CONFIG[post.type];
-  const sentColor = post.sentiment === "bullish" ? "#4DC820" : post.sentiment === "bearish" ? "#E8193C" : "#F79009";
+  const sentColor = post.sentiment === "bullish" ? "#00C47A" : post.sentiment === "bearish" ? "#E8193C" : "#F79009";
   const displayText = post.text || post.thesis || "";
   const isLong = displayText.length > 200;
 
@@ -297,57 +310,37 @@ function SocialPostCard({
       animate={{ opacity: 1, y: 0 }}
       className="bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-all"
     >
-      {/* Header: Avatar + Full Trader Identity */}
+      {/* Header */}
       <div className="flex items-start gap-3 mb-3">
-        <div
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-          style={{ background: post.user.color }}
-        >
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: post.user.color }}>
           {post.user.initials}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap mb-1">
             <Link href={`/traders/${post.user.handle.replace("@", "")}`}>
-              <span className="font-bold text-foreground text-sm hover:underline cursor-pointer">
-                {post.user.name}
-              </span>
+              <span className="font-bold text-foreground text-sm hover:underline cursor-pointer">{post.user.name}</span>
             </Link>
             <span className="text-[10px] text-muted-foreground">{post.user.handle}</span>
-            {/* Level badge — colored pill per vision doc */}
-            <span
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
-              style={{ background: post.user.levelColor }}
-            >
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: post.user.levelColor }}>
               {post.user.level}
             </span>
-            {/* Style badge */}
             <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground hidden sm:inline">
               {post.user.style}
             </span>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Post type badge */}
-            <span
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-              style={{ background: typeConfig.bg, color: typeConfig.color }}
-            >
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: typeConfig.bg, color: typeConfig.color }}>
               {typeConfig.label}
             </span>
-            {/* Ticker pill */}
             {post.ticker && (
-              <button
-                onClick={() => onTickerClick(post.ticker!)}
-                className="flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded-lg hover:bg-muted transition-colors"
-                style={{ color: sentColor, fontFamily: "var(--font-mono)" }}
-              >
+              <button onClick={() => onTickerClick(post.ticker!)} className="flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded-lg hover:bg-muted transition-colors" style={{ color: sentColor, fontFamily: "var(--font-mono)" }}>
                 <TickerLogo symbol={post.ticker} size={12} />
                 ${post.ticker}
               </button>
             )}
-            {/* Sentiment */}
             {post.sentiment && (
               <span className="text-[9px] font-bold" style={{ color: sentColor }}>
-                {post.sentiment === "bullish" ? "🔥 Bullish" : post.sentiment === "bearish" ? "🐻 Bearish" : "👀 Neutral"}
+                {post.sentiment === "bullish" ? "⚡ Bullish" : post.sentiment === "bearish" ? "🐻 Bearish" : "👀 Neutral"}
               </span>
             )}
             <span className="text-[10px] text-muted-foreground ml-auto">{post.timestamp}</span>
@@ -355,17 +348,15 @@ function SocialPostCard({
         </div>
       </div>
 
-      {/* P&L badge for pl_share */}
+      {/* Wall of Fame P&L badge */}
       {post.type === "pl_share" && post.pnl && (
-        <div className="inline-flex items-center gap-2 mb-3 px-3 py-1.5 rounded-lg bg-muted">
-          <span className="text-lg font-black" style={{ color: post.outcome === "win" ? "#4DC820" : "#E8193C" }}>
+        <div className="inline-flex items-center gap-2 mb-3 px-3 py-1.5 rounded-lg" style={{ background: post.outcome === "win" ? "rgba(0,196,122,0.1)" : "rgba(232,25,60,0.08)" }}>
+          <Trophy size={14} style={{ color: post.outcome === "win" ? "#00C47A" : "#E8193C" }} />
+          <span className="text-lg font-black" style={{ color: post.outcome === "win" ? "#00C47A" : "#E8193C" }}>
             {post.pnl}
           </span>
-          <span
-            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
-            style={{ background: post.outcome === "win" ? "#4DC820" : "#E8193C" }}
-          >
-            {post.outcome === "win" ? "Win" : "Loss"}
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: post.outcome === "win" ? "#00C47A" : "#E8193C" }}>
+            {post.outcome === "win" ? "Win 🏆" : "Loss"}
           </span>
         </div>
       )}
@@ -382,23 +373,15 @@ function SocialPostCard({
         </p>
       )}
 
-      {/* Trade levels for trade_idea */}
+      {/* Trade levels */}
       {post.type === "trade_idea" && (post.entry || post.target || post.stop) && (
         <div className="mb-3">
-          <button
-            onClick={() => setShowLevels(!showLevels)}
-            className="text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors mb-1"
-          >
+          <button onClick={() => setShowLevels(!showLevels)} className="text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors mb-1">
             {showLevels ? "▲ Hide levels" : "▼ Show levels"}
           </button>
           <AnimatePresence>
             {showLevels && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                 <div className="grid grid-cols-3 gap-2">
                   {post.entry && (
                     <div className="text-center p-2 rounded-lg bg-muted">
@@ -408,8 +391,8 @@ function SocialPostCard({
                   )}
                   {post.target && (
                     <div className="text-center p-2 rounded-lg" style={{ background: "#EDFBE6" }}>
-                      <p className="text-[9px] font-bold uppercase tracking-wide mb-0.5" style={{ color: "#4DC820" }}>Target</p>
-                      <p className="text-xs font-black" style={{ color: "#4DC820", fontFamily: "var(--font-mono)" }}>{post.target}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wide mb-0.5" style={{ color: "#00C47A" }}>Target</p>
+                      <p className="text-xs font-black" style={{ color: "#00C47A", fontFamily: "var(--font-mono)" }}>{post.target}</p>
                     </div>
                   )}
                   {post.stop && (
@@ -428,11 +411,7 @@ function SocialPostCard({
       {/* Reactions row */}
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         {post.reactions.map(r => (
-          <button
-            key={r.emoji}
-            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
-            style={{ color: "var(--muted-foreground)" }}
-          >
+          <button key={r.emoji} className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-muted hover:bg-muted/80 transition-colors" style={{ color: "var(--muted-foreground)" }}>
             {r.emoji} {r.count}
           </button>
         ))}
@@ -456,39 +435,34 @@ function SocialPostCard({
       <AnimatePresence>
         {showComments && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="pt-2 border-t border-border space-y-2">
-              <div className="flex gap-2">
-                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground flex-shrink-0 mt-0.5">Y</div>
-                <div className="flex-1 flex gap-1.5">
-                  <input
-                    type="text"
-                    value={commentText}
-                    onChange={e => setCommentText(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmitComment(); } }}
-                    placeholder="Add a comment…"
-                    className="flex-1 text-xs bg-muted rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors"
-                  />
-                  {commentText.trim() && (
-                    <button onClick={handleSubmitComment} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg cc-gradient-bg text-[#101828] flex-shrink-0">
-                      Post
-                    </button>
-                  )}
-                </div>
-              </div>
-              {comments.map((c: any) => (
-                <div key={c.id} className="flex gap-2">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 mt-0.5" style={{ background: "#4DC820" }}>
-                    {(c.user?.name || "T")[0]}
+            <div className="border-t border-border pt-3 mt-1 space-y-2">
+              {comments.length > 0 ? (
+                comments.slice(0, 3).map((c: any) => (
+                  <div key={c.id} className="flex gap-2">
+                    <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground flex-shrink-0">
+                      {(c.user?.name || "?")[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 bg-muted rounded-lg px-2.5 py-1.5">
+                      <p className="text-[10px] font-bold text-foreground">{c.user?.name || "Trader"}</p>
+                      <p className="text-xs text-foreground/80">{c.body}</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <span className="text-[11px] font-bold text-foreground">{c.user?.name || "Trader"} </span>
-                    <span className="text-[11px] text-muted-foreground">{c.body}</span>
-                  </div>
-                </div>
-              ))}
-              {commentsLoaded && comments.length === 0 && (
-                <p className="text-[11px] text-muted-foreground text-center py-1">No comments yet. Be first!</p>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-1">No comments yet — be the first!</p>
               )}
+              <div className="flex gap-2 mt-2">
+                <input
+                  value={commentText}
+                  onChange={e => setCommentText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmitComment(); } }}
+                  placeholder="Add a comment…"
+                  className="flex-1 text-xs bg-muted rounded-lg px-3 py-1.5 text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors"
+                />
+                <button onClick={handleSubmitComment} disabled={!commentText.trim()} className="text-xs font-bold px-3 py-1.5 rounded-lg cc-gradient-bg text-[#101828] disabled:opacity-40">
+                  <Send size={11} />
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -524,15 +498,11 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
   return (
     <div className="bg-card rounded-xl border border-border p-3 mb-4">
       {!open ? (
-        <button
-          onClick={() => setOpen(true)}
-          className="w-full text-left text-sm text-muted-foreground bg-muted rounded-lg px-3 py-2.5 hover:bg-muted/80 transition-colors"
-        >
+        <button onClick={() => setOpen(true)} className="w-full text-left text-sm text-muted-foreground bg-muted rounded-lg px-3 py-2.5 hover:bg-muted/80 transition-colors">
           What's your market take today?
         </button>
       ) : (
         <div className="space-y-2">
-          {/* Post type selector */}
           <div className="flex gap-1.5 flex-wrap">
             {(Object.entries(POST_TYPE_CONFIG) as [PostType, { label: string; color: string; bg: string }][]).map(([key, cfg]) => (
               <button
@@ -555,7 +525,7 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
             onChange={e => setText(e.target.value)}
             placeholder={
               type === "trade_idea" ? "Describe your setup — ticker, entry, target, stop, thesis…" :
-              type === "pl_share" ? "Share your P&L — what did you trade and how did it go?" :
+              type === "pl_share" ? "Share your Wall of Fame moment — what did you trade and how did it go?" :
               type === "market_take" ? "What's your read on the market right now?" :
               "Ask the community a question…"
             }
@@ -564,11 +534,7 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
           />
           <div className="flex justify-between items-center">
             <button onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-            <button
-              onClick={handlePost}
-              disabled={!text.trim()}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cc-gradient-bg text-[#101828] disabled:opacity-40 transition-opacity"
-            >
+            <button onClick={handlePost} disabled={!text.trim()} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cc-gradient-bg text-[#101828] disabled:opacity-40 transition-opacity">
               <Send size={11} /> Post
             </button>
           </div>
@@ -578,10 +544,10 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
   );
 }
 
-// ─── Discovery Sidebar ────────────────────────────────────────────────────────
-// ─── VideoShelfRow ─────────────────────────────────────────────────────────────
-// A horizontal scroll row of video cards for a given ticker, shown between ticker sections
-function VideoShelfRow({ ticker }: { ticker: string }) {
+// ─── Mixed Video Shelf (Trending or For You) ──────────────────────────────────
+// Fetches a mix of videos from multiple tickers / general content
+// Shows ticker pill badges overlaid on thumbnails
+function MixedVideoShelf({ mode, tickers }: { mode: "trending" | "for_you"; tickers: string[] }) {
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -589,71 +555,105 @@ function VideoShelfRow({ ticker }: { ticker: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchContentByTicker(ticker)
-      .then(data => { if (!cancelled) { setVideos(data.slice(0, 5)); setLoading(false); } })
+
+    // Fetch general trending/discover content — mix of topics
+    const sort = mode === "trending" ? "trending" : "relevant";
+    fetchContent({ sort, page: 1 })
+      .then((data: any[]) => {
+        if (!cancelled) {
+          // Assign ticker badges from topics or title matching
+          const enriched = data.slice(0, 8).map((v: any) => {
+            const n = normalizeContentCard(v);
+            // Try to extract ticker from topics or title
+            const tickerMatch = (n.topics || []).find((t: string) =>
+              /^[A-Z]{1,5}$/.test(t) || tickers.includes(t.toUpperCase())
+            ) || tickers[Math.floor(Math.random() * Math.min(tickers.length, 3))];
+            return { ...n, badgeTicker: tickerMatch || null };
+          });
+          setVideos(enriched);
+          setLoading(false);
+        }
+      })
       .catch(() => { if (!cancelled) setLoading(false); });
+
     return () => { cancelled = true; };
-  }, [ticker]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   if (!loading && videos.length === 0) return null;
 
+  const label = mode === "trending" ? "🔥 Trending Videos" : "⚡ For You";
+
   return (
-    <div className="mt-3 mb-1">
-      <div className="flex items-center gap-2 mb-2 px-1">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-[9px] font-bold text-muted-foreground tracking-widest px-2 flex items-center gap-1">
-          <span style={{ color: "#4DC820" }}>▶</span> WATCH: ${ticker}
-        </span>
-        <div className="h-px flex-1 bg-border" />
+    <div className="mt-4 mb-5">
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="text-xs font-bold text-foreground">{label}</span>
+        <Link href="/watch">
+          <span className="text-[10px] font-bold text-[#4DC820] hover:underline cursor-pointer ml-auto flex items-center gap-0.5">
+            See all <ArrowUpRight size={9} />
+          </span>
+        </Link>
       </div>
       <div
         ref={scrollRef}
-        className="flex gap-2.5 overflow-x-auto pb-1"
+        className="flex gap-3 overflow-x-auto pb-1"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {loading
-          ? Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex-shrink-0 w-[180px] h-[110px] rounded-lg bg-muted animate-pulse" />
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex-shrink-0 w-[190px] h-[120px] rounded-xl bg-muted animate-pulse" />
             ))
-          : videos.map(v => {
-              const n = normalizeContentCard(v);
-              return (
-                <Link key={n.id} href={`/video/${n.id}`}>
-                  <div className="flex-shrink-0 w-[180px] cursor-pointer group/vc">
-                    <div className="relative rounded-lg overflow-hidden mb-1.5" style={{ aspectRatio: "16/9" }}>
-                      <img
-                        src={n.thumbnailUrl || ""}
-                        alt={n.title}
-                        className="w-full h-full object-cover group-hover/vc:scale-105 transition-transform duration-300"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&q=60"; }}
-                      />
-                      <div className="absolute inset-0 bg-black/20 group-hover/vc:bg-black/10 transition-colors" />
-                      {n.durationLabel && (
-                        <span className="absolute bottom-1 right-1 text-[9px] font-bold text-white bg-black/70 px-1 py-0.5 rounded">
-                          {n.durationLabel}
-                        </span>
-                      )}
+          : videos.map(v => (
+              <Link key={v.id} href={`/video/${v.id}`}>
+                <div className="flex-shrink-0 w-[190px] cursor-pointer group/vc">
+                  <div className="relative rounded-xl overflow-hidden mb-1.5" style={{ aspectRatio: "16/9" }}>
+                    <img
+                      src={v.thumbnailUrl || ""}
+                      alt={v.title}
+                      className="w-full h-full object-cover group-hover/vc:scale-105 transition-transform duration-300"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&q=60"; }}
+                    />
+                    {/* Dark overlay on hover */}
+                    <div className="absolute inset-0 bg-black/10 group-hover/vc:bg-black/20 transition-colors" />
+                    {/* Play button */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/vc:opacity-100 transition-opacity">
+                      <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                        <Play size={12} fill="#101828" className="ml-0.5" />
+                      </div>
                     </div>
-                    <p className="text-[10px] font-semibold text-foreground leading-snug line-clamp-2 px-0.5">
-                      {n.title}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5 px-0.5">{n.creator_name}</p>
+                    {/* Duration badge */}
+                    {v.durationLabel && (
+                      <span className="absolute bottom-1.5 right-1.5 text-[9px] font-bold text-white bg-black/70 px-1.5 py-0.5 rounded">
+                        {v.durationLabel}
+                      </span>
+                    )}
+                    {/* Ticker pill badge overlay */}
+                    {v.badgeTicker && (
+                      <span
+                        className="absolute top-1.5 left-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-md"
+                        style={{
+                          background: "rgba(0,0,0,0.72)",
+                          color: "#00E5A0",
+                          fontFamily: "var(--font-mono)",
+                          backdropFilter: "blur(4px)",
+                        }}
+                      >
+                        ${v.badgeTicker.toUpperCase()}
+                      </span>
+                    )}
                   </div>
-                </Link>
-              );
-            })}
+                  <p className="text-[10px] font-semibold text-foreground leading-snug line-clamp-2 px-0.5">{v.title}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5 px-0.5">{v.creator_name}</p>
+                </div>
+              </Link>
+            ))}
       </div>
     </div>
   );
 }
 
-function DiscoverySidebar({
-  topTraders,
-  radarTickers,
-}: {
-  topTraders: any[];
-  radarTickers: any[];
-}) {
+// ─── Discovery Sidebar ────────────────────────────────────────────────────────
+function DiscoverySidebar({ topTraders, radarTickers }: { topTraders: any[]; radarTickers: any[] }) {
   const TRENDING_TOPICS = [
     { tag: "NVDA Earnings", count: 284, hot: true },
     { tag: "Fed Rate Decision", count: 197, hot: true },
@@ -683,7 +683,12 @@ function DiscoverySidebar({
           </Link>
         </div>
         <div className="space-y-3">
-          {topTraders.slice(0, 4).map((trader: any, i: number) => {
+          {(topTraders.length > 0 ? topTraders : [
+            { display_name: "Jordan Davis", trading_style: "Swing Trader", xp: 4200 },
+            { display_name: "Alex Kim", trading_style: "Day Trader", xp: 8900 },
+            { display_name: "Sam Rivera", trading_style: "Macro", xp: 12400 },
+            { display_name: "Maya Chen", trading_style: "Crypto", xp: 3100 },
+          ]).slice(0, 4).map((trader: any, i: number) => {
             const COLORS = ["#4DC820", "#00AEEF", "#7B2FBE", "#F79009", "#E8193C"];
             const color = COLORS[i % COLORS.length];
             const level = getLevel(trader.xp || 0);
@@ -707,50 +712,22 @@ function DiscoverySidebar({
               </div>
             );
           })}
-          {topTraders.length === 0 && (
-            <>
-              {[
-                { name: "Jordan Davis", style: "Swing Trader", xp: 4200 },
-                { name: "Alex Kim", style: "Day Trader", xp: 8900 },
-                { name: "Sam Rivera", style: "Macro", xp: 12400 },
-                { name: "Maya Chen", style: "Crypto", xp: 3100 },
-              ].map((t, i) => {
-                const COLORS = ["#4DC820", "#00AEEF", "#7B2FBE", "#F79009"];
-                const level = getLevel(t.xp);
-                return (
-                  <div key={i} className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: COLORS[i] }}>
-                      {t.name.split(" ").map(w => w[0]).join("")}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-bold text-foreground">{t.name}</p>
-                        <span className="text-[8px] font-bold px-1 py-0.5 rounded-full text-white" style={{ background: level.color }}>{level.name}</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{t.style}</p>
-                    </div>
-                    <button className="text-[10px] font-bold px-2 py-1 rounded-full border border-[#4DC820] text-[#4DC820] hover:bg-[#4DC820] hover:text-white transition-colors">Follow</button>
-                  </div>
-                );
-              })}
-            </>
-          )}
         </div>
       </div>
 
       {/* Trending Topics */}
       <div className="bg-card rounded-xl border border-border p-4">
         <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5 mb-3">
-          <Hash size={14} className="text-[#7B2FBE]" /> Trending Topics
+          <Hash size={14} className="text-[#00AEEF]" /> Trending Topics
         </h3>
         <div className="space-y-2">
-          {TRENDING_TOPICS.map((topic, i) => (
-            <div key={i} className="flex items-center justify-between cursor-pointer hover:bg-muted rounded-lg px-1.5 py-1 -mx-1.5 transition-colors">
+          {TRENDING_TOPICS.map((t, i) => (
+            <div key={i} className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                {topic.hot && <Flame size={10} className="text-[#E8193C]" />}
-                <span className="text-xs font-semibold text-foreground">#{topic.tag}</span>
+                {t.hot && <Flame size={10} className="text-[#E8193C] flex-shrink-0" />}
+                <span className="text-xs font-semibold text-foreground">#{t.tag}</span>
               </div>
-              <span className="text-[10px] text-muted-foreground">{topic.count} posts</span>
+              <span className="text-[10px] text-muted-foreground">{t.count} posts</span>
             </div>
           ))}
         </div>
@@ -758,52 +735,54 @@ function DiscoverySidebar({
 
       {/* Active Rooms */}
       <div className="bg-card rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-            <Activity size={14} className="text-[#E8193C]" /> Active Rooms
-          </h3>
-          <Link href="/community">
-            <span className="text-[10px] font-bold text-[#4DC820] hover:underline cursor-pointer">Browse</span>
-          </Link>
-        </div>
+        <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5 mb-3">
+          <Zap size={14} className="text-[#F79009]" /> Active Rooms
+        </h3>
         <div className="space-y-2">
           {ACTIVE_ROOMS.map((room, i) => (
-            <div key={i} className="flex items-center justify-between cursor-pointer hover:bg-muted rounded-lg px-1.5 py-1.5 -mx-1.5 transition-colors">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: room.live ? "#4DC820" : "#667085" }} />
-                <span className="text-xs font-semibold text-foreground">{room.name}</span>
+            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${room.color}22` }}>
+                <Users size={12} style={{ color: room.color }} />
               </div>
-              <span className="text-[10px] text-muted-foreground">{room.members} online</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-foreground truncate">{room.name}</p>
+                <p className="text-[10px] text-muted-foreground">{room.members} members</p>
+              </div>
+              {room.live && (
+                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(232,25,60,0.12)", color: "#E8193C" }}>
+                  LIVE
+                </span>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Kai's Radar (compact) */}
+      {/* Kai's Radar mini */}
       {radarTickers.length > 0 && (
-        <div className="bg-card rounded-xl border border-border p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-              <Zap size={14} className="text-[#C8D400]" /> Kai's Radar
-              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(77,200,32,0.15)", color: "#4DC820" }}>LIVE</span>
-            </h3>
-            <Link href="/intelligence">
-              <span className="text-[10px] font-bold text-[#4DC820] hover:underline cursor-pointer">Full →</span>
-            </Link>
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-3 flex items-center gap-2" style={{ background: "linear-gradient(90deg, #2B3245 0%, #1a2035 100%)" }}>
+            <Flame size={14} className="text-[#C8D400]" />
+            <span className="font-bold text-sm text-white" style={{ fontFamily: "var(--font-display)" }}>Kai's Radar</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-widest ml-auto" style={{ background: "rgba(77,200,32,0.2)", color: "#4DC820" }}>LIVE</span>
           </div>
-          <div className="space-y-1.5">
+          <div className="p-3 space-y-1.5">
             {radarTickers.slice(0, 5).map((t: any, i: number) => (
               <div key={i} className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <TickerLogo symbol={t.symbol || t.ticker} size={16} />
-                  <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                    {t.symbol || t.ticker}
+                <div className="flex items-center gap-2">
+                  <TickerLogo symbol={t.symbol} size={14} />
+                  <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>{t.symbol}</span>
+                  <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{
+                    background: t.direction === "bullish" ? "rgba(0,196,122,0.15)" : t.direction === "bearish" ? "rgba(232,25,60,0.15)" : "rgba(247,144,9,0.15)",
+                    color: t.direction === "bullish" ? "#00C47A" : t.direction === "bearish" ? "#E8193C" : "#F79009",
+                  }}>
+                    {(t.direction || "neutral").toUpperCase()}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] text-muted-foreground">{t.timeframe || "swing"}</span>
-                  <span className="text-[10px] font-bold" style={{ color: t.direction === "up" ? "#4DC820" : "#E8193C" }}>
-                    {t.direction === "up" ? "↑" : "↓"} {t.score}
+                  <span className="text-[10px] font-bold" style={{ color: t.direction === "bullish" ? "#00C47A" : "#E8193C" }}>
+                    {t.direction === "bullish" ? "↑" : "↓"} {t.score}
                   </span>
                 </div>
               </div>
@@ -821,37 +800,30 @@ export default function Home() {
   const [, navigate] = useLocation();
   const tickerRailRef = useRef<HTMLDivElement>(null);
 
-  // Asset class filter
   const { matchesTicker, isAll } = useAssetClass();
 
-  // Feed state
-  const [feedTab, setFeedTab] = useState<"for_you" | "trending" | "trade_ideas" | "pl_shares">("for_you");
+  // Feed state — Trending is now the default primary tab
+  const [feedTab, setFeedTab] = useState<"trending" | "for_you" | "trade_ideas" | "wall_of_fame">("trending");
   const [posts, setPosts] = useState<Post[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
 
   // Live quotes for ticker rail
   const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({});
 
-  // API data
   const { data: radarData } = useApi(fetchRadar, null);
   const { data: leaderboardData } = useApi(fetchLeaderboard, []);
 
   const allRadarTickers = radarData
-    ? [
-        ...(radarData.critical || []),
-        ...(radarData.high_conviction || []),
-        ...(radarData.watch || []),
-      ]
+    ? [...(radarData.critical || []), ...(radarData.high_conviction || []), ...(radarData.watch || [])]
     : [];
 
-  // Filter radar tickers by asset class
   const radarTickers = isAll
     ? allRadarTickers
     : allRadarTickers.filter(rt => matchesTicker(rt.symbol || ""));
 
   const topTraders = Array.isArray(leaderboardData) ? leaderboardData.slice(0, 4) : [];
 
-  // Fetch live quotes when radar tickers load
+  // Fetch live quotes
   useEffect(() => {
     if (allRadarTickers.length === 0) return;
     const symbols = allRadarTickers.slice(0, 15).map((rt: any) => rt.symbol || rt.ticker).filter(Boolean).join(",");
@@ -872,12 +844,12 @@ export default function Home() {
   useEffect(() => {
     setFeedLoading(true);
     const tabMap: Record<string, string> = {
-      for_you: "discover",
       trending: "trending",
+      for_you: "discover",
       trade_ideas: "trade_ideas",
-      pl_shares: "pl_shares",
+      wall_of_fame: "pl_shares",
     };
-    fetchFeed(tabMap[feedTab] || "discover").then((data: any[]) => {
+    fetchFeed(tabMap[feedTab] || "trending").then((data: any[]) => {
       if (Array.isArray(data) && data.length > 0) {
         const mapped: Post[] = data.map((p: any) => ({
           id: p.id || String(Math.random()),
@@ -909,8 +881,11 @@ export default function Home() {
           reposts: p.repost_count || p.reposts || 0,
         }));
         setPosts(mapped);
+      } else {
+        // Fall back to seed posts when API returns empty
+        setPosts(SEED_POSTS);
       }
-    }).catch(() => {}).finally(() => setFeedLoading(false));
+    }).catch(() => { setPosts(SEED_POSTS); }).finally(() => setFeedLoading(false));
   }, [feedTab]);
 
   const handleNewPost = (text: string, type: PostType) => {
@@ -929,9 +904,7 @@ export default function Home() {
     toast.success(`Posted! +${type === "trade_idea" ? "25" : type === "pl_share" ? "20" : "10"} XP`);
   };
 
-  const handleTickerClick = (ticker: string) => {
-    navigate(`/tickers/${ticker}`);
-  };
+  const handleTickerClick = (ticker: string) => navigate(`/tickers/${ticker}`);
 
   const scrollTickers = (dir: "left" | "right") => {
     if (tickerRailRef.current) {
@@ -939,12 +912,18 @@ export default function Home() {
     }
   };
 
+  // Feed tabs — Trending is primary (first), For You is secondary
   const FEED_TABS = [
-    { id: "for_you" as const, label: "For You" },
-    { id: "trending" as const, label: "Trending" },
+    { id: "trending" as const,    label: "Trending" },
+    { id: "for_you" as const,     label: "For You" },
     { id: "trade_ideas" as const, label: "Trade Ideas" },
-    { id: "pl_shares" as const, label: "P&L" },
+    { id: "wall_of_fame" as const, label: "Wall of Fame 🏆" },
   ];
+
+  // Ticker symbols for video shelf badge hints
+  const tickerSymbols = (radarTickers.length > 0 ? radarTickers : TRENDING_TICKERS)
+    .slice(0, 8)
+    .map((t: any) => t.symbol || t.ticker || "");
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
@@ -958,7 +937,7 @@ export default function Home() {
             <h2 className="text-sm font-bold text-foreground flex items-center gap-1.5">
               <Flame size={14} className="text-[#E8193C]" />
               Trending Tickers
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(77,200,32,0.15)", color: "#4DC820" }}>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(0,229,160,0.15)", color: "#00C47A" }}>
                 COMMUNITY SENTIMENT
               </span>
             </h2>
@@ -978,7 +957,7 @@ export default function Home() {
           >
             {radarTickers.length === 0 && !radarData && (
               Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-48 h-[140px] rounded-xl bg-muted animate-pulse" />
+                <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
               ))
             )}
             {(radarTickers.length > 0
@@ -1009,16 +988,15 @@ export default function Home() {
 
           {/* Left: Community Feed */}
           <div>
-            {/* Compose bar */}
             <ComposeBar onPost={handleNewPost} />
 
-            {/* Feed filter tabs */}
-            <div className="flex items-center gap-1 mb-4 border-b border-border">
+            {/* Feed filter tabs — Trending first */}
+            <div className="flex items-center gap-0.5 mb-4 border-b border-border overflow-x-auto" style={{ scrollbarWidth: "none" }}>
               {FEED_TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setFeedTab(tab.id)}
-                  className="px-3 py-2 text-xs font-bold transition-colors relative"
+                  className="px-3 py-2 text-xs font-bold transition-colors relative whitespace-nowrap flex-shrink-0"
                   style={{ color: feedTab === tab.id ? "#4DC820" : "var(--muted-foreground)" }}
                 >
                   {tab.label}
@@ -1026,19 +1004,38 @@ export default function Home() {
                     <motion.div
                       layoutId="feedTabUnderline"
                       className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                      style={{ background: "#4DC820" }}
+                      style={{ background: "linear-gradient(90deg, #00E5A0, #0EA5E9)" }}
                     />
                   )}
                 </button>
               ))}
-              <Link href="/community" className="ml-auto">
-                <span className="text-[10px] font-bold text-[#4DC820] hover:underline cursor-pointer flex items-center gap-0.5 pb-2">
+              <Link href="/community" className="ml-auto flex-shrink-0">
+                <span className="text-[10px] font-bold text-[#4DC820] hover:underline cursor-pointer flex items-center gap-0.5 pb-2 pr-1">
                   Full Feed <ArrowUpRight size={10} />
                 </span>
               </Link>
             </div>
 
-            {/* Ticker-Discovery Feed */}
+            {/* Wall of Fame header */}
+            {feedTab === "wall_of_fame" && (
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-xl" style={{ background: "linear-gradient(90deg, rgba(0,196,122,0.08) 0%, rgba(14,165,233,0.08) 100%)", border: "1px solid rgba(0,196,122,0.2)" }}>
+                <Trophy size={18} style={{ color: "#00C47A" }} />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Wall of Fame</p>
+                  <p className="text-[10px] text-muted-foreground">Traders sharing their best wins. Post yours and inspire the community.</p>
+                </div>
+              </div>
+            )}
+
+            {/* For You header */}
+            {feedTab === "for_you" && (
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-xl" style={{ background: "rgba(123,47,190,0.06)", border: "1px solid rgba(123,47,190,0.15)" }}>
+                <Star size={16} style={{ color: "#7B2FBE" }} />
+                <p className="text-xs text-muted-foreground">Personalized based on your watchlist and trading style.</p>
+              </div>
+            )}
+
+            {/* Feed content */}
             {feedLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
@@ -1059,7 +1056,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="space-y-0">
-                {/* Ticker focus sections — each trending ticker gets a block */}
+                {/* Ticker focus sections */}
                 {radarTickers.slice(0, 4).map((rt, idx) => {
                   const tickerPosts = posts.filter(p => p.ticker === rt.symbol).slice(0, 2);
                   const generalPosts = posts.filter(p => !p.ticker);
@@ -1081,23 +1078,17 @@ export default function Home() {
                                 {rt.symbol}
                               </span>
                               {q && (
-                                <span
-                                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                                  style={{
-                                    color: isUp ? "#4DC820" : "#E8193C",
-                                    background: isUp ? "rgba(77,200,32,0.12)" : "rgba(232,25,60,0.12)",
-                                  }}
-                                >
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{
+                                  color: isUp ? "#00C47A" : "#E8193C",
+                                  background: isUp ? "rgba(0,196,122,0.12)" : "rgba(232,25,60,0.12)",
+                                }}>
                                   {isUp ? "+" : ""}{q.change_pct.toFixed(2)}%
                                 </span>
                               )}
-                              <span
-                                className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                                style={{
-                                  background: rt.direction === "bullish" ? "rgba(77,200,32,0.15)" : rt.direction === "bearish" ? "rgba(232,25,60,0.15)" : "rgba(247,144,9,0.15)",
-                                  color: rt.direction === "bullish" ? "#4DC820" : rt.direction === "bearish" ? "#E8193C" : "#F79009",
-                                }}
-                              >
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{
+                                background: rt.direction === "bullish" ? "rgba(0,196,122,0.15)" : rt.direction === "bearish" ? "rgba(232,25,60,0.15)" : "rgba(247,144,9,0.15)",
+                                color: rt.direction === "bullish" ? "#00C47A" : rt.direction === "bearish" ? "#E8193C" : "#F79009",
+                              }}>
                                 KAI: {(rt.direction ?? "NEUTRAL").toUpperCase()}
                               </span>
                             </div>
@@ -1105,41 +1096,36 @@ export default function Home() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <MiniSparkline symbol={rt.symbol} width={72} height={32} />
+                          <MiniSparkline symbol={rt.symbol} width={80} height={36} />
                           <span className="text-[10px] font-bold text-[#4DC820] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
                             View <ArrowUpRight size={10} />
                           </span>
                         </div>
                       </button>
+
                       {/* Posts for this ticker */}
                       <div className="space-y-2 pl-1">
                         {displayPosts.length > 0 ? (
                           displayPosts.map(post => (
-                            <SocialPostCard
-                              key={post.id}
-                              post={post}
-                              onTickerClick={handleTickerClick}
-                            />
+                            <SocialPostCard key={post.id} post={post} onTickerClick={handleTickerClick} />
                           ))
                         ) : (
                           <div className="text-center py-3 text-xs text-muted-foreground">
                             No posts yet for ${rt.symbol} —{" "}
-                            <button
-                              onClick={() => handleTickerClick(rt.symbol)}
-                              className="text-[#4DC820] hover:underline"
-                            >
+                            <button onClick={() => handleTickerClick(rt.symbol)} className="text-[#4DC820] hover:underline">
                               be the first
                             </button>
                           </div>
                         )}
                       </div>
-                      {/* Video shelf every 2 tickers */}
-                      {idx % 2 === 1 && (
-                        <VideoShelfRow ticker={rt.symbol} />
-                      )}
+
+                      {/* Mixed video shelf every 2 tickers */}
+                      {idx === 1 && <MixedVideoShelf mode="trending" tickers={tickerSymbols} />}
+                      {idx === 3 && <MixedVideoShelf mode="for_you" tickers={tickerSymbols} />}
                     </div>
                   );
                 })}
+
                 {/* Remaining general posts */}
                 {posts.slice(8).length > 0 && (
                   <div className="space-y-2 mt-2">
@@ -1149,11 +1135,7 @@ export default function Home() {
                       <div className="h-px flex-1 bg-border" />
                     </div>
                     {posts.slice(8).map(post => (
-                      <SocialPostCard
-                        key={post.id}
-                        post={post}
-                        onTickerClick={handleTickerClick}
-                      />
+                      <SocialPostCard key={post.id} post={post} onTickerClick={handleTickerClick} />
                     ))}
                   </div>
                 )}

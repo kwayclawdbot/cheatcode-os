@@ -56,3 +56,14 @@
 - [x] Wire asset class filter to CommunityPage feed (classifyTicker() maps symbols to asset class)
 - [x] Wire asset class filter to IntelligencePage / Kai Radar (filteredRadarTickers)
 - [x] Wire asset class filter to YouTubeUniversityPage (crypto/forex mapped to topic param)
+
+## UX Improvements Batch (Active)
+- [x] Add sparkline line chart to the right side of each ticker card in the trending rail
+- [x] Rename "P&L" feed tab to "Wall of Fame" (P&L screenshots / profit posts)
+- [x] Make "Trending" the primary/default tab; "For You" secondary (based on user watchlist)
+- [x] Replace solid sentiment bar with gradient style (volt/teal-blue-green or heat gradient volt-orange/red)
+- [x] Add ticker pill badges overlaid on video thumbnails showing tickers discussed
+- [x] Video shelves show mixed-ticker content (Trending or For You mix) instead of per-ticker only
+- [x] Add "Watch" as its own top-level nav tab
+- [x] Add "Community" as its own top-level nav tab
+- [x] Rename "Feed" nav tab to "Home"
