@@ -108,3 +108,8 @@
 ## Auth Gap Fixes (Apr 7 #4)
 - [x] New-user onboarding redirect: after auth.me succeeds, check if user is new (no watchlist/profile data) and redirect to /onboarding
 - [x] Sign-up flow: after OAuth, detect first-time users and route to onboarding (not just Home)
+
+## Auth/Nav Fixes (Apr 7 #5)
+- [x] Fix Sign In button on homepage giving 404 (route /auth not found or wrong path)
+- [x] Hide sign-in CTA on homepage when user is already authenticated
+- [x] Add logout button/option to nav menu bar (desktop user dropdown + mobile drawer)

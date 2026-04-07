@@ -545,7 +545,7 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType, mediaUr
     return (
       <div className="bg-card rounded-xl border border-border p-4 mb-4">
         <p className="text-sm text-muted-foreground text-center">
-          <Link href="/sign-in"><span className="text-[#4DC820] font-bold hover:underline cursor-pointer">Sign in</span></Link> to post trade ideas, share P&L, and join the community.
+          <Link href="/auth"><span className="text-[#4DC820] font-bold hover:underline cursor-pointer">Sign in</span></Link> to post trade ideas, share P&L, and join the community.
         </p>
       </div>
     );

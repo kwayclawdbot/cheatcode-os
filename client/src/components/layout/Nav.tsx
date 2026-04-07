@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles, LogIn, PenLine } from "lucide-react";
+import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles, LogIn, LogOut, PenLine, User } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -358,10 +358,23 @@ function MobileGroupItem({
 export function Nav() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, signOut } = useAuth();
   const [location] = useLocation();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const { selected, isAll, toggle, selectAll, isSelected } = useAssetClass();
 
   const userXP = (user as any)?.xp || 0;
@@ -466,8 +479,12 @@ export function Nav() {
               </Link>
 
               {isAuthenticated ? (
-                <Link href="/traders/me">
-                  <div className="hidden sm:flex flex-col items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity" title={`${navLevel.name} · ${userXP.toLocaleString()} XP`}>
+                <div className="relative hidden sm:block" ref={userDropdownRef}>
+                  <button
+                    onClick={() => setUserDropdownOpen(v => !v)}
+                    className="flex flex-col items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity"
+                    title={`${navLevel.name} · ${userXP.toLocaleString()} XP`}
+                  >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
                       style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}
@@ -475,8 +492,32 @@ export function Nav() {
                       {userInitial}
                     </div>
                     <span className="text-[8px] font-bold leading-none" style={{ color: navLevel.color }}>{navLevel.name}</span>
-                  </div>
-                </Link>
+                  </button>
+                  {userDropdownOpen && (
+                    <div
+                      className="absolute right-0 top-full mt-2 w-44 rounded-xl border shadow-lg z-50 overflow-hidden"
+                      style={{
+                        background: isDark ? "#1a2035" : "white",
+                        borderColor: isDark ? "rgba(255,255,255,0.1)" : "#EAECF0",
+                      }}
+                    >
+                      <Link href="/traders/me" onClick={() => setUserDropdownOpen(false)}>
+                        <div className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-muted/50 transition-colors cursor-pointer">
+                          <User size={14} style={{ color: isDark ? "#98A2B3" : "#667085" }} />
+                          <span className="text-sm font-medium" style={{ color: isDark ? "#D0D5DD" : "#344054" }}>My Profile</span>
+                        </div>
+                      </Link>
+                      <div className="border-t" style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }} />
+                      <button
+                        onClick={() => { setUserDropdownOpen(false); signOut(); }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut size={14} className="text-red-400" />
+                        <span className="text-sm font-medium text-red-400">Sign Out</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <Link href="/auth">
                   <button
@@ -641,13 +682,32 @@ export function Nav() {
               </nav>
 
               {/* Bottom CTA */}
-              <div className="px-4 py-4 border-t"
+              <div className="px-4 py-4 border-t space-y-2"
                    style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "#EAECF0" }}>
                 <Link href="/pricing">
                   <button className="w-full py-2.5 rounded-xl cc-gradient-bg text-[#101828] font-bold text-sm hover:opacity-90 transition-opacity">
                     Go Pro ⚡
                   </button>
                 </Link>
+                {isAuthenticated ? (
+                  <button
+                    onClick={() => { setMobileOpen(false); signOut(); }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/30 text-red-400 font-semibold text-sm hover:bg-red-500/10 transition-colors"
+                  >
+                    <LogOut size={15} />
+                    Sign Out
+                  </button>
+                ) : (
+                  <Link href="/auth" onClick={() => setMobileOpen(false)}>
+                    <button
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border font-semibold text-sm hover:bg-muted transition-colors"
+                      style={{ color: isDark ? "#D0D5DD" : "#344054" }}
+                    >
+                      <LogIn size={15} />
+                      Sign In
+                    </button>
+                  </Link>
+                )}
               </div>
             </motion.div>
           </>
