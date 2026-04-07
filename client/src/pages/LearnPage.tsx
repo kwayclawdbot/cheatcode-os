@@ -3,7 +3,7 @@
 // Brand: CC Green for free paths, CC Yellow for Pro, CC Dark gradient for upsell banner
 
 import { Link } from "wouter";
-import { Lock, Play, CheckCircle, Zap, BookOpen, Clock } from "lucide-react";
+import { Lock, Play, CheckCircle, Zap, BookOpen, Clock, Youtube } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 
@@ -194,6 +194,36 @@ export default function LearnPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {freePaths.map(p => <PathCard key={p.id} path={p} />)}
             </div>
+          </section>
+
+          {/* YouTube University CTA */}
+          <section>
+            <Link href="/learn/university">
+              <div className="rounded-2xl border border-border overflow-hidden cursor-pointer group hover:border-border/60 transition-all hover:shadow-md">
+                <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #E8193C 0%, #00AEEF 50%, #4DC820 100%)" }} />
+                <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                         style={{ background: "linear-gradient(135deg, #FF0000, #CC0000)" }}>
+                      <Youtube size={22} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-foreground mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                        YouTube University &mdash; Free curated video library
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+                        Hundreds of curated videos from top trading educators on YouTube &mdash; organized by topic, skill level, and fully searchable. No subscription needed.
+                      </p>
+                    </div>
+                  </div>
+                  <button className="flex-shrink-0 flex items-center gap-2 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-opacity hover:opacity-90"
+                          style={{ background: "linear-gradient(135deg, #FF0000, #CC0000)" }}>
+                    <Play size={13} fill="white" />
+                    Browse Videos
+                  </button>
+                </div>
+              </div>
+            </Link>
           </section>
 
           {/* Pro paths */}

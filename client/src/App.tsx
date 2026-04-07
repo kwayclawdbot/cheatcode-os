@@ -47,6 +47,8 @@ import CoachesCornerPage from "./pages/CoachesCornerPage";
 import CoachProfilePage from "./pages/CoachProfilePage";
 import DiscoverPage from "./pages/DiscoverPage";
 import KaiAssistPage from "./pages/KaiAssistPage";
+import LeaderboardPage from "./pages/LeaderboardPage";
+import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -90,6 +92,8 @@ function Router() {
       {/* ── Legacy feed route → redirect to swipe feed ── */}
       <Route path="/social-feed" component={FeedPage} />
       <Route path="/assist" component={KaiAssistPage} />
+      <Route path="/leaderboard" component={LeaderboardPage} />
+      <Route path="/learn/university" component={YouTubeUniversityPage} />
 
       {/* ── Auth ── */}
       <Route path="/auth" component={AuthPage} />

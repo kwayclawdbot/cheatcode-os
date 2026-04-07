@@ -777,12 +777,58 @@ export default function CommunityPage() {
   const [activeAsset, setActiveAsset] = useState<AssetClass>("all");
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("trending");
-  const [posts, setPosts] = useState<Post[]>(SEED_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
   const [radarTickers, setRadarTickers] = useState<any[]>([]);
   const [tickerSearch, setTickerSearch] = useState("");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const { theme } = useTheme();
   const isDark = theme === "dark";
+
+  // Load feed from Railway API
+  useEffect(() => {
+    const tab = feedFilter === "following" ? "following" : feedFilter === "latest" ? "discover" : "trending";
+    setFeedLoading(true);
+    import("@/lib/api").then(({ fetchFeed }) => {
+      fetchFeed(tab, 1).then((data: any[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const normalized: Post[] = data.map((p: any) => ({
+            id: p.id,
+            type: (p.post_type || "market_take") as PostType,
+            assetClass: "stocks" as AssetClass,
+            ticker: p.ticker,
+            sentiment: p.sentiment as Sentiment | undefined,
+            thesis: p.thesis,
+            text: p.body || p.thesis || "",
+            entry: p.entry_price ? `$${p.entry_price}` : undefined,
+            target: p.target_price ? `$${p.target_price}` : undefined,
+            stop: p.stop_price ? `$${p.stop_price}` : undefined,
+            timeframe: p.timeframe,
+            user: {
+              name: p.user?.name || "Trader",
+              handle: p.user?.handle ? `@${p.user.handle}` : "@trader",
+              initials: (p.user?.name || "T").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+              color: "#4DC820",
+              style: p.user?.style || "Trader",
+              level: "Pro",
+              levelColor: "#4DC820",
+            },
+            timestamp: p.created_at ? new Date(p.created_at).toLocaleDateString() : "Recently",
+            reactions: [
+              { emoji: "🔥", label: "Bullish", count: p.likes_count || 0, active: p.user_liked || false },
+              { emoji: "❤️", label: "Like", count: 0, active: false },
+            ],
+            comments: p.comments_count || 0,
+            reposts: p.reposts_count || 0,
+          }));
+          setPosts(normalized);
+        } else {
+          setPosts(SEED_POSTS);
+        }
+      }).catch(() => setPosts(SEED_POSTS))
+        .finally(() => setFeedLoading(false));
+    });
+  }, [feedFilter]);
 
   useEffect(() => {
     fetchRadar().then(r => {
@@ -805,17 +851,24 @@ export default function CommunityPage() {
   };
 
   const handleReact = (postId: string, emoji: string) => {
+    // Optimistic update
+    const post = posts.find(p => p.id === postId);
+    const wasLiked = post?.reactions[0]?.active;
     setPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
       return {
         ...p,
         reactions: p.reactions.map(r => {
           if (r.emoji !== emoji) return r;
-          const wasActive = r.active;
-          return { ...r, count: wasActive ? r.count - 1 : r.count + 1, active: !wasActive };
+          return { ...r, count: wasLiked ? r.count - 1 : r.count + 1, active: !wasLiked };
         }),
       };
     }));
+    // Persist to Railway API
+    import("@/lib/api").then(({ likePost, unlikePost }) => {
+      if (wasLiked) unlikePost(postId).catch(() => {});
+      else likePost(postId).catch(() => {});
+    });
   };
 
   const handlePost = (text: string) => {
@@ -828,6 +881,10 @@ export default function CommunityPage() {
       comments: 0, reposts: 0,
     };
     setPosts(prev => [newPost, ...prev]);
+    // Persist to Railway API
+    import("@/lib/api").then(({ createPost }) => {
+      createPost({ post_type: "market_take", body: text }).catch(() => {});
+    });
   };
 
   const FEED_FILTERS: { id: FeedFilter; label: string }[] = [
