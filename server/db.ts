@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, profiles } from "../drizzle/schema";
+import { InsertUser, users, profiles, chatMessages, InsertChatMessage } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -107,6 +107,27 @@ export async function setWatchlist(userId: number, symbols: string[]): Promise<v
   } else {
     await db.insert(profiles).values({ userId, watchlist: symbols });
   }
+}
+
+// ─── Chat helpers ───────────────────────────────────────────────────────────
+
+export async function getChatHistory(channelId: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(chatMessages)
+    .where(eq(chatMessages.channelId, channelId))
+    .orderBy(desc(chatMessages.createdAt))
+    .limit(limit);
+  return rows.reverse(); // oldest first for display
+}
+
+export async function saveChatMessage(msg: InsertChatMessage) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(chatMessages).values(msg);
+  return result;
 }
 
 // TODO: add feature queries here as your schema grows.

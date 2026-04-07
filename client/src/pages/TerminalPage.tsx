@@ -7,16 +7,18 @@
 // - Far right: Community chat sidebar with per-feed channels
 // - Each mode switch changes: default symbol, watchlist, order types, chat feed
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowLeft, Send, Hash, TrendingUp, TrendingDown,
   ChevronDown, Circle, Users, Zap, Globe, Bitcoin,
-  BarChart2, Lock, LogIn, RefreshCw, Star, Bell
+  BarChart2, Lock, LogIn, RefreshCw, Star, Bell, Wifi, WifiOff
 } from "lucide-react";
 import { Nav } from "@/components/layout/Nav";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { CheatCodeChart } from "@/components/CheatCodeChart";
+import { useChatChannel } from "@/hooks/useChatChannel";
+import { useAuth } from "@/hooks/useAuth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MarketMode = "stocks" | "futures" | "forex" | "crypto";
@@ -631,40 +633,66 @@ function OrderPanel({ mode, isLoggedIn }: { mode: MarketMode; isLoggedIn: boolea
 }
 
 // ─── Community Chat Sidebar ───────────────────────────────────────────────────
+// ─── User color palette for chat avatars ─────────────────────────────────────
+const AVATAR_COLORS = [
+  "#4DC820", "#00AEEF", "#F79009", "#E8193C", "#7B2FBE",
+  "#0EA5E9", "#14B8A6", "#D946EF", "#EC4899", "#F97316",
+];
+
+function stringToColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+}
+
 function ChatSidebar({ mode }: { mode: MarketMode }) {
   const config = MARKET_MODES[mode];
   const [activeChannel, setActiveChannel] = useState(config.chatChannels[0].id);
-  const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState(MOCK_MESSAGES[activeChannel] || MOCK_MESSAGES["stocks-general"]);
-  const [onlineCount] = useState(Math.floor(Math.random() * 800) + 200);
+  const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Update messages when channel changes
-  useEffect(() => {
-    setMessages(MOCK_MESSAGES[activeChannel] || MOCK_MESSAGES[config.chatChannels[0].id] || []);
-  }, [activeChannel, config.chatChannels]);
 
   // Update active channel when mode changes
   useEffect(() => {
     setActiveChannel(config.chatChannels[0].id);
   }, [mode]);
 
-  // Auto-scroll to bottom
+  // Real-time chat hook
+  const { messages, connected, isLoading, sendMessage } = useChatChannel(activeChannel);
+
+  // Supabase auth
+  const { user, isAuthenticated } = useAuth();
+
+  // Derive display identity from Supabase user
+  const displayName = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email?.split("@")[0] ?? "Guest";
+  const avatarInitials = getInitials(displayName);
+  const avatarColor = user ? stringToColor(user.id) : "#667085";
+
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = () => {
-    if (!message.trim()) return;
-    setMessages(prev => [...prev, {
-      user: "You",
-      avatar: "YO",
-      color: config.color,
-      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-      text: message,
-    }]);
-    setMessage("");
-  };
+  const handleSend = useCallback(async () => {
+    if (!inputText.trim() || !isAuthenticated) return;
+    await sendMessage({
+      body: inputText.trim(),
+      username: displayName,
+      avatarInitials,
+      avatarColor,
+    });
+    setInputText("");
+  }, [inputText, isAuthenticated, sendMessage, displayName, avatarInitials, avatarColor]);
 
   const currentChannel = config.chatChannels.find(c => c.id === activeChannel);
 
@@ -685,12 +713,6 @@ function ChatSidebar({ mode }: { mode: MarketMode }) {
             }}
           >
             <span>{ch.icon}</span>
-            {ch.unread && (
-              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center text-white"
-                    style={{ background: "#E8193C" }}>
-                {ch.unread > 9 ? "9+" : ch.unread}
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -704,59 +726,97 @@ function ChatSidebar({ mode }: { mode: MarketMode }) {
             <span className="text-sm">{currentChannel?.icon}</span>
             <span className="text-xs font-bold text-white truncate">{currentChannel?.label}</span>
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Circle size={6} fill="#4DC820" color="#4DC820" />
-            <span className="text-[10px]" style={{ color: "#667085" }}>{onlineCount}</span>
+          <div className="flex items-center gap-1 flex-shrink-0" title={connected ? "Connected" : "Connecting..."}>
+            {connected ? (
+              <Wifi size={10} style={{ color: "#4DC820" }} />
+            ) : (
+              <WifiOff size={10} style={{ color: "#667085" }} />
+            )}
           </div>
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2 min-h-0">
-          {messages.map((msg, i) => (
-            <div key={i} className="flex gap-2 group hover:bg-white/5 rounded-lg px-1 py-0.5 transition-colors">
-              {/* Avatar */}
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 mt-0.5"
-                   style={{ background: msg.color + "33", color: msg.color, border: `1px solid ${msg.color}44` }}>
-                {msg.avatar}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[11px] font-bold" style={{ color: msg.color }}>{msg.user}</span>
-                  {msg.badge && (
-                    <span className="text-[8px] font-bold px-1 py-0.5 rounded"
-                          style={{ background: config.color + "22", color: config.color }}>
-                      {msg.badge}
-                    </span>
-                  )}
-                  <span className="text-[9px]" style={{ color: "#3d4f6a" }}>{msg.time}</span>
-                </div>
-                <p className="text-[11px] leading-relaxed break-words" style={{ color: "#94a3b8" }}>
-                  {msg.text}
-                </p>
-              </div>
+          {isLoading && (
+            <div className="flex items-center justify-center py-4">
+              <span className="text-[10px]" style={{ color: "#3d4f6a" }}>Loading messages...</span>
             </div>
-          ))}
+          )}
+          {!isLoading && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
+              <span className="text-2xl">💬</span>
+              <span className="text-[10px] text-center" style={{ color: "#3d4f6a" }}>No messages yet.<br />Be the first to post!</span>
+            </div>
+          )}
+          {messages.map((msg, i) => {
+            const msgColor = msg.avatarColor || stringToColor(msg.username);
+            const timeStr = msg.createdAt
+              ? new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+              : "";
+            return (
+              <div key={msg.id ?? i} className="flex gap-2 group hover:bg-white/5 rounded-lg px-1 py-0.5 transition-colors">
+                {/* Avatar */}
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0 mt-0.5"
+                     style={{ background: msgColor + "33", color: msgColor, border: `1px solid ${msgColor}44` }}>
+                  {msg.avatarInitials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[11px] font-bold" style={{ color: msgColor }}>{msg.username}</span>
+                    {msg.badge && (
+                      <span className="text-[8px] font-bold px-1 py-0.5 rounded"
+                            style={{ background: config.color + "22", color: config.color }}>
+                        {msg.badge}
+                      </span>
+                    )}
+                    <span className="text-[9px]" style={{ color: "#3d4f6a" }}>{timeStr}</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed break-words" style={{ color: "#94a3b8" }}>
+                    {msg.body}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
         {/* Message input */}
         <div className="px-2 pb-2 pt-1 flex-shrink-0">
-          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5"
-               style={{ background: "#1a2035", border: "1px solid #1e2a3a" }}>
-            <input
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && sendMessage()}
-              placeholder={`Message #${currentChannel?.label}...`}
-              className="flex-1 text-xs bg-transparent outline-none min-w-0"
-              style={{ color: "#e2e8f0" }}
-            />
-            <button onClick={sendMessage}
-                    className="flex-shrink-0 p-1 rounded transition-opacity hover:opacity-80"
-                    style={{ color: message.trim() ? config.color : "#3d4f6a" }}>
-              <Send size={12} />
-            </button>
-          </div>
+          {!isAuthenticated ? (
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+                 style={{ background: "#1a2035", border: "1px solid #1e2a3a" }}>
+              <Lock size={11} style={{ color: "#667085" }} />
+              <span className="text-[10px] flex-1" style={{ color: "#667085" }}>Sign in to chat</span>
+              <button
+                onClick={() => window.location.href = "/auth"}
+                className="text-[10px] font-bold px-2 py-1 rounded"
+                style={{ background: config.color + "22", color: config.color }}
+              >
+                Sign In
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5"
+                 style={{ background: "#1a2035", border: "1px solid #1e2a3a" }}>
+              <input
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+                placeholder={`Message #${currentChannel?.label}...`}
+                className="flex-1 text-xs bg-transparent outline-none min-w-0"
+                style={{ color: "#e2e8f0" }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!inputText.trim()}
+                className="flex-shrink-0 p-1 rounded transition-opacity hover:opacity-80 disabled:opacity-30"
+                style={{ color: inputText.trim() ? config.color : "#3d4f6a" }}
+              >
+                <Send size={12} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

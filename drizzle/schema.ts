@@ -193,6 +193,22 @@ export const learnProgress = mysqlTable("learn_progress", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── Chat Messages ───────────────────────────────────────────────────────────
+export const chatMessages = mysqlTable("chat_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  channelId: varchar("channelId", { length: 64 }).notNull(),
+  userId: int("userId").notNull(),
+  username: varchar("username", { length: 64 }).notNull(),
+  avatarInitials: varchar("avatarInitials", { length: 4 }).notNull(),
+  avatarColor: varchar("avatarColor", { length: 16 }).notNull(),
+  badge: varchar("badge", { length: 32 }),
+  body: text("body").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = typeof chatMessages.$inferInsert;
+
 // ─── Coach Applications ───────────────────────────────────────────────────────
 export const coachApplications = mysqlTable("coach_applications", {
   id: int("id").autoincrement().primaryKey(),

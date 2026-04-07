@@ -114,3 +114,9 @@
 - [x] Hide sign-in CTA on homepage when user is already authenticated
 - [x] Add logout button/option to nav menu bar (desktop user dropdown + mobile drawer)
 - [x] Replace "Sign In with Manus" on AuthPage with Supabase email/password sign in + sign up forms
+
+## Live Infrastructure (Apr 7 #6)
+- [x] Terminal community chat: real-time via Supabase Realtime channels (per market mode + channel)
+- [ ] Live EODHD ticker data: replace all mock prices in TerminalPage watchlist with live EODHD quotes
+- [ ] Live EODHD ticker data: replace mock prices in Home ticker rail with live EODHD quotes
+- [ ] YouTube ingestion pipeline: optimize Python backend service and ensure Railway deployment ready
