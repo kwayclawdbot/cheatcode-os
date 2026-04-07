@@ -43,7 +43,7 @@
 - [x] Add TickerPage: /tickers/:symbol - community feed, Kai's signal, videos, sentiment vote; ticker pills in all pages navigate here
 
 ## Remaining / Future Work
-- [ ] XP persistence - XP earning actions need to trigger Railway API calls
-- [ ] Level badges - Display user level badges in nav and on posts
-- [ ] Navigation alignment - Nav structure doesn't fully match Product Vision spec
-- [ ] LearnPage content - Replace hardcoded 6 paths with dynamic Railway content
+- [x] XP persistence - XP is tracked server-side by Railway API via trackEvent(); Nav fetches real XP from fetchMyProfile() on load
+- [x] Level badges - Level badges shown in Nav (desktop tooltip + mobile drawer) and on every PostCard across all pages
+- [x] Navigation alignment - Nav restructured: Feed, Terminal, Learn (dropdown), Intelligence (dropdown), Journal per vision doc
+- [x] LearnPage content - Replaced hardcoded 6 paths with dynamic Railway API content grouped by Beginner/Intermediate/Advanced with static fallback

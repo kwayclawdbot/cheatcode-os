@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles, LogIn } from "lucide-react";
+import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles, LogIn, PenLine } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -370,6 +370,18 @@ export function Nav() {
                 {isDark ? <Sun size={17} /> : <Moon size={17} />}
               </button>
 
+              {isAuthenticated && (
+                <Link href="/community">
+                  <button
+                    className="hidden md:flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
+                    style={{ color: isDark ? "#D0D5DD" : "#344054" }}
+                    title="Create a post"
+                  >
+                    <PenLine size={14} />
+                    Post
+                  </button>
+                </Link>
+              )}
               <Link href="/pricing">
                 <button className="hidden md:flex items-center gap-1.5 text-[#101828] text-sm font-bold px-3 py-1.5 rounded-lg cc-gradient-bg hover:opacity-90 transition-opacity">
                   Go Pro
