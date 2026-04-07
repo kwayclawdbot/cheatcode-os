@@ -12,10 +12,11 @@
  */
 
 import { z } from "zod";
-import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { TRPCError } from "@trpc/server";
+import { runAutoIngest } from "../scheduler";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -565,6 +566,97 @@ export const ingestRouter = router({
     }),
 
   /**
+   * Get videos that mention a specific ticker symbol.
+   * Queries Railway content API for videos with that ticker in their enrichment data.
+   * Public endpoint — no auth required.
+   */
+  getVideosByTicker: publicProcedure
+    .input(
+      z.object({
+        symbol: z.string().min(1).max(10).toUpperCase(),
+        limit: z.number().min(1).max(50).default(12),
+      })
+    )
+    .query(async ({ input }) => {
+      const railwayBase = ENV.railwayApiUrl;
+      try {
+        // Try Railway's by-ticker endpoint first
+        const resp = await fetch(
+          `${railwayBase}/content/by-ticker/${encodeURIComponent(input.symbol)}?limit=${input.limit}`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (resp.ok) {
+          const data = await resp.json() as unknown;
+          const items = Array.isArray(data)
+            ? data
+            : (data as Record<string, unknown>).results ?? (data as Record<string, unknown>).items ?? [];
+          return {
+            symbol: input.symbol,
+            videos: (items as Record<string, unknown>[]).map((v) => ({
+              id: (v.id ?? v.video_id ?? v.external_id ?? "") as string,
+              videoId: (v.video_id ?? v.external_id ?? v.id ?? "") as string,
+              title: (v.title ?? "") as string,
+              thumbnailUrl: (v.thumbnail_url ?? "") as string,
+              creatorName: (v.creator_name ?? v.channel_title ?? "") as string,
+              durationSeconds: (v.duration_seconds ?? 0) as number,
+              viewCount: (v.view_count ?? 0) as number,
+              qualityScore: Math.round(((v.relevance_score as number | null) ?? 0) * 100),
+              quickTake: (v.quick_take ?? "") as string,
+              topics: (v.topics ?? []) as string[],
+              pillBadges: (v.pill_badges ?? []) as string[],
+              skillLevel: (v.skill_level ?? "intermediate") as string,
+              contentType: (v.content_type ?? "trading_education") as string,
+              publishedAt: (v.published_at ?? "") as string,
+              tickerSentiment: "neutral" as string,
+            })),
+            source: "railway" as const,
+          };
+        }
+      } catch {
+        // Fall through to search fallback
+      }
+
+      // Fallback: search Railway content by ticker as query
+      try {
+        const searchResp = await fetch(
+          `${railwayBase}/content?search=${encodeURIComponent("$" + input.symbol)}&limit=${input.limit}`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (searchResp.ok) {
+          const data = await searchResp.json() as unknown;
+          const items = Array.isArray(data)
+            ? data
+            : (data as Record<string, unknown>).results ?? (data as Record<string, unknown>).items ?? [];
+          return {
+            symbol: input.symbol,
+            videos: (items as Record<string, unknown>[]).map((v) => ({
+              id: (v.id ?? v.video_id ?? v.external_id ?? "") as string,
+              videoId: (v.video_id ?? v.external_id ?? v.id ?? "") as string,
+              title: (v.title ?? "") as string,
+              thumbnailUrl: (v.thumbnail_url ?? "") as string,
+              creatorName: (v.creator_name ?? v.channel_title ?? "") as string,
+              durationSeconds: (v.duration_seconds ?? 0) as number,
+              viewCount: (v.view_count ?? 0) as number,
+              qualityScore: Math.round(((v.relevance_score as number | null) ?? 0) * 100),
+              quickTake: (v.quick_take ?? "") as string,
+              topics: (v.topics ?? []) as string[],
+              pillBadges: (v.pill_badges ?? []) as string[],
+              skillLevel: (v.skill_level ?? "intermediate") as string,
+              contentType: (v.content_type ?? "trading_education") as string,
+              publishedAt: (v.published_at ?? "") as string,
+              tickerSentiment: "neutral" as string,
+            })),
+            source: "search" as const,
+          };
+        }
+      } catch {
+        // Return empty
+      }
+
+      return { symbol: input.symbol, videos: [], source: "empty" as const };
+    }),
+
+  /**
    * Bulk analyse multiple video IDs — runs quality filter on each.
    * Returns pass/fail results for admin review before bulk submit.
    */
@@ -597,5 +689,23 @@ export const ingestRouter = router({
         }
         return r.value;
       });
+    }),
+
+  /**
+   * Manually trigger the daily auto-ingest pipeline.
+   * Admin-only. Searches all niches, filters quality >= 70, and submits to Railway.
+   */
+  runAutoIngest: adminProcedure
+    .mutation(async () => {
+      const summaries = await runAutoIngest();
+      const totalSubmitted = summaries.reduce((acc, s) => acc + s.submitted, 0);
+      const totalSearched = summaries.reduce((acc, s) => acc + s.searched, 0);
+      return {
+        success: true,
+        totalSubmitted,
+        totalSearched,
+        summaries,
+        ranAt: new Date().toISOString(),
+      };
     }),
 });

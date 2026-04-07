@@ -21,14 +21,22 @@ export function useSupabaseAuth(): AuthState {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    // Get initial session and immediately sync token to localStorage
+    // This is critical: onAuthStateChange may not fire on page load if the
+    // session was restored from storage, so we must sync here too.
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // Sync token on initial load
+      if (session?.access_token) {
+        localStorage.setItem("sb-access-token", session.access_token);
+      } else {
+        localStorage.removeItem("sb-access-token");
+      }
     });
 
-    // Listen for auth changes
+    // Listen for auth changes (token refresh, sign-in, sign-out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);

@@ -2,20 +2,21 @@
 // Full-page ticker hub: community sentiment, top posts, Kai's signal, and related videos.
 // Clicking a $TICKER pill anywhere in the app navigates here.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useParams } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, MessageCircle, Repeat2, Bookmark, Share2,
   BarChart2, Play, ThumbsUp, ThumbsDown, TrendingUp, TrendingDown,
-  Flame, Zap, ChevronDown, ArrowUpRight, Activity,
+  Flame, Zap, ChevronDown, ArrowUpRight, Activity, Brain, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
+import { trpc } from "@/lib/trpc";
 import {
-  fetchTicker, fetchContentByTicker, fetchContent, fetchFeed,
+  fetchTicker, fetchFeed,
   likePost, repostPost, bookmarkPost, createComment, fetchComments,
 } from "@/lib/api";
 
@@ -249,11 +250,19 @@ export default function TickerPage() {
   const [tickerLoading, setTickerLoading] = useState(true);
   const [posts, setPosts] = useState<any[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
-  const [videos, setVideos] = useState<any[]>([]);
-  const [videosLoading, setVideosLoading] = useState(false);
   const [bullVotes, setBullVotes] = useState(62);
   const [bearVotes, setBearVotes] = useState(38);
   const [voted, setVoted] = useState<"bull" | "bear" | null>(null);
+
+  // Stabilize input to avoid infinite re-fetches
+  const videoQueryInput = useMemo(() => ({ symbol, limit: 12 }), [symbol]);
+
+  // tRPC query for videos mentioning this ticker
+  const { data: videosData, isLoading: videosLoading } = trpc.ingest.getVideosByTicker.useQuery(
+    videoQueryInput,
+    { enabled: activeTab === "videos" && !!symbol, staleTime: 5 * 60 * 1000 }
+  );
+  const videos = videosData?.videos ?? [];
 
   useEffect(() => {
     if (!symbol) return;
@@ -298,15 +307,6 @@ export default function TickerPage() {
       setPosts(mapped);
     }).catch(() => {}).finally(() => setPostsLoading(false));
   }, [symbol]);
-
-  useEffect(() => {
-    if (activeTab !== "videos" || !symbol) return;
-    setVideosLoading(true);
-    fetchContentByTicker(symbol)
-      .then(r => setVideos(Array.isArray(r) ? r : []))
-      .catch(() => fetchContent({ topic: symbol.toLowerCase() }).then(r => setVideos(r || [])).catch(() => {}))
-      .finally(() => setVideosLoading(false));
-  }, [activeTab, symbol]);
 
   const isBull = tickerData?.direction?.toLowerCase() === "bullish";
   const isBear = tickerData?.direction?.toLowerCase() === "bearish";
@@ -599,36 +599,98 @@ export default function TickerPage() {
                   ))}
                 </div>
               ) : videos.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {videos.map((v: any) => (
-                    <Link key={v.id || v.video_id} href={`/video/${v.id || v.video_id}`}>
-                      <div className="group bg-card rounded-xl overflow-hidden border border-border hover:shadow-md transition-all cursor-pointer">
-                        <div className="relative aspect-video bg-muted">
-                          {v.thumbnail_url && (
-                            <img src={v.thumbnail_url} alt={v.title} className="w-full h-full object-cover" />
-                          )}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Play size={24} className="text-white" />
+                <div className="space-y-3">
+                  {/* Source badge */}
+                  {videosData?.source === "search" && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1">
+                      <Star size={10} />
+                      Showing related content — curated videos mentioning ${symbol} will appear as they are ingested
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {videos.map((v) => {
+                      const videoId = v.videoId || v.id;
+                      const durationMin = v.durationSeconds ? Math.floor(v.durationSeconds / 60) : 0;
+                      const durationSec = v.durationSeconds ? v.durationSeconds % 60 : 0;
+                      const durationLabel = durationMin > 0 ? `${durationMin}:${String(durationSec).padStart(2, "0")}` : "";
+                      const qualityColor = v.qualityScore >= 85 ? "#4DC820" : v.qualityScore >= 70 ? "#F79009" : "#667085";
+                      return (
+                        <Link key={videoId} href={`/video/${videoId}`}>
+                          <div className="group bg-card rounded-xl overflow-hidden border border-border hover:shadow-md hover:border-border/60 transition-all cursor-pointer">
+                            {/* Thumbnail */}
+                            <div className="relative aspect-video bg-muted">
+                              {v.thumbnailUrl && (
+                                <img src={v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover" />
+                              )}
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                                  <Play size={18} className="text-white ml-0.5" />
+                                </div>
+                              </div>
+                              {/* Duration */}
+                              {durationLabel && (
+                                <span className="absolute bottom-1.5 right-1.5 text-[9px] font-bold bg-black/80 text-white px-1.5 py-0.5 rounded">
+                                  {durationLabel}
+                                </span>
+                              )}
+                              {/* Quality score */}
+                              {v.qualityScore > 0 && (
+                                <span className="absolute top-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                                      style={{ background: qualityColor }}>
+                                  {v.qualityScore}
+                                </span>
+                              )}
+                              {/* Skill level badge */}
+                              {v.skillLevel && v.skillLevel !== "intermediate" && (
+                                <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/70 text-white capitalize">
+                                  {v.skillLevel}
+                                </span>
+                              )}
+                            </div>
+                            {/* Info */}
+                            <div className="p-3">
+                              <p className="text-xs font-bold text-foreground line-clamp-2 leading-tight mb-1">{v.title}</p>
+                              <p className="text-[10px] text-muted-foreground mb-2">{v.creatorName}</p>
+                              {/* Pill badges */}
+                              {v.pillBadges && v.pillBadges.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {v.pillBadges.slice(0, 3).map((badge: string) => (
+                                    <span key={badge} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                      {badge}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Quick take snippet */}
+                              {v.quickTake && (
+                                <div className="flex items-start gap-1.5 bg-muted/50 rounded-lg p-2">
+                                  <Brain size={10} className="text-[#4DC820] mt-0.5 flex-shrink-0" />
+                                  <p className="text-[10px] text-muted-foreground leading-relaxed line-clamp-2">
+                                    {v.quickTake}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {v.duration && (
-                            <span className="absolute bottom-1.5 right-1.5 text-[9px] font-bold bg-black/80 text-white px-1.5 py-0.5 rounded">
-                              {v.duration}
-                            </span>
-                          )}
-                        </div>
-                        <div className="p-3">
-                          <p className="text-xs font-bold text-foreground line-clamp-2 leading-tight">{v.title}</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">{v.creator_name || v.channel_name}</p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-16">
-                  <Play size={32} className="text-muted-foreground mx-auto mb-3" />
+                  <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                    <Play size={24} className="text-muted-foreground" />
+                  </div>
                   <p className="font-bold text-foreground mb-1">No videos about ${symbol} yet</p>
-                  <p className="text-sm text-muted-foreground">Check back later as creators cover this ticker</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Videos mentioning ${symbol} will appear here once they are ingested and enriched.
+                  </p>
+                  <Link href="/admin/ingest">
+                    <button className="text-xs font-bold px-4 py-2 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
+                      Ingest videos about ${symbol}
+                    </button>
+                  </Link>
                 </div>
               )}
             </motion.div>

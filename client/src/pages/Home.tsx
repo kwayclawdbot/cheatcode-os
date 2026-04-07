@@ -30,7 +30,7 @@ import {
   likePost, repostPost, bookmarkPost, createPost, createComment, fetchComments, normalizeContentCard,
 } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { MiniSparkline } from "@/components/shared/MiniSparkline";
 import { useAssetClass } from "@/contexts/AssetClassContext";
 import { trpc } from "@/lib/trpc";

@@ -42,11 +42,17 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      headers() {
-        // Attach Supabase access token so protectedProcedures can authenticate
-        const token = localStorage.getItem("sb-access-token");
-        if (token) {
-          return { Authorization: `Bearer ${token}` };
+      async headers() {
+        // Always read the freshest token from Supabase session first.
+        // Falls back to localStorage for the brief window before the
+        // Supabase client has initialized (e.g., SSR hydration).
+        try {
+          const { data: { session } } = await import("./lib/supabase").then(m => m.supabase.auth.getSession());
+          const token = session?.access_token ?? localStorage.getItem("sb-access-token");
+          if (token) return { Authorization: `Bearer ${token}` };
+        } catch {
+          const token = localStorage.getItem("sb-access-token");
+          if (token) return { Authorization: `Bearer ${token}` };
         }
         return {};
       },

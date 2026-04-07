@@ -244,6 +244,18 @@ export default function AdminIngestPage() {
   const bulkAnalyseMutation = trpc.ingest.bulkAnalyse.useMutation();
   const submitVideoMutation = trpc.ingest.submitVideo.useMutation();
   const analyseVideoMutation = trpc.ingest.analyseVideo.useMutation();
+  const runAutoIngestMutation = trpc.ingest.runAutoIngest.useMutation();
+  const [autoIngestResult, setAutoIngestResult] = useState<{ totalSubmitted: number; totalSearched: number; summaries: Array<{ niche: string; searched: number; submitted: number; skipped: number; errors: number }> } | null>(null);
+
+  const handleRunAutoIngest = async () => {
+    setAutoIngestResult(null);
+    try {
+      const result = await runAutoIngestMutation.mutateAsync();
+      setAutoIngestResult(result);
+    } catch (e) {
+      console.error("Auto-ingest failed", e);
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -338,17 +350,55 @@ export default function AdminIngestPage() {
       <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl cc-gradient-bg flex items-center justify-center">
-              <Youtube size={18} className="text-[#101828]" />
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl cc-gradient-bg flex items-center justify-center">
+                <Youtube size={18} className="text-[#101828]" />
+              </div>
+              <div>
+                <h1 className="text-xl font-black text-foreground" style={{ fontFamily: "var(--font-display)" }}>
+                  Content Ingestion Pipeline
+                </h1>
+                <p className="text-xs text-muted-foreground">Search by niche → quality filter → submit to Railway</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-black text-foreground" style={{ fontFamily: "var(--font-display)" }}>
-                Content Ingestion Pipeline
-              </h1>
-              <p className="text-xs text-muted-foreground">Search by niche → quality filter → submit to Railway</p>
-            </div>
+            {/* Auto-ingest trigger */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRunAutoIngest}
+              disabled={runAutoIngestMutation.isPending}
+              className="flex items-center gap-1.5 border-[#4DC820]/40 text-[#4DC820] hover:bg-[#4DC820]/10"
+            >
+              {runAutoIngestMutation.isPending ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Zap size={13} />
+              )}
+              {runAutoIngestMutation.isPending ? "Running..." : "Run Auto-Ingest"}
+            </Button>
           </div>
+
+          {/* Auto-ingest result */}
+          {autoIngestResult && (
+            <div className="mt-3 p-3 rounded-xl border border-[#4DC820]/30 bg-[#4DC820]/5">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 size={14} className="text-[#4DC820]" />
+                <span className="text-xs font-bold text-[#4DC820]">
+                  Auto-ingest complete: {autoIngestResult.totalSubmitted} videos submitted from {autoIngestResult.totalSearched} searched
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                {autoIngestResult.summaries.map(s => (
+                  <div key={s.niche} className="bg-card rounded-lg p-2 border border-border">
+                    <p className="text-[10px] font-bold text-foreground capitalize mb-0.5">{s.niche}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.submitted}/{s.searched} submitted</p>
+                    {s.errors > 0 && <p className="text-[10px] text-[#F04438]">{s.errors} errors</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

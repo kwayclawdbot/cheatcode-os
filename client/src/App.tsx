@@ -24,7 +24,7 @@ import { AssetClassProvider } from "./contexts/AssetClassContext";
 import { WatchlistProvider } from "./contexts/WatchlistContext";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
-import { useAuth } from "./_core/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 
 // Pages

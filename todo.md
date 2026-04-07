@@ -152,3 +152,17 @@
 - [x] Admin ingestion: quality filter table showing pass/fail per video before bulk submit
 - [x] Admin ingestion: bulk submit approved videos to Railway content API
 - [x] Admin ingestion: niche presets (stocks/forex/futures/crypto/options/general with custom query override)
+
+## Ticker Enrichment + Daily Ingest + Auth Hardening (Apr 7 #10)
+- [x] TickerPage Videos tab: tRPC getVideosByTicker procedure querying Railway /content/by-ticker/:symbol
+- [x] TickerPage Videos tab: show quality score badge, ticker pill, Kai quick take snippet on each video card
+- [x] TickerPage Videos tab: "No videos yet" empty state with niche search CTA
+- [x] Daily auto-ingest: server-side scheduler (setInterval at midnight UTC) that searches each niche and auto-submits quality ≥70 videos
+- [x] Daily auto-ingest: tRPC ingest.runAutoIngest admin procedure (manual trigger + scheduled)
+- [x] Daily auto-ingest: log results and notify owner via notifyOwner
+- [x] Auth hardening: fix sb-access-token not set on initial getSession (only set on onAuthStateChange)
+- [x] Auth hardening: add token refresh guard — re-read token from Supabase session before every tRPC request
+- [x] Auth hardening: verify all protectedProcedures return UNAUTHED_ERR_MSG (not generic 401) so frontend redirect works
+- [x] Auth hardening: unified all auth consumers to single Supabase hook (removed _core/hooks/useAuth dual-auth drift)
+- [ ] Auth hardening: add /auth/reset-password route and ResetPasswordPage (reset emails point to this route)
+- [ ] Auth hardening: add rate limiting on ingest endpoints (max 10 req/min per IP)
