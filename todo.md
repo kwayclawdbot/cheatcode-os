@@ -113,3 +113,4 @@
 - [x] Fix Sign In button on homepage giving 404 (route /auth not found or wrong path)
 - [x] Hide sign-in CTA on homepage when user is already authenticated
 - [x] Add logout button/option to nav menu bar (desktop user dropdown + mobile drawer)
+- [x] Replace "Sign In with Manus" on AuthPage with Supabase email/password sign in + sign up forms

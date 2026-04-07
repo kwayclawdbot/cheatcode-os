@@ -1,19 +1,15 @@
-/**
- * CheatCode OS — Auth Page
- * Design: Split-screen. Left = Kai welcome + feature highlights. Right = sign in card.
- * Mobile: stacked, logo on top, sign in card below.
- * Auth: Manus OAuth only (no email/password — this is a Manus app).
- */
+// CheatCode OS — Auth Page
+// Sign In / Sign Up with Supabase (email+password + Google OAuth)
+// Left panel: Kai welcome + testimonials
+// Right panel: tabbed sign in / sign up form
 
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { useAuth } from "@/hooks/useAuth";
 import { motion } from "framer-motion";
-import { TrendingUp, Zap, Users, BookOpen, BarChart2, ArrowRight, Star } from "lucide-react";
+import { Eye, EyeOff, TrendingUp, Zap, Users, BookOpen, BarChart2, ArrowRight, Star, Chrome } from "lucide-react";
 
 // ─── Logo Icon ────────────────────────────────────────────────────────────────
-
 function LogoIcon({ size = 36 }: { size?: number }) {
   const r = size * 0.18;
   const cx = size / 2;
@@ -44,7 +40,6 @@ function LogoIcon({ size = 36 }: { size?: number }) {
 }
 
 // ─── Kai Message Bubble ───────────────────────────────────────────────────────
-
 function KaiBubble({ text, delay = 0 }: { text: string; delay?: number }) {
   return (
     <motion.div
@@ -53,7 +48,6 @@ function KaiBubble({ text, delay = 0 }: { text: string; delay?: number }) {
       transition={{ delay, duration: 0.4 }}
       className="flex items-start gap-3"
     >
-      {/* Kai avatar */}
       <div
         className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white"
         style={{ background: "linear-gradient(135deg, #00AEEF, #4DC820)" }}
@@ -70,8 +64,6 @@ function KaiBubble({ text, delay = 0 }: { text: string; delay?: number }) {
   );
 }
 
-// ─── Feature Pill ─────────────────────────────────────────────────────────────
-
 function FeaturePill({ icon: Icon, label, color }: { icon: React.ElementType; label: string; color: string }) {
   return (
     <div
@@ -84,8 +76,6 @@ function FeaturePill({ icon: Icon, label, color }: { icon: React.ElementType; la
   );
 }
 
-// ─── Testimonial ──────────────────────────────────────────────────────────────
-
 const TESTIMONIALS = [
   { name: "Alex T.", handle: "@swing_alex", text: "Kai called the NVDA breakout 2 days before it happened. This platform is different.", stars: 5 },
   { name: "Maya R.", handle: "@daytrader_m", text: "The community here actually trades. No noise, just real setups and real P&L.", stars: 5 },
@@ -93,24 +83,63 @@ const TESTIMONIALS = [
 ];
 
 // ─── Main Auth Page ───────────────────────────────────────────────────────────
-
 export default function AuthPage() {
-  const [, setLocation] = useLocation();
-  const { isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
+  const { isAuthenticated, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword } = useAuth();
 
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
+
+  // Redirect if already authenticated
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      setLocation("/");
+      navigate("/");
     }
-  }, [isAuthenticated, loading, setLocation]);
+  }, [isAuthenticated, loading, navigate]);
 
-  const handleSignIn = () => {
-    window.location.href = getLoginUrl();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setSubmitting(true);
+
+    if (tab === "signin") {
+      const { error } = await signInWithEmail(email, password);
+      if (error) {
+        setError(error);
+      } else {
+        navigate("/");
+      }
+    } else {
+      if (!name.trim()) {
+        setError("Please enter your name.");
+        setSubmitting(false);
+        return;
+      }
+      const { error } = await signUpWithEmail(email, password, name);
+      if (error) {
+        setError(error);
+      } else {
+        setSuccess("Account created! Check your email to confirm, then sign in.");
+        setTab("signin");
+        setPassword("");
+      }
+    }
+    setSubmitting(false);
   };
 
-  const handleSignUp = () => {
-    // Sign up uses the same OAuth flow — Manus handles new account creation
-    window.location.href = getLoginUrl();
+  const handleGoogle = async () => {
+    setError(null);
+    const { error } = await signInWithGoogle();
+    if (error) setError(error);
+    // Google OAuth redirects automatically
   };
 
   if (loading) {
@@ -128,7 +157,6 @@ export default function AuthPage() {
         className="relative flex flex-col justify-between px-8 py-10 lg:w-[55%] overflow-hidden"
         style={{ background: "linear-gradient(135deg, #0d1117 0%, #1a2035 50%, #0d1117 100%)" }}
       >
-        {/* Background glow */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -155,20 +183,10 @@ export default function AuthPage() {
 
         {/* Kai conversation */}
         <div className="relative z-10 flex-1 flex flex-col justify-center py-8 space-y-4 max-w-sm">
-          <KaiBubble
-            text="Hey, I'm Kai — your personal trading intelligence. I watch the markets so you don't miss a beat."
-            delay={0.1}
-          />
-          <KaiBubble
-            text="I'll analyze your watchlist, flag high-conviction setups, and walk you through the platform when you're ready."
-            delay={0.4}
-          />
-          <KaiBubble
-            text="Join thousands of traders who are already using CheatCode to trade smarter. Let's get you set up."
-            delay={0.7}
-          />
+          <KaiBubble text="Hey, I'm Kai — your personal trading intelligence. I watch the markets so you don't miss a beat." delay={0.1} />
+          <KaiBubble text="I'll analyze your watchlist, flag high-conviction setups, and walk you through the platform when you're ready." delay={0.4} />
+          <KaiBubble text="Join thousands of traders who are already using CheatCode to trade smarter. Let's get you set up." delay={0.7} />
 
-          {/* Feature pills */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -216,7 +234,7 @@ export default function AuthPage() {
         </motion.div>
       </div>
 
-      {/* ── Right Panel: Sign In Card ── */}
+      {/* ── Right Panel: Sign In / Sign Up Form ── */}
       <div
         className="flex flex-col items-center justify-center px-8 py-12 lg:w-[45%]"
         style={{ background: "#ffffff" }}
@@ -227,7 +245,7 @@ export default function AuthPage() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-sm"
         >
-          {/* Mobile logo (hidden on desktop) */}
+          {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
             <LogoIcon size={28} />
             <div className="flex items-baseline gap-0">
@@ -240,39 +258,166 @@ export default function AuthPage() {
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-[#EAECF0] tracking-wide text-[#2B3245] bg-[#F2F4F7]">OS</span>
           </div>
 
+          {/* Heading */}
           <h2 className="text-2xl font-black text-[#101828] mb-1" style={{ fontFamily: "Sora, sans-serif" }}>
-            Welcome back
+            {tab === "signin" ? "Welcome back" : "Create your account"}
           </h2>
-          <p className="text-sm text-[#667085] mb-8">
-            Sign in to your CheatCode account to continue.
+          <p className="text-sm text-[#667085] mb-6">
+            {tab === "signin" ? "Sign in to access your trading edge." : "Join 10,000+ traders already on CheatCode OS."}
           </p>
 
-          {/* Primary CTA — Sign In */}
+          {/* Tab switcher */}
+          <div className="flex rounded-xl p-1 mb-5 bg-[#F2F4F7]">
+            {(["signin", "signup"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setError(null); setSuccess(null); }}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  background: tab === t ? "linear-gradient(135deg, #4DC820, #C8D400)" : "transparent",
+                  color: tab === t ? "#101828" : "#667085",
+                  boxShadow: tab === t ? "0 1px 4px rgba(0,0,0,0.12)" : "none",
+                }}
+              >
+                {t === "signin" ? "Sign In" : "Sign Up"}
+              </button>
+            ))}
+          </div>
+
+          {/* Google OAuth */}
           <button
-            onClick={handleSignIn}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm mb-3 transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ background: "linear-gradient(135deg, #4DC820 0%, #C8D400 100%)", color: "#101828" }}
+            onClick={handleGoogle}
+            className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-xl mb-4 text-sm font-semibold transition-colors border hover:bg-[#F9FAFB]"
+            style={{ borderColor: "#D0D5DD", color: "#344054", background: "#fff" }}
           >
-            Sign In with Manus <ArrowRight size={16} />
+            <Chrome size={16} className="text-[#4285F4]" />
+            Continue with Google
           </button>
 
           {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
+          <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px bg-[#EAECF0]" />
-            <span className="text-xs text-[#98A2B3] font-medium">New here?</span>
+            <span className="text-xs text-[#98A2B3]">or</span>
             <div className="flex-1 h-px bg-[#EAECF0]" />
           </div>
 
-          {/* Sign Up CTA */}
-          <button
-            onClick={handleSignUp}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm border-2 transition-all hover:border-[#4DC820] hover:bg-[#EDFBE6] active:scale-[0.98]"
-            style={{ borderColor: "#D0D5DD", color: "#101828", background: "#fff" }}
-          >
-            Create Free Account
-          </button>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {tab === "signup" && (
+              <div>
+                <label className="block text-xs font-semibold text-[#344054] mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Your name"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl text-sm border border-[#D0D5DD] outline-none text-[#101828] placeholder-[#98A2B3] focus:border-[#4DC820] transition-colors"
+                />
+              </div>
+            )}
 
-          {/* Kai intro teaser */}
+            <div>
+              <label className="block text-xs font-semibold text-[#344054] mb-1.5">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl text-sm border border-[#D0D5DD] outline-none text-[#101828] placeholder-[#98A2B3] focus:border-[#4DC820] transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#344054] mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder={tab === "signup" ? "Min. 8 characters" : "Your password"}
+                  required
+                  minLength={tab === "signup" ? 8 : undefined}
+                  className="w-full px-3.5 py-2.5 pr-10 rounded-xl text-sm border border-[#D0D5DD] outline-none text-[#101828] placeholder-[#98A2B3] focus:border-[#4DC820] transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#98A2B3] hover:text-[#667085]"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            {tab === "signin" && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[#4DC820] hover:underline"
+                  onClick={async () => {
+                    if (!email) {
+                      setError("Enter your email above, then click Forgot password.");
+                      return;
+                    }
+                    const { error } = await resetPassword(email);
+                    if (error) {
+                      setError(error);
+                    } else {
+                      setResetSent(true);
+                      setSuccess(`Password reset email sent to ${email}. Check your inbox.`);
+                    }
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            {/* Error / success messages */}
+            {error && (
+              <div className="px-3.5 py-2.5 rounded-xl text-sm bg-red-50 text-red-600 border border-red-200">
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="px-3.5 py-2.5 rounded-xl text-sm bg-green-50 text-green-700 border border-green-200">
+                {success}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-60 mt-1"
+              style={{ background: "linear-gradient(135deg, #4DC820 0%, #C8D400 100%)", color: "#101828" }}
+            >
+              {submitting ? (
+                <span className="w-4 h-4 border-2 border-[#101828]/30 border-t-[#101828] rounded-full animate-spin" />
+              ) : (
+                <>
+                  {tab === "signin" ? "Sign In" : "Create Account"}
+                  <ArrowRight size={15} />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Switch tab */}
+          <p className="text-center text-sm mt-5 text-[#667085]">
+            {tab === "signin" ? (
+              <>Don't have an account?{" "}
+                <button onClick={() => { setTab("signup"); setError(null); }} className="font-semibold text-[#4DC820] hover:underline">Sign up free</button>
+              </>
+            ) : (
+              <>Already have an account?{" "}
+                <button onClick={() => { setTab("signin"); setError(null); }} className="font-semibold text-[#4DC820] hover:underline">Sign in</button>
+              </>
+            )}
+          </p>
+
+          {/* Kai teaser */}
           <div
             className="mt-6 flex items-start gap-3 p-4 rounded-2xl"
             style={{ background: "linear-gradient(135deg, #EDFBE6, #E6F7FD)", border: "1px solid #A9EFC5" }}
@@ -291,7 +436,6 @@ export default function AuthPage() {
             </div>
           </div>
 
-          {/* Legal */}
           <p className="text-[11px] text-[#98A2B3] text-center mt-6 leading-relaxed">
             By continuing, you agree to CheatCode's{" "}
             <a href="/terms" className="underline hover:text-[#475467]">Terms of Service</a>
