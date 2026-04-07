@@ -20,28 +20,8 @@ type NavItem =
   | { type: "dropdown"; label: string; emoji: string; children: { href: string; label: string; description: string; icon: React.ReactNode }[] };
 
 const NAV_ITEMS: NavItem[] = [
-  { type: "link", href: "/home",        label: "Home",      emoji: "🏠" },
-  {
-    type: "dropdown",
-    label: "Community",
-    emoji: "💬",
-    children: [
-      {
-        href: "/community",
-        label: "Community Feed",
-        description: "Discuss markets, share setups & connect with traders",
-        icon: <Users size={16} />,
-      },
-      {
-        href: "/feed",
-        label: "Ideas",
-        description: "Swipe through trade ideas & market calls",
-        icon: <Lightbulb size={16} />,
-      },
-    ],
-  },
-  { type: "link", href: "/intelligence",label: "Analyze",   emoji: "🧠" },
-  { type: "link", href: "/topics",      label: "Watch",     emoji: "🎬" },
+  { type: "link", href: "/home",        label: "Feed",          emoji: "🏠" },
+  { type: "link", href: "/terminal",    label: "Terminal",      emoji: "📊" },
   {
     type: "dropdown",
     label: "Learn",
@@ -54,32 +34,62 @@ const NAV_ITEMS: NavItem[] = [
         icon: <BookOpen size={16} />,
       },
       {
+        href: "/learn/university",
+        label: "YouTube University",
+        description: "Top trading videos organized by topic & skill level",
+        icon: <Trophy size={16} />,
+      },
+      {
         href: "/coaches-corner",
         label: "Coaches",
         description: "1-on-1 sessions, courses & coaching programs",
-        icon: <Trophy size={16} />,
+        icon: <Users size={16} />,
       },
     ],
   },
-  { type: "link", href: "/terminal",    label: "Trade",     emoji: "📊" },
-  { type: "link", href: "/assist",      label: "Assist",    emoji: "✨" },
+  {
+    type: "dropdown",
+    label: "Intelligence",
+    emoji: "🧠",
+    children: [
+      {
+        href: "/intelligence",
+        label: "Kai Analysis",
+        description: "AI-powered ticker analysis, radar & market signals",
+        icon: <Sparkles size={16} />,
+      },
+      {
+        href: "/topics",
+        label: "Watch",
+        description: "Curated trading videos & creator content",
+        icon: <Lightbulb size={16} />,
+      },
+      {
+        href: "/community",
+        label: "Community",
+        description: "Discuss markets, share setups & connect with traders",
+        icon: <Users size={16} />,
+      },
+    ],
+  },
+  { type: "link", href: "/journal",    label: "Journal",       emoji: "📓" },
 ];
 
 // All links flattened for mobile drawer
 const ALL_MOBILE_LINKS = [
-  { href: "/home",          label: "Home",            emoji: "🏠" },
-  { href: "/community",     label: "Community Feed",  emoji: "💬" },
-  { href: "/feed",          label: "Ideas",           emoji: "🃏", indent: true },
-  { href: "/intelligence",  label: "Analyze",         emoji: "🧠" },
-  { href: "/topics",        label: "Watch",           emoji: "🎬" },
-  { href: "/learn",         label: "Courses",         emoji: "📖", indent: true },
-  { href: "/coaches-corner",label: "Coaches",         emoji: "🏆", indent: true },
-  { href: "/terminal",      label: "Trade",           emoji: "📊" },
-  { href: "/assist",        label: "Assist",          emoji: "✨" },
-  { href: "/journal",       label: "Journal",         emoji: "📓" },
-  { href: "/newsletter",    label: "Newsletter",      emoji: "✉️" },
-  { href: "/pricing",       label: "Pricing",         emoji: "⚡" },
-  { href: "/admin",         label: "Admin",           emoji: "⚙️" },
+  { href: "/home",              label: "Feed",              emoji: "🏠" },
+  { href: "/terminal",          label: "Terminal",          emoji: "📊" },
+  { href: "/learn",             label: "Courses",           emoji: "📖" },
+  { href: "/learn/university",  label: "YouTube University", emoji: "🎬", indent: true },
+  { href: "/coaches-corner",    label: "Coaches",           emoji: "🏆", indent: true },
+  { href: "/intelligence",      label: "Kai Analysis",      emoji: "🧠" },
+  { href: "/topics",            label: "Watch",             emoji: "👁️", indent: true },
+  { href: "/community",         label: "Community",         emoji: "💬", indent: true },
+  { href: "/journal",           label: "Journal",           emoji: "📓" },
+  { href: "/feed",              label: "Ideas",             emoji: "🃏" },
+  { href: "/newsletter",        label: "Newsletter",        emoji: "✉️" },
+  { href: "/pricing",           label: "Pricing",           emoji: "⚡" },
+  { href: "/admin",             label: "Admin",             emoji: "⚙️" },
 ];
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────

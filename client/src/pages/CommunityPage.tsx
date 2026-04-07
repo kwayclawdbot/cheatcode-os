@@ -208,41 +208,49 @@ function PostCard({ post, onReact, onTickerClick }: {
       className="bg-card rounded-xl border border-border p-3 hover:border-border/80 transition-all"
     >
       {/* Header row */}
-      <div className="flex items-center gap-2.5 mb-2">
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+      <div className="flex items-start gap-2.5 mb-2">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
              style={{ background: post.user.color }}>
           {post.user.initials}
         </div>
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-          <Link href={`/traders/${post.user.handle.replace("@", "")}`}>
-            <span className="font-bold text-foreground text-sm hover:underline cursor-pointer">{post.user.name}</span>
-          </Link>
-          <span className="text-[10px] text-muted-foreground">{post.user.handle}</span>
-          {/* Style + level as subtle pills — not overwhelming */}
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground hidden sm:inline">
-            {post.user.style}
-          </span>
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white hidden sm:inline"
-                style={{ background: post.user.levelColor + "cc" }}>
-            {post.user.level}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {post.ticker && (
-            <button
-              onClick={() => onTickerClick(post.ticker!)}
-              className="flex items-center gap-1 ticker-mono text-[11px] font-black px-1.5 py-0.5 rounded-lg transition-colors hover:bg-muted"
-              style={{ color: sentColor }}
-            >
-              <TickerLogo symbol={post.ticker} size={16} />
-              ${post.ticker}
-            </button>
-          )}
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: typeConfig.color + "18", color: typeConfig.color }}>
-            {typeConfig.label}
-          </span>
-          <span className="text-[10px] text-muted-foreground">{post.timestamp}</span>
+        <div className="flex-1 min-w-0">
+          {/* Row 1: name + handle + level badge + style */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+            <Link href={`/traders/${post.user.handle.replace("@", "")}`}>
+              <span className="font-bold text-foreground text-sm hover:underline cursor-pointer">{post.user.name}</span>
+            </Link>
+            <span className="text-[10px] text-muted-foreground">{post.user.handle}</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                  style={{ background: post.user.levelColor }}>
+              {post.user.level}
+            </span>
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground hidden sm:inline">
+              {post.user.style}
+            </span>
+          </div>
+          {/* Row 2: post type + ticker + sentiment + time */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: typeConfig.color + "18", color: typeConfig.color }}>
+              {typeConfig.label}
+            </span>
+            {post.ticker && (
+              <button
+                onClick={() => onTickerClick(post.ticker!)}
+                className="flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded-lg transition-colors hover:bg-muted"
+                style={{ color: sentColor, fontFamily: "var(--font-mono)" }}
+              >
+                <TickerLogo symbol={post.ticker} size={12} />
+                ${post.ticker}
+              </button>
+            )}
+            {post.sentiment && (
+              <span className="text-[9px] font-bold" style={{ color: sentColor }}>
+                {post.sentiment === "bullish" ? "🔥 Bullish" : post.sentiment === "bearish" ? "🐻 Bearish" : "👀 Neutral"}
+              </span>
+            )}
+            <span className="text-[10px] text-muted-foreground ml-auto">{post.timestamp}</span>
+          </div>
         </div>
       </div>
 
