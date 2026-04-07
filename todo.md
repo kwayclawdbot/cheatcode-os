@@ -47,3 +47,12 @@
 - [x] Level badges - Level badges shown in Nav (desktop tooltip + mobile drawer) and on every PostCard across all pages
 - [x] Navigation alignment - Nav restructured: Feed, Terminal, Learn (dropdown), Intelligence (dropdown), Journal per vision doc
 - [x] LearnPage content - Replaced hardcoded 6 paths with dynamic Railway API content grouped by Beginner/Intermediate/Advanced with static fallback
+
+## Asset Class Filter + Sparklines + Ticker-First Feed (COMPLETED)
+- [x] Build global AssetClassContext: Stocks/Futures/Forex/Crypto multi-select, persisted to localStorage + Railway profile sync
+- [x] Add global asset class toggle pill bar to Nav (second sticky row below main header)
+- [x] Fetch 1W sparkline data: MiniSparkline SVG component using Railway fetchChartData candles
+- [x] Redesign Home page main feed: ticker-discovery-first — VideoShelfRow per ticker, live quotes, asset class filter wired
+- [x] Wire asset class filter to CommunityPage feed (classifyTicker() maps symbols to asset class)
+- [x] Wire asset class filter to IntelligencePage / Kai Radar (filteredRadarTickers)
+- [x] Wire asset class filter to YouTubeUniversityPage (crypto/forex mapped to topic param)

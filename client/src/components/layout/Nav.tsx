@@ -12,6 +12,7 @@ import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAssetClass, ASSET_CLASSES } from "@/contexts/AssetClassContext";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
 
@@ -274,6 +275,7 @@ export function Nav() {
   }, [isAuthenticated]);
 
   const navLevel = getNavLevel(userXP);
+  const { selected: _acSelected, toggle, selectAll, isSelected, isAll } = useAssetClass();
 
   return (
     <>
@@ -424,6 +426,48 @@ export function Nav() {
           </div>
         </div>
       </header>
+
+      {/* Asset Class Filter Bar */}
+      <div
+        className="sticky z-40 border-b"
+        style={{
+          top: 56,
+          backgroundColor: isDark ? "rgba(26,32,53,0.95)" : "rgba(255,255,255,0.95)",
+          borderColor: isDark ? "rgba(255,255,255,0.06)" : "#EAECF0",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <div className="container mx-auto">
+          <div className="flex items-center gap-1.5 h-9 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <button
+              onClick={() => selectAll()}
+              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all duration-150"
+              style={{
+                background: isAll ? "rgba(77,200,32,0.15)" : "transparent",
+                color: isAll ? "#4DC820" : isDark ? "#667085" : "#98A2B3",
+                border: isAll ? "1px solid rgba(77,200,32,0.3)" : "1px solid transparent",
+              }}
+            >
+              All Markets
+            </button>
+            {ASSET_CLASSES.map(ac => (
+              <button
+                key={ac.id}
+                onClick={() => toggle(ac.id)}
+                className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all duration-150"
+                style={{
+                  background: isSelected(ac.id) ? `${ac.color}20` : "transparent",
+                  color: isSelected(ac.id) ? ac.color : isDark ? "#667085" : "#98A2B3",
+                  border: isSelected(ac.id) ? `1px solid ${ac.color}40` : "1px solid transparent",
+                }}
+              >
+                <span>{ac.emoji}</span>
+                {ac.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Mobile drawer */}
       <AnimatePresence>

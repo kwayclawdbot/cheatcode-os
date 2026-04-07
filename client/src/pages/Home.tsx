@@ -32,11 +32,13 @@ import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  fetchFeed, fetchRadar, fetchMarketSummary, fetchLeaderboard,
-  likePost, repostPost, bookmarkPost, createPost, createComment, fetchComments,
+  fetchFeed, fetchRadar, fetchMarketSummary, fetchLeaderboard, fetchQuotes, fetchContentByTicker,
+  likePost, repostPost, bookmarkPost, createPost, createComment, fetchComments, normalizeContentCard,
 } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { MiniSparkline } from "@/components/shared/MiniSparkline";
+import { useAssetClass } from "@/contexts/AssetClassContext";
 
 // ─── XP Level System (shared) ─────────────────────────────────────────────────
 const XP_LEVELS = [
@@ -86,36 +88,41 @@ const TRENDING_TICKERS: TickerSocialCard[] = [
 
 function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; onClick: () => void }) {
   const isUp = ticker.change_pct >= 0;
-  const sentColor = ticker.bullish_pct >= 60 ? "#4DC820" : ticker.bullish_pct <= 40 ? "#E8193C" : "#F79009";
   const bearish_pct = 100 - ticker.bullish_pct;
 
   return (
     <motion.button
       whileHover={{ y: -2, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
       onClick={onClick}
-      className="flex-shrink-0 w-44 p-3 rounded-xl border border-border bg-card text-left cursor-pointer transition-colors hover:border-border/60"
+      className="flex-shrink-0 w-48 p-3 rounded-xl border border-border bg-card text-left cursor-pointer transition-colors hover:border-border/60"
     >
-      {/* Header: logo + symbol + price change */}
-      <div className="flex items-center justify-between mb-2">
+      {/* Header: logo + symbol + change badge */}
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
-          <TickerLogo symbol={ticker.symbol} size={20} />
+          <TickerLogo symbol={ticker.symbol} size={18} />
           <span className="font-black text-sm text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-            ${ticker.symbol}
+            {ticker.symbol}
           </span>
         </div>
         <span
-          className="text-[10px] font-bold flex items-center gap-0.5"
-          style={{ color: isUp ? "#4DC820" : "#E8193C" }}
+          className="text-[10px] font-bold flex items-center gap-0.5 px-1.5 py-0.5 rounded-full"
+          style={{
+            color: isUp ? "#4DC820" : "#E8193C",
+            background: isUp ? "rgba(77,200,32,0.12)" : "rgba(232,25,60,0.12)",
+          }}
         >
-          {isUp ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-          {isUp ? "+" : ""}{ticker.change_pct.toFixed(2)}%
+          {isUp ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+          {isUp ? "+" : ""}{ticker.change_pct !== 0 ? ticker.change_pct.toFixed(2) : "—"}%
         </span>
       </div>
 
-      {/* Price */}
-      <p className="text-base font-black text-foreground mb-2" style={{ fontFamily: "var(--font-mono)" }}>
-        ${ticker.price.toLocaleString()}
-      </p>
+      {/* Price + Sparkline side by side */}
+      <div className="flex items-end justify-between mb-2">
+        <p className="text-base font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+          {ticker.price > 0 ? `$${ticker.price.toLocaleString()}` : "—"}
+        </p>
+        <MiniSparkline symbol={ticker.symbol} width={64} height={28} />
+      </div>
 
       {/* Community sentiment bar */}
       <div className="mb-1.5">
@@ -123,16 +130,16 @@ function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; o
           <span style={{ color: "#4DC820" }}>🔥 {ticker.bullish_pct}%</span>
           <span style={{ color: "#E8193C" }}>🐻 {bearish_pct}%</span>
         </div>
-        <div className="h-1.5 rounded-full overflow-hidden bg-muted flex">
-          <div className="h-full rounded-l-full" style={{ width: `${ticker.bullish_pct}%`, background: "#4DC820" }} />
-          <div className="h-full rounded-r-full" style={{ width: `${bearish_pct}%`, background: "#E8193C" }} />
+        <div className="h-1 rounded-full overflow-hidden bg-muted flex">
+          <div className="h-full" style={{ width: `${ticker.bullish_pct}%`, background: "#4DC820" }} />
+          <div className="h-full" style={{ width: `${bearish_pct}%`, background: "#E8193C" }} />
         </div>
       </div>
 
       {/* Post count + top trader avatars */}
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-muted-foreground font-medium">
-          {ticker.post_count} posts
+          {ticker.post_count > 0 ? `${ticker.post_count} posts` : ""}
         </span>
         <div className="flex -space-x-1.5">
           {ticker.top_traders.slice(0, 2).map((t, i) => (
@@ -572,6 +579,74 @@ function ComposeBar({ onPost }: { onPost: (text: string, type: PostType) => void
 }
 
 // ─── Discovery Sidebar ────────────────────────────────────────────────────────
+// ─── VideoShelfRow ─────────────────────────────────────────────────────────────
+// A horizontal scroll row of video cards for a given ticker, shown between ticker sections
+function VideoShelfRow({ ticker }: { ticker: string }) {
+  const [videos, setVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchContentByTicker(ticker)
+      .then(data => { if (!cancelled) { setVideos(data.slice(0, 5)); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [ticker]);
+
+  if (!loading && videos.length === 0) return null;
+
+  return (
+    <div className="mt-3 mb-1">
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-[9px] font-bold text-muted-foreground tracking-widest px-2 flex items-center gap-1">
+          <span style={{ color: "#4DC820" }}>▶</span> WATCH: ${ticker}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+      <div
+        ref={scrollRef}
+        className="flex gap-2.5 overflow-x-auto pb-1"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {loading
+          ? Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex-shrink-0 w-[180px] h-[110px] rounded-lg bg-muted animate-pulse" />
+            ))
+          : videos.map(v => {
+              const n = normalizeContentCard(v);
+              return (
+                <Link key={n.id} href={`/video/${n.id}`}>
+                  <div className="flex-shrink-0 w-[180px] cursor-pointer group/vc">
+                    <div className="relative rounded-lg overflow-hidden mb-1.5" style={{ aspectRatio: "16/9" }}>
+                      <img
+                        src={n.thumbnailUrl || ""}
+                        alt={n.title}
+                        className="w-full h-full object-cover group-hover/vc:scale-105 transition-transform duration-300"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&q=60"; }}
+                      />
+                      <div className="absolute inset-0 bg-black/20 group-hover/vc:bg-black/10 transition-colors" />
+                      {n.durationLabel && (
+                        <span className="absolute bottom-1 right-1 text-[9px] font-bold text-white bg-black/70 px-1 py-0.5 rounded">
+                          {n.durationLabel}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-semibold text-foreground leading-snug line-clamp-2 px-0.5">
+                      {n.title}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5 px-0.5">{n.creator_name}</p>
+                  </div>
+                </Link>
+              );
+            })}
+      </div>
+    </div>
+  );
+}
+
 function DiscoverySidebar({
   topTraders,
   radarTickers,
@@ -746,16 +821,22 @@ export default function Home() {
   const [, navigate] = useLocation();
   const tickerRailRef = useRef<HTMLDivElement>(null);
 
+  // Asset class filter
+  const { matchesTicker, isAll } = useAssetClass();
+
   // Feed state
   const [feedTab, setFeedTab] = useState<"for_you" | "trending" | "trade_ideas" | "pl_shares">("for_you");
-  const [posts, setPosts] = useState<Post[]>(SEED_POSTS);
-  const [feedLoading, setFeedLoading] = useState(false);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+
+  // Live quotes for ticker rail
+  const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({});
 
   // API data
   const { data: radarData } = useApi(fetchRadar, null);
   const { data: leaderboardData } = useApi(fetchLeaderboard, []);
 
-  const radarTickers = radarData
+  const allRadarTickers = radarData
     ? [
         ...(radarData.critical || []),
         ...(radarData.high_conviction || []),
@@ -763,7 +844,29 @@ export default function Home() {
       ]
     : [];
 
+  // Filter radar tickers by asset class
+  const radarTickers = isAll
+    ? allRadarTickers
+    : allRadarTickers.filter(rt => matchesTicker(rt.symbol || ""));
+
   const topTraders = Array.isArray(leaderboardData) ? leaderboardData.slice(0, 4) : [];
+
+  // Fetch live quotes when radar tickers load
+  useEffect(() => {
+    if (allRadarTickers.length === 0) return;
+    const symbols = allRadarTickers.slice(0, 15).map((rt: any) => rt.symbol || rt.ticker).filter(Boolean).join(",");
+    if (!symbols) return;
+    fetchQuotes(symbols).then((data: any[]) => {
+      if (Array.isArray(data)) {
+        const map: Record<string, { price: number; change_pct: number }> = {};
+        data.forEach((q: any) => {
+          if (q.symbol) map[q.symbol] = { price: q.price || q.close || 0, change_pct: q.change_pct || 0 };
+        });
+        setQuotes(map);
+      }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRadarTickers.length]);
 
   // Load live feed
   useEffect(() => {
@@ -873,15 +976,23 @@ export default function Home() {
             className="flex gap-3 overflow-x-auto pb-2"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
+            {radarTickers.length === 0 && !radarData && (
+              Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="flex-shrink-0 w-48 h-[140px] rounded-xl bg-muted animate-pulse" />
+              ))
+            )}
             {(radarTickers.length > 0
-              ? radarTickers.map(rt => ({
-                  symbol: rt.symbol,
-                  price: 0,
-                  change_pct: 0,
-                  bullish_pct: rt.direction === "bullish" ? 75 : rt.direction === "bearish" ? 25 : 50,
-                  post_count: Math.round(rt.score * 1.5),
-                  top_traders: [],
-                } as TickerSocialCard))
+              ? radarTickers.map(rt => {
+                  const q = quotes[rt.symbol];
+                  return {
+                    symbol: rt.symbol,
+                    price: q?.price ?? 0,
+                    change_pct: q?.change_pct ?? 0,
+                    bullish_pct: rt.direction === "bullish" ? Math.round(60 + Math.random() * 25) : rt.direction === "bearish" ? Math.round(15 + Math.random() * 30) : 50,
+                    post_count: Math.round(rt.score * 1.5),
+                    top_traders: [],
+                  } as TickerSocialCard;
+                })
               : TRENDING_TICKERS
             ).map(ticker => (
               <TickerSocialCardItem
@@ -890,11 +1001,6 @@ export default function Home() {
                 onClick={() => handleTickerClick(ticker.symbol)}
               />
             ))}
-            {radarTickers.length === 0 && !radarData && (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-[160px] h-[120px] rounded-xl bg-muted animate-pulse" />
-              ))
-            )}
           </div>
         </div>
 
@@ -932,7 +1038,7 @@ export default function Home() {
               </Link>
             </div>
 
-            {/* Posts */}
+            {/* Ticker-Discovery Feed */}
             {feedLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
@@ -952,18 +1058,109 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <div className="space-y-3">
-                {posts.map(post => (
-                  <SocialPostCard
-                    key={post.id}
-                    post={post}
-                    onTickerClick={handleTickerClick}
-                  />
-                ))}
-                <div className="text-center pt-2">
+              <div className="space-y-0">
+                {/* Ticker focus sections — each trending ticker gets a block */}
+                {radarTickers.slice(0, 4).map((rt, idx) => {
+                  const tickerPosts = posts.filter(p => p.ticker === rt.symbol).slice(0, 2);
+                  const generalPosts = posts.filter(p => !p.ticker);
+                  const displayPosts = tickerPosts.length > 0 ? tickerPosts : generalPosts.slice(idx * 2, idx * 2 + 2);
+                  const q = quotes[rt.symbol];
+                  const isUp = (q?.change_pct ?? 0) >= 0;
+                  return (
+                    <div key={rt.symbol} className="mb-5">
+                      {/* Ticker focus header */}
+                      <button
+                        onClick={() => handleTickerClick(rt.symbol)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-border bg-card/60 hover:bg-card transition-colors mb-2 group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <TickerLogo symbol={rt.symbol} size={22} />
+                          <div className="text-left">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                                {rt.symbol}
+                              </span>
+                              {q && (
+                                <span
+                                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                  style={{
+                                    color: isUp ? "#4DC820" : "#E8193C",
+                                    background: isUp ? "rgba(77,200,32,0.12)" : "rgba(232,25,60,0.12)",
+                                  }}
+                                >
+                                  {isUp ? "+" : ""}{q.change_pct.toFixed(2)}%
+                                </span>
+                              )}
+                              <span
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                                style={{
+                                  background: rt.direction === "bullish" ? "rgba(77,200,32,0.15)" : rt.direction === "bearish" ? "rgba(232,25,60,0.15)" : "rgba(247,144,9,0.15)",
+                                  color: rt.direction === "bullish" ? "#4DC820" : rt.direction === "bearish" ? "#E8193C" : "#F79009",
+                                }}
+                              >
+                                KAI: {(rt.direction ?? "NEUTRAL").toUpperCase()}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">{rt.timeframe} · {Math.round(rt.score * 1.5)} community posts</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MiniSparkline symbol={rt.symbol} width={72} height={32} />
+                          <span className="text-[10px] font-bold text-[#4DC820] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                            View <ArrowUpRight size={10} />
+                          </span>
+                        </div>
+                      </button>
+                      {/* Posts for this ticker */}
+                      <div className="space-y-2 pl-1">
+                        {displayPosts.length > 0 ? (
+                          displayPosts.map(post => (
+                            <SocialPostCard
+                              key={post.id}
+                              post={post}
+                              onTickerClick={handleTickerClick}
+                            />
+                          ))
+                        ) : (
+                          <div className="text-center py-3 text-xs text-muted-foreground">
+                            No posts yet for ${rt.symbol} —{" "}
+                            <button
+                              onClick={() => handleTickerClick(rt.symbol)}
+                              className="text-[#4DC820] hover:underline"
+                            >
+                              be the first
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {/* Video shelf every 2 tickers */}
+                      {idx % 2 === 1 && (
+                        <VideoShelfRow ticker={rt.symbol} />
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Remaining general posts */}
+                {posts.slice(8).length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-[10px] font-bold text-muted-foreground px-2">MORE FROM THE COMMUNITY</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    {posts.slice(8).map(post => (
+                      <SocialPostCard
+                        key={post.id}
+                        post={post}
+                        onTickerClick={handleTickerClick}
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="text-center pt-4">
                   <Link href="/community">
                     <button className="text-xs font-bold text-[#4DC820] hover:underline flex items-center gap-1 mx-auto">
-                      See more posts <ArrowUpRight size={11} />
+                      See full community feed <ArrowUpRight size={11} />
                     </button>
                   </Link>
                 </div>

@@ -10,6 +10,7 @@ import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchContent, normalizeContentCard, type ContentCard } from "@/lib/api";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
+import { useAssetClass } from "@/contexts/AssetClassContext";
 
 // ── Topic filters ─────────────────────────────────────────────────────────────
 const TOPICS = [
@@ -158,11 +159,16 @@ export default function YouTubeUniversityPage() {
   const [activeLevel, setActiveLevel] = useState("");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const { selected: assetSelected, isAll: assetIsAll } = useAssetClass();
+  // Map asset class selection to topic filter for video content
+  const assetTopicFilter: string | undefined = !assetIsAll && assetSelected.length === 1
+    ? (assetSelected[0] === "crypto" ? "crypto" : assetSelected[0] === "forex" ? "forex" : undefined)
+    : undefined;
 
   useEffect(() => {
     setLoading(true);
     fetchContent({
-      topic: activeTopic || undefined,
+      topic: activeTopic || assetTopicFilter || undefined,
       skill_level: activeLevel || undefined,
       sort: "relevance",
       page: 1,
@@ -170,7 +176,7 @@ export default function YouTubeUniversityPage() {
       .then(data => setAllCards(data))
       .catch(() => setAllCards([]))
       .finally(() => setLoading(false));
-  }, [activeTopic, activeLevel]);
+  }, [activeTopic, activeLevel, assetTopicFilter]);
 
   // Client-side search filter
   const filtered = search

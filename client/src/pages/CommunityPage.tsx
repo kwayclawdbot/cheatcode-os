@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAssetClass } from "@/contexts/AssetClassContext";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchRadar, fetchTicker, fetchContent, fetchContentByTicker } from "@/lib/api";
 import { SparklineChart } from "@/components/intelligence/SparklineChart";
@@ -914,7 +915,9 @@ function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTicker
 // ─── Main Community Page ──────────────────────────────────────────────────────
 
 export default function CommunityPage() {
-  const [activeAsset, setActiveAsset] = useState<AssetClass>("all");
+  const { selected: globalSelected, isAll: globalIsAll, toggle: toggleAssetClass, selectAll: selectAllAssets } = useAssetClass();
+  // Map global multi-select to local single AssetClass for backward compat
+  const activeAsset: AssetClass = globalIsAll ? "all" : (globalSelected[0] as AssetClass) ?? "all";
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("trending");
   const [posts, setPosts] = useState<Post[]>([]);
@@ -1079,7 +1082,7 @@ export default function CommunityPage() {
               {ASSET_TABS.map(tab => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveAsset(tab.id)}
+                  onClick={() => tab.id === "all" ? selectAllAssets() : toggleAssetClass(tab.id as "stocks" | "futures" | "forex" | "crypto")}
                   className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md transition-all flex-shrink-0"
                   style={{
                     background: activeAsset === tab.id ? "rgba(77,200,32,0.12)" : "transparent",

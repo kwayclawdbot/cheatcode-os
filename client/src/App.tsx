@@ -20,6 +20,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { useEffect } from "react";
 import { syncCreatorRegistry } from "./lib/creatorRegistry";
 import { AuthProvider } from "./contexts/AuthContext";
+import { AssetClassProvider } from "./contexts/AssetClassContext";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
 
@@ -124,10 +125,12 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark" switchable>
         <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
+          <AssetClassProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </AssetClassProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

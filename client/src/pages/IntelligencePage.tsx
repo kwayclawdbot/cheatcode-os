@@ -29,6 +29,7 @@ import { VideoCard } from "@/components/shared/VideoCard";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchTicker, fetchRadar, trackEvent } from "@/lib/api";
+import { useAssetClass, tickerMatchesFilter } from "@/contexts/AssetClassContext";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -591,6 +592,10 @@ export default function IntelligencePage() {
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState("");
   const [radarTickers, setRadarTickers] = useState<any[]>([]);
+  const { selected: assetSelected, isAll: assetIsAll } = useAssetClass();
+  const filteredRadarTickers = assetIsAll
+    ? radarTickers
+    : radarTickers.filter(t => tickerMatchesFilter(t.ticker, assetSelected));
 
   useEffect(() => {
     fetchRadar()
@@ -678,7 +683,7 @@ export default function IntelligencePage() {
           </div>
 
           {/* Radar strip */}
-          {radarTickers.length > 0 && (
+          {filteredRadarTickers.length > 0 && (
             <div className="border-t" style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.2)" }}>
               <div className="container mx-auto py-2.5">
                 <div className="flex items-center gap-4">
@@ -689,7 +694,7 @@ export default function IntelligencePage() {
                     </span>
                   </div>
                   <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5 flex-1">
-                    {radarTickers.map(t => (
+                    {filteredRadarTickers.map(t => (
                       <RadarPill key={t.ticker} t={t} onClick={() => handleRadarClick(t.ticker)} />
                     ))}
                   </div>
@@ -714,13 +719,13 @@ export default function IntelligencePage() {
               <p className="text-sm text-muted-foreground mb-6">
                 Score, direction, 60-day chart with key levels, catalysts, risks, and Kai's plain-English take.
               </p>
-              {radarTickers.length > 0 && (
+              {filteredRadarTickers.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                     Or pick from today's radar
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
-                    {radarTickers.slice(0, 8).map(t => (
+                    {filteredRadarTickers.slice(0, 8).map(t => (
                       <RadarPill key={t.ticker} t={t} onClick={() => handleRadarClick(t.ticker)} />
                     ))}
                   </div>
