@@ -10,7 +10,7 @@
  * - Video thumbnails have ticker pill badge overlays
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -945,22 +945,26 @@ export default function Home() {
 
   const topTraders = Array.isArray(leaderboardData) ? leaderboardData.slice(0, 4) : [];
 
-  // Fetch live quotes
+  // Live quotes via EODHD (server-side, API key hidden) — auto-refresh every 60s
+  // Stabilize with useMemo to prevent infinite re-queries (new array ref on every render)
+  const radarSymbols = useMemo(
+    () => allRadarTickers.slice(0, 15).map((rt: any) => rt.symbol || rt.ticker).filter(Boolean) as string[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allRadarTickers.length]
+  );
+  const { data: eohdQuotes } = trpc.marketData.quotes.useQuery(
+    { symbols: radarSymbols },
+    { enabled: radarSymbols.length > 0, refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  // Merge EODHD quotes into the quotes map whenever data arrives
   useEffect(() => {
-    if (allRadarTickers.length === 0) return;
-    const symbols = allRadarTickers.slice(0, 15).map((rt: any) => rt.symbol || rt.ticker).filter(Boolean).join(",");
-    if (!symbols) return;
-    fetchQuotes(symbols).then((data: any[]) => {
-      if (Array.isArray(data)) {
-        const map: Record<string, { price: number; change_pct: number }> = {};
-        data.forEach((q: any) => {
-          if (q.symbol) map[q.symbol] = { price: q.price || q.close || 0, change_pct: q.change_pct || 0 };
-        });
-        setQuotes(map);
-      }
-    }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allRadarTickers.length]);
+    if (!eohdQuotes?.length) return;
+    const map: Record<string, { price: number; change_pct: number }> = {};
+    eohdQuotes.forEach((q: any) => {
+      if (q.symbol) map[q.symbol] = { price: q.price ?? q.close ?? 0, change_pct: q.change_pct ?? 0 };
+    });
+    setQuotes(map);
+  }, [eohdQuotes]);
 
   // Load live feed
   useEffect(() => {

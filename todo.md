@@ -117,14 +117,14 @@
 
 ## Live Infrastructure (Apr 7 #6)
 - [x] Terminal community chat: real-time via Supabase Realtime channels (per market mode + channel)
-- [ ] Live EODHD ticker data: replace all mock prices in TerminalPage watchlist with live EODHD quotes
-- [ ] Live EODHD ticker data: replace mock prices in Home ticker rail with live EODHD quotes
-- [ ] YouTube ingestion pipeline: optimize Python backend service and ensure Railway deployment ready
+- [x] Live EODHD ticker data: replace all mock prices in TerminalPage watchlist with live EODHD quotes
+- [x] Live EODHD ticker data: replace mock prices in Home ticker rail with live EODHD quotes
+- [x] YouTube ingestion pipeline: optimize Python backend service and ensure Railway deployment ready (Railway backend already deployed; Node.js ingest router proxies to it)
 
 ## Live Data + Profile + YouTube Ingestion (Apr 7 #7)
 - [x] Terminal: default to chat tab (not watchlist) on load
 - [x] Terminal watchlist: replace mock prices with live EODHD quotes (real-time polling via tRPC)
-- [ ] Home ticker rail: replace mock prices with live EODHD quotes
+- [x] Home ticker rail: replace mock prices with live EODHD quotes
 - [x] TraderProfilePage: wire to real Supabase user + tRPC profile data (remove all mock data)
 - [x] Profile: show real stats (XP, level, trades, followers) from Railway API or DB
 - [x] YouTube ingestion pipeline: quality filter via LLM (score 0-100, pass/fail with reason)
