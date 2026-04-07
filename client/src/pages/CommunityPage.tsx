@@ -123,14 +123,6 @@ const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string }> = {
   question:    { label: "Question",    color: "#667085" },
 };
 
-const ASSET_TABS: { id: AssetClass; label: string; icon: React.ReactNode }[] = [
-  { id: "all",     label: "All",     icon: <Globe size={11} /> },
-  { id: "stocks",  label: "Stocks",  icon: <DollarSign size={11} /> },
-  { id: "forex",   label: "Forex",   icon: <Activity size={11} /> },
-  { id: "futures", label: "Futures", icon: <BarChart2 size={11} /> },
-  { id: "crypto",  label: "Crypto",  icon: <Bitcoin size={11} /> },
-];
-
 // ─── Lean Post Card ───────────────────────────────────────────────────────────
 
 function PostCard({ post, onReact, onTickerClick }: {
@@ -660,12 +652,15 @@ function TickerHub({ ticker, radarTickers, onClose }: {
         {/* FEED TAB */}
         {activeTab === "feed" && (
           <div className="space-y-3">
-            <ComposeBox onPost={(text) => {
+            <ComposeBox onPost={(text, media) => {
               const newPost: Post = {
                 id: Date.now().toString(), type: "market_take", assetClass: "stocks",
                 user: { name: "You", handle: "@you", initials: "YO", color: "#4DC820", style: "Trader", level: "Rookie", levelColor: "#667085" },
                 timestamp: "Just now", ticker,
-                text, reactions: [{ emoji: "🔥", label: "Bullish", count: 0 }, { emoji: "❤️", label: "Like", count: 0 }],
+                text,
+                mediaUrl: media?.url,
+                mediaMimetype: media?.mimetype,
+                reactions: [{ emoji: "🔥", label: "Bullish", count: 0 }, { emoji: "❤️", label: "Like", count: 0 }],
                 comments: 0, reposts: 0,
               };
               setPosts(prev => [newPost, ...prev]);
