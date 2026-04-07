@@ -68,3 +68,7 @@
 - [x] Add "Community" as its own top-level nav tab
 - [x] Rename "Feed" nav tab to "Home"
 - [x] Add prominent sparkline line chart to the right side of each ticker section header row in the Home feed (SOFI, BYD etc.)
+- [x] Fix flat sparkline — debug fetchChartData API, ensure real candle data renders
+- [x] Fix mobile layout overflow — all components fit correctly in containers on mobile
+- [x] Make each ticker row clickable to ticker detail/analysis page
+- [x] Add live price next to ticker name in feed ticker rows

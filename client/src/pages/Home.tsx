@@ -926,22 +926,22 @@ export default function Home() {
     .map((t: any) => t.symbol || t.ticker || "");
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--background)" }}>
+    <div className="min-h-screen overflow-x-hidden" style={{ background: "var(--background)" }}>
       <Nav />
 
-      <div className="max-w-7xl mx-auto px-4 py-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4">
 
         {/* ── Trending Tickers Rail ─────────────────────────────────────── */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-              <Flame size={14} className="text-[#E8193C]" />
-              Trending Tickers
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(0,229,160,0.15)", color: "#00C47A" }}>
+            <h2 className="text-sm font-bold text-foreground flex items-center gap-1.5 min-w-0">
+              <Flame size={14} className="text-[#E8193C] flex-shrink-0" />
+              <span className="truncate">Trending Tickers</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline" style={{ background: "rgba(0,229,160,0.15)", color: "#00C47A" }}>
                 COMMUNITY SENTIMENT
               </span>
             </h2>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <button onClick={() => scrollTickers("left")} className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
                 <ChevronLeft size={12} className="text-muted-foreground" />
               </button>
@@ -950,6 +950,8 @@ export default function Home() {
               </button>
             </div>
           </div>
+          {/* Negative margin trick to allow horizontal scroll to bleed to screen edge on mobile */}
+          <div className="-mx-3 sm:mx-0 px-3 sm:px-0">
           <div
             ref={tickerRailRef}
             className="flex gap-3 overflow-x-auto pb-2"
@@ -980,6 +982,7 @@ export default function Home() {
                 onClick={() => handleTickerClick(ticker.symbol)}
               />
             ))}
+          </div>
           </div>
         </div>
 
@@ -1065,46 +1068,52 @@ export default function Home() {
                   const isUp = (q?.change_pct ?? 0) >= 0;
                   return (
                     <div key={rt.symbol} className="mb-5">
-                      {/* Ticker focus header */}
-                      <button
-                        onClick={() => handleTickerClick(rt.symbol)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-border bg-card/60 hover:bg-card transition-colors mb-2 group"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <TickerLogo symbol={rt.symbol} size={22} />
-                          <div className="text-left">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                                {rt.symbol}
-                              </span>
-                              {q && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{
-                                  color: isUp ? "#00C47A" : "#E8193C",
-                                  background: isUp ? "rgba(0,196,122,0.12)" : "rgba(232,25,60,0.12)",
-                                }}>
-                                  {isUp ? "+" : ""}{q.change_pct.toFixed(2)}%
+                      {/* Ticker focus header — clickable to ticker detail page */}
+                      <Link href={`/tickers/${rt.symbol}`}>
+                        <div className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-border bg-card/60 hover:bg-card hover:border-border/80 transition-all mb-2 group cursor-pointer overflow-hidden">
+                          {/* Left: logo + name + price + badges */}
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+                            <TickerLogo symbol={rt.symbol} size={22} className="flex-shrink-0" />
+                            <div className="text-left min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                                  {rt.symbol}
                                 </span>
-                              )}
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{
-                                background: rt.direction === "bullish" ? "rgba(0,196,122,0.15)" : rt.direction === "bearish" ? "rgba(232,25,60,0.15)" : "rgba(247,144,9,0.15)",
-                                color: rt.direction === "bullish" ? "#00C47A" : rt.direction === "bearish" ? "#E8193C" : "#F79009",
-                              }}>
-                                KAI: {(rt.direction ?? "NEUTRAL").toUpperCase()}
-                              </span>
+                                {/* Live price */}
+                                {q && q.price > 0 && (
+                                  <span className="text-sm font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                                    ${q.price > 999 ? q.price.toLocaleString() : q.price.toFixed(2)}
+                                  </span>
+                                )}
+                                {/* % change badge */}
+                                {q && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{
+                                    color: isUp ? "#00C47A" : "#E8193C",
+                                    background: isUp ? "rgba(0,196,122,0.12)" : "rgba(232,25,60,0.12)",
+                                  }}>
+                                    {isUp ? "+" : ""}{q.change_pct.toFixed(2)}%
+                                  </span>
+                                )}
+                                {/* Kai signal — hidden on very small screens */}
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden sm:inline flex-shrink-0" style={{
+                                  background: rt.direction === "bullish" ? "rgba(0,196,122,0.15)" : rt.direction === "bearish" ? "rgba(232,25,60,0.15)" : "rgba(247,144,9,0.15)",
+                                  color: rt.direction === "bullish" ? "#00C47A" : rt.direction === "bearish" ? "#E8193C" : "#F79009",
+                                }}>
+                                  KAI: {(rt.direction ?? "NEUTRAL").toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground truncate">{rt.timeframe} · {Math.round(rt.score * 1.5)} posts</p>
                             </div>
-                            <p className="text-[10px] text-muted-foreground">{rt.timeframe} · {Math.round(rt.score * 1.5)} community posts</p>
+                          </div>
+                          {/* Right: sparkline chart — always visible */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div style={{ width: 110, height: 44 }}>
+                              <MiniSparkline symbol={rt.symbol} width={110} height={44} displayCount={14} />
+                            </div>
+                            <ArrowUpRight size={12} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block" />
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {/* Prominent sparkline chart — always visible on the right */}
-                          <div className="flex-shrink-0" style={{ width: 120, height: 48 }}>
-                            <MiniSparkline symbol={rt.symbol} width={120} height={48} />
-                          </div>
-                          <span className="text-[10px] font-bold text-[#4DC820] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
-                            View <ArrowUpRight size={10} />
-                          </span>
-                        </div>
-                      </button>
+                      </Link>
 
                       {/* Posts for this ticker */}
                       <div className="space-y-2 pl-1">
