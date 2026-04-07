@@ -40,7 +40,7 @@
 - [x] Redesign Home page: Trending Tickers social rail (ticker cards with community sentiment + top posts), community feed center, discovery sidebar (top traders to follow, active rooms, trending topics)
 - [x] Upgrade PostCard: show trader level badge + style pill on every post, post type badge (Trade Idea / P&L Share / Market Take / Journal Post)
 - [x] Update nav: renamed/reordered to Feed, Terminal, Learn (dropdown: Courses/YouTube University/Coaches), Intelligence (dropdown: Kai Analysis/Watch/Community), Journal
-- [ ] Add TickerPage: when you click a ticker pill on any post, go to /tickers/$TICK showing community sentiment, top posts about that ticker, and Kai's take
+- [x] Add TickerPage: /tickers/:symbol - community feed, Kai's signal, videos, sentiment vote; ticker pills in all pages navigate here
 
 ## Remaining / Future Work
 - [ ] XP persistence - XP earning actions need to trigger Railway API calls

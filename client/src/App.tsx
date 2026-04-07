@@ -49,6 +49,7 @@ import DiscoverPage from "./pages/DiscoverPage";
 import KaiAssistPage from "./pages/KaiAssistPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
+import TickerPage from "./pages/TickerPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -94,6 +95,7 @@ function Router() {
       <Route path="/assist" component={KaiAssistPage} />
       <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/learn/university" component={YouTubeUniversityPage} />
+      <Route path="/tickers/:symbol" component={TickerPage} />
 
       {/* ── Auth ── */}
       <Route path="/auth" component={AuthPage} />

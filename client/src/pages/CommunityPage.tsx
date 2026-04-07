@@ -7,7 +7,7 @@
 // NO MOCK DATA — radar tickers from live Kai API.
 
 import { useState, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Minus, MessageCircle, Repeat2,
@@ -649,7 +649,7 @@ function TickerHub({ ticker, radarTickers, onClose }: {
             }} prefillTicker={ticker} />
             {tickerPosts.length > 0 ? (
               tickerPosts.map(post => (
-                <PostCard key={post.id} post={post} onReact={() => {}} onTickerClick={() => {}} />
+                <PostCard key={post.id} post={post} onReact={() => {}} onTickerClick={(t) => { if (t) { import("wouter").then(({ useLocation: _ }) => {}); window.location.href = `/tickers/${t.toUpperCase()}`; } }} />
               ))
             ) : (
               <div className="text-center py-8">
@@ -977,8 +977,13 @@ export default function CommunityPage() {
     }).catch(() => {});
   }, []);
 
+  const [, navigate] = useLocation();
   const handleTickerClick = (ticker: string) => {
-    setActiveTicker(ticker || null);
+    if (ticker) {
+      navigate(`/tickers/${ticker.toUpperCase()}`);
+      return;
+    }
+    setActiveTicker(null);
     setTickerSearch("");
   };
 
