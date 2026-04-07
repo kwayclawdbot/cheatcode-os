@@ -19,6 +19,9 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useEffect } from "react";
 import { syncCreatorRegistry } from "./lib/creatorRegistry";
+import { AuthProvider } from "./contexts/AuthContext";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
+import AuthPage from "./pages/AuthPage";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -44,8 +47,8 @@ import CoachesCornerPage from "./pages/CoachesCornerPage";
 import CoachProfilePage from "./pages/CoachProfilePage";
 import DiscoverPage from "./pages/DiscoverPage";
 import KaiAssistPage from "./pages/KaiAssistPage";
-
 function Router() {
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       {/* ── Public landing page ── */}
@@ -88,6 +91,10 @@ function Router() {
       <Route path="/social-feed" component={FeedPage} />
       <Route path="/assist" component={KaiAssistPage} />
 
+      {/* ── Auth ── */}
+      <Route path="/auth" component={AuthPage} />
+      <Route path="/auth/callback" component={AuthCallbackPage} />
+
       {/* ── Creator / topic routes ── */}
       <Route path="/topics/:id" component={TopicsPage} />
       <Route path="/creators" component={TopicsPage} />
@@ -110,10 +117,12 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark" switchable>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

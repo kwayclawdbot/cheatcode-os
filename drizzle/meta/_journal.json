@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1775545246990,
+      "tag": "0000_bent_alex_wilder",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1775545387354,
+      "tag": "0001_shocking_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775545479561,
+      "tag": "0002_oval_toxin",
+      "breakpoints": true
+    }
+  ]
+}

@@ -8,8 +8,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles } from "lucide-react";
+import { Search, Bell, Sun, Moon, Menu, X, ChevronRight, ChevronDown, BookOpen, Trophy, Users, Lightbulb, Sparkles, LogIn } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
@@ -224,6 +225,9 @@ export function Nav() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, isAuthenticated, signOut } = useAuth();
+  const userInitial = user?.user_metadata?.full_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
+  const userHandle = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "My Profile";
 
   useEffect(() => { setMobileOpen(false); }, [location]);
 
@@ -333,14 +337,26 @@ export function Nav() {
                 </button>
               </Link>
 
-              <Link href="/traders/me">
-                <div
-                  className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-xs font-bold text-white cursor-pointer hover:opacity-80 transition-opacity"
-                  style={{ backgroundColor: "#2B3245" }}
-                >
-                  U
-                </div>
-              </Link>
+              {isAuthenticated ? (
+                <Link href="/traders/me">
+                  <div
+                    className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-xs font-bold cursor-pointer hover:opacity-80 transition-opacity"
+                    style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}
+                  >
+                    {userInitial}
+                  </div>
+                </Link>
+              ) : (
+                <Link href="/auth">
+                  <button
+                    className="hidden sm:flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
+                    style={{ color: isDark ? "#D0D5DD" : "#344054" }}
+                  >
+                    <LogIn size={14} />
+                    Sign In
+                  </button>
+                </Link>
+              )}
 
               <button
                 onClick={() => setMobileOpen(true)}
