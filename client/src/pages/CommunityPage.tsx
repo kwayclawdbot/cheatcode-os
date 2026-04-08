@@ -42,7 +42,7 @@ interface Post {
   id: string;
   type: PostType;
   assetClass?: AssetClass;
-  user: { name: string; handle: string; initials: string; color: string; style: string; level: string; levelColor: string; };
+  user: { name: string; handle: string; initials: string; color: string; style: string; level: string; levelColor: string; isAgent?: boolean; };
   timestamp: string;
   sentiment?: Sentiment;
   ticker?: string;
@@ -217,6 +217,15 @@ function PostCard({ post, onReact, onTickerClick }: {
             <Link href={`/traders/${post.user.handle.replace("@", "")}`}>
               <span className="font-bold text-foreground text-sm hover:underline cursor-pointer">{post.user.name}</span>
             </Link>
+            {post.user.isAgent && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                title="AI trading persona · educational · not financial advice"
+                style={{ background: "#7B2FBE" }}
+              >
+                AI
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground">{post.user.handle}</span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
                   style={{ background: post.user.levelColor }}>
@@ -942,15 +951,25 @@ export default function CommunityPage() {
   const [radarTickers, setRadarTickers] = useState<any[]>([]);
   const [tickerSearch, setTickerSearch] = useState("");
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [hideAgents, setHideAgents] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("cc.hideAIAgents") === "1";
+  });
   const { theme } = useTheme();
   const isDark = theme === "dark";
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("cc.hideAIAgents", hideAgents ? "1" : "0");
+    }
+  }, [hideAgents]);
 
   // Load feed from Railway API
   useEffect(() => {
     const tab = feedFilter === "following" ? "following" : feedFilter === "latest" ? "discover" : "trending";
     setFeedLoading(true);
     import("@/lib/api").then(({ fetchFeed }) => {
-      fetchFeed(tab, 1).then((data: any[]) => {
+      fetchFeed(tab, 1, { hideAgents }).then((data: any[]) => {
         if (Array.isArray(data) && data.length > 0) {
           const normalized: Post[] = data.map((p: any) => ({
             id: p.id,
@@ -968,10 +987,11 @@ export default function CommunityPage() {
               name: p.user?.name || "Trader",
               handle: p.user?.handle ? `@${p.user.handle}` : "@trader",
               initials: (p.user?.name || "T").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-              color: "#4DC820",
+              color: p.user?.is_agent ? "#7B2FBE" : "#4DC820",
               style: p.user?.style || "Trader",
-              level: "Pro",
-              levelColor: "#4DC820",
+              level: p.user?.is_agent ? "AI" : "Pro",
+              levelColor: p.user?.is_agent ? "#7B2FBE" : "#4DC820",
+              isAgent: Boolean(p.user?.is_agent),
             },
             timestamp: p.created_at ? new Date(p.created_at).toLocaleDateString() : "Recently",
             reactions: [
@@ -988,7 +1008,7 @@ export default function CommunityPage() {
       }).catch(() => setPosts(SEED_POSTS))
         .finally(() => setFeedLoading(false));
     });
-  }, [feedFilter]);
+  }, [feedFilter, hideAgents]);
 
   useEffect(() => {
     fetchRadar().then(r => {
@@ -1190,11 +1210,25 @@ export default function CommunityPage() {
                   </button>
                 ))}
               </div>
-              <Link href="/feed">
-                <button className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg cc-gradient-bg text-[#101828] flex items-center gap-1">
-                  <Zap size={10} /> Swipe Feed
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setHideAgents(v => !v)}
+                  title={hideAgents ? "Showing humans only. Click to include AI personas." : "AI personas visible. Click to hide them."}
+                  className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border transition-colors"
+                  style={{
+                    borderColor: hideAgents ? "#7B2FBE" : "var(--border)",
+                    color: hideAgents ? "#7B2FBE" : "var(--muted-foreground)",
+                    background: hideAgents ? "rgba(123,47,190,0.08)" : "transparent",
+                  }}
+                >
+                  {hideAgents ? "Hiding AI" : "AI on"}
                 </button>
-              </Link>
+                <Link href="/feed">
+                  <button className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg cc-gradient-bg text-[#101828] flex items-center gap-1">
+                    <Zap size={10} /> Swipe Feed
+                  </button>
+                </Link>
+              </div>
             </div>
 
             <ComposeBox onPost={handlePost} />
