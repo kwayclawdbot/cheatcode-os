@@ -12,4 +12,5 @@ export const ENV = {
   eohdApiKey: process.env.EODHD_API_KEY ?? "",
   youtubeApiKey: process.env.YOUTUBE_API_KEY ?? "",
   railwayApiUrl: process.env.RAILWAY_API_URL ?? "https://cheatcode-os-api-production.up.railway.app/api/v1",
+  railwayAdminKey: process.env.RAILWAY_ADMIN_KEY ?? "",
 };

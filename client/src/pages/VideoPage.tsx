@@ -295,6 +295,126 @@ function ContentTypeBadge({ type }: { type: string }) {
   );
 }
 
+// ─── More on $TICKER shelf ───────────────────────────────────────────────────
+
+function MoreOnTickerShelf({
+  tickers,
+  currentVideoId,
+}: {
+  tickers: Array<{ ticker: string; sentiment: string; mention_context?: string; is_primary?: boolean }>;
+  currentVideoId: string;
+}) {
+  // Pick the primary ticker (or first ticker) to drive the shelf
+  const primaryTicker = tickers.find(t => t.is_primary)?.ticker || tickers[0]?.ticker;
+
+  const { data: tickerVideos, isLoading } = trpc.ingest.getVideosByTicker.useQuery(
+    { symbol: primaryTicker ?? "" },
+    { enabled: !!primaryTicker, staleTime: 5 * 60 * 1000, retry: 1 }
+  );
+
+  // Filter out the current video — response is { symbol, videos: [...], source }
+  const videos = (tickerVideos?.videos ?? []).filter((v: any) => v.id !== currentVideoId).slice(0, 6);
+
+  if (!primaryTicker) return null;
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-1 h-5 rounded-full flex-shrink-0" style={{ background: "#00AEEF" }} />
+        <h3 className="font-bold text-sm text-foreground" style={{ fontFamily: "var(--font-display)" }}>
+          More on ${primaryTicker}
+        </h3>
+        <Link href={`/tickers/${primaryTicker}`}>
+          <span className="text-[10px] font-semibold text-[#00AEEF] hover:underline ml-1">
+            See all
+          </span>
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex gap-3 animate-pulse">
+              <div className="w-28 h-16 rounded-xl bg-muted flex-shrink-0" />
+              <div className="flex-1 space-y-2 py-1">
+                <div className="h-3 bg-muted rounded w-full" />
+                <div className="h-2.5 bg-muted rounded w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : videos.length === 0 ? (
+        <div className="text-center py-6 rounded-xl border border-border bg-card/50">
+          <p className="text-sm text-muted-foreground">
+            No other videos for ${primaryTicker} yet.
+          </p>
+          <Link href={`/tickers/${primaryTicker}`}>
+            <button className="mt-2 text-xs font-semibold text-[#00AEEF] hover:underline">
+              Explore ${primaryTicker} intelligence →
+            </button>
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {videos.map((v: any) => (
+            <Link key={v.id} href={`/video/${v.id}`}>
+              <div className="flex gap-3 cursor-pointer group/mt rounded-xl p-2 hover:bg-muted/50 transition-colors">
+                <div className="relative w-28 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted">
+                  <img
+                    src={v.thumbnailUrl || `https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg`}
+                    alt={v.title}
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover/mt:scale-105"
+                    onError={(e) => {
+                      // Fallback to hqdefault YouTube thumbnail, then a branded dark placeholder
+                      const img = e.currentTarget as HTMLImageElement;
+                      if (v.youtubeId && !img.src.includes('hqdefault')) {
+                        img.src = `https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg`;
+                      } else {
+                        img.style.display = 'none';
+                      }
+                    }}
+                  />
+                  {/* Quality score badge */}
+                  {v.qualityScore > 0 && (
+                    <span
+                      className="absolute top-1 right-1 text-[9px] font-bold px-1 py-0.5 rounded"
+                      style={{
+                        background: v.qualityScore >= 80 ? "rgba(77,200,32,0.85)" : "rgba(200,212,0,0.85)",
+                        color: "#101828",
+                      }}
+                    >
+                      {v.qualityScore}
+                    </span>
+                  )}
+                  {/* Ticker pill */}
+                  <span
+                    className="absolute bottom-1 left-1 text-[8px] font-bold px-1 py-0.5 rounded"
+                    style={{ background: "rgba(0,174,239,0.85)", color: "#fff", fontFamily: "var(--font-mono)" }}
+                  >
+                    ${primaryTicker}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0 py-0.5">
+                  <p
+                    className="text-xs font-semibold text-foreground line-clamp-2 leading-snug"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {v.title}
+                  </p>
+                  {v.quickTake && (
+                    <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{v.quickTake}</p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{v.creatorName || ""}</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VideoPage() {
@@ -815,6 +935,9 @@ export default function VideoPage() {
             )}
             {/* ── Community Discussion ─────────────────────────────────── */}
             <VideoCommentSection videoId={video.id} />
+
+            {/* ── More on $TICKER ────────────────────────────────────────── */}
+            <MoreOnTickerShelf tickers={tickers} currentVideoId={video.id} />
           </div>
 
           {/* ── Sidebar ─────────────────────────────────────────────────── */}

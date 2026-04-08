@@ -926,7 +926,7 @@ export default function Home() {
   // Live quotes for ticker rail
   const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({})
 
-  const { data: radarData } = useApi(fetchRadar, null);
+  const { data: radarData, loading: radarLoading } = useApi(fetchRadar, null);
   const { data: leaderboardData } = useApi(fetchLeaderboard, []);
 
   // Watchlist — used for "For You" feed
@@ -1198,27 +1198,55 @@ export default function Home() {
             )}
 
             {/* Feed content */}
-            {feedLoading ? (
+            {(feedLoading || radarLoading) ? (
               <div className="space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-card rounded-xl border border-border p-4 animate-pulse">
-                    <div className="flex gap-3 mb-3">
-                      <div className="w-9 h-9 rounded-full bg-muted" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="h-3 bg-muted rounded w-1/3" />
-                        <div className="h-2.5 bg-muted rounded w-1/4" />
+                {/* Ticker section skeletons */}
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="mb-5">
+                    <div className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-border bg-card/60 animate-pulse mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-full bg-muted" />
+                        <div className="space-y-1">
+                          <div className="h-3 bg-muted rounded w-12" />
+                          <div className="h-2 bg-muted rounded w-20" />
+                        </div>
                       </div>
+                      <div className="w-28 h-11 bg-muted rounded" />
                     </div>
-                    <div className="space-y-1.5">
-                      <div className="h-3 bg-muted rounded w-full" />
-                      <div className="h-3 bg-muted rounded w-4/5" />
+                    <div className="space-y-2 pl-1">
+                      {[1, 2].map(j => (
+                        <div key={j} className="bg-card rounded-xl border border-border p-4 animate-pulse">
+                          <div className="flex gap-3 mb-3">
+                            <div className="w-9 h-9 rounded-full bg-muted" />
+                            <div className="flex-1 space-y-1.5">
+                              <div className="h-3 bg-muted rounded w-1/3" />
+                              <div className="h-2.5 bg-muted rounded w-1/4" />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="h-3 bg-muted rounded w-full" />
+                            <div className="h-3 bg-muted rounded w-4/5" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="space-y-0">
-                {/* Ticker focus sections */}
+                {/* Ticker focus sections — show live radar tickers; if none, show empty state */}
+                {radarTickers.length === 0 ? (
+                  <div className="text-center py-10 rounded-xl border border-border bg-card/50">
+                    <p className="text-sm font-semibold text-foreground mb-1">Radar loading…</p>
+                    <p className="text-xs text-muted-foreground mb-3">Today’s market radar is being generated. Check back shortly.</p>
+                    <Link href="/search">
+                      <button className="text-xs font-bold text-[#4DC820] hover:underline flex items-center gap-1 mx-auto">
+                        Browse all content <ArrowUpRight size={11} />
+                      </button>
+                    </Link>
+                  </div>
+                ) : null}
                 {radarTickers.slice(0, 4).map((rt, idx) => {
                   const tickerPosts = posts.filter(p => p.ticker === rt.symbol).slice(0, 2);
                   const generalPosts = posts.filter(p => !p.ticker);

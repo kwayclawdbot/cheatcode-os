@@ -236,8 +236,24 @@ export async function fetchTicker(symbol: string): Promise<TickerData> {
 }
 
 export async function fetchRadar(date?: string): Promise<RadarData> {
-  const qs = date ? `?date=${date}` : "";
-  return apiFetch(`/intelligence/radar${qs}`);
+  // If a specific date is requested, use it directly
+  if (date) return apiFetch(`/intelligence/radar?date=${date}`);
+
+  // Try today first, then walk back up to 7 days to find the most recent radar
+  for (let daysBack = 0; daysBack <= 7; daysBack++) {
+    const d = new Date(Date.now() - daysBack * 86_400_000);
+    const dateStr = d.toISOString().split("T")[0];
+    try {
+      const result = await apiFetch<RadarData>(`/intelligence/radar?date=${dateStr}`);
+      // Validate that the result actually has tickers
+      const hasData = (result.critical?.length ?? 0) + (result.high_conviction?.length ?? 0) + (result.watch?.length ?? 0) > 0;
+      if (hasData) return result;
+    } catch {
+      // 404 or other error — try previous day
+    }
+  }
+  // Return empty radar if nothing found in the last 7 days
+  return { date: "", market_sentiment: "neutral", sentiment_summary: null, critical: [], high_conviction: [], watch: [], contested: [], theme_heatmap: [], sector_rotation: {} };
 }
 
 export async function fetchPredictions(minScore = 60): Promise<any[]> {

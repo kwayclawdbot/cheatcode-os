@@ -246,24 +246,38 @@ async function submitToRailway(video: {
     ingested_by: "auto_scheduler",
   };
 
+  const adminKey = ENV.railwayAdminKey;
+  const authHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(adminKey ? { "Authorization": `Bearer ${adminKey}` } : {}),
+  };
+
   try {
     const resp = await fetch(`${railwayBase}/admin/video/submit`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000),
     });
     if (resp.ok) return true;
 
+    const errText = await resp.text().catch(() => "");
+    console.warn(`[Scheduler] /admin/video/submit returned ${resp.status}: ${errText.slice(0, 200)}`);
+
     // Try fallback queue endpoint
     const queueResp = await fetch(`${railwayBase}/admin/queue/submit`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify({ external_id: video.videoId, source_platform: "youtube", metadata: payload }),
       signal: AbortSignal.timeout(15000),
     });
+    if (!queueResp.ok) {
+      const qErrText = await queueResp.text().catch(() => "");
+      console.warn(`[Scheduler] /admin/queue/submit returned ${queueResp.status}: ${qErrText.slice(0, 200)}`);
+    }
     return queueResp.ok;
-  } catch {
+  } catch (err) {
+    console.error("[Scheduler] submitToRailway network error:", err);
     return false;
   }
 }

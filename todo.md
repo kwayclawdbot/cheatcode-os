@@ -166,3 +166,15 @@
 - [x] Auth hardening: unified all auth consumers to single Supabase hook (removed _core/hooks/useAuth dual-auth drift)
 - [x] Auth hardening: add /auth/reset-password route and ResetPasswordPage (reset emails point to this route)
 - [x] Auth hardening: add rate limiting on ingest endpoints (max 10 req/min per IP)
+
+## Homepage Fix + Next Steps (Apr 8 #11)
+- [ ] Homepage: fix empty/loading state for trending tickers carousel (show skeleton while loading, not blank cards)
+- [ ] Homepage: fix community feed empty state (show placeholder posts or CTA when feed is empty)
+- [ ] Railway admin submit: add Authorization header using RAILWAY_ADMIN_KEY env var in scheduler submitToRailway
+- [ ] Railway admin submit: add RAILWAY_ADMIN_KEY to ENV and server secrets
+- [ ] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
+- [ ] Supabase reset-password redirect: document the Supabase dashboard config step for the user
+
+## Trending Tickers Fix + VideoPage Related Videos (Apr 8 #12)
+- [x] Homepage: trending tickers carousel not displaying — debug fetchRadar response and fix empty state
+- [x] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
