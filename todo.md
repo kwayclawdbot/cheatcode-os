@@ -202,3 +202,10 @@
 - [x] Fix asset filter buttons: changed from multi-select toggle to single-select radio mode
 - [x] Fix asset filter: clicking same button again returns to All Markets
 - [x] Fix asset filter: ticker rail now shows inline empty state when filter has no matches instead of falling back to stale TRENDING_TICKERS mock data
+
+## Live Forex/Crypto/Futures Data (Apr 8 #17)
+- [x] Add tRPC marketData.forexQuotes procedure using EODHD API (EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, USDCHF, NZDUSD, EURGBP)
+- [x] Add tRPC marketData.cryptoQuotes procedure using EODHD API (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX)
+- [x] Add tRPC marketData.indicesQuotes procedure using EODHD API (SPX, NDX, DJI, RUT, VIX, DAX, FTSE, N225)
+- [x] Wire Forex/Crypto/Futures quotes into homepage ticker rail — each filter shows its own live tickers
+- [x] Remove "honest" placeholder / fix corrupted fallback string in ticker cards — each filter now uses dedicated curated symbol list with proper display labels

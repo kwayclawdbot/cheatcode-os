@@ -77,6 +77,64 @@ async function fetchEohdBatch(symbols: string[]) {
   }));
 }
 
+// ─── Curated symbol lists per asset class ───────────────────────────────────
+const FOREX_SYMBOLS = [
+  { symbol: "EURUSD", eohdSymbol: "EURUSD.FOREX", label: "EUR/USD" },
+  { symbol: "GBPUSD", eohdSymbol: "GBPUSD.FOREX", label: "GBP/USD" },
+  { symbol: "USDJPY", eohdSymbol: "USDJPY.FOREX", label: "USD/JPY" },
+  { symbol: "AUDUSD", eohdSymbol: "AUDUSD.FOREX", label: "AUD/USD" },
+  { symbol: "USDCAD", eohdSymbol: "USDCAD.FOREX", label: "USD/CAD" },
+  { symbol: "USDCHF", eohdSymbol: "USDCHF.FOREX", label: "USD/CHF" },
+  { symbol: "NZDUSD", eohdSymbol: "NZDUSD.FOREX", label: "NZD/USD" },
+  { symbol: "EURGBP", eohdSymbol: "EURGBP.FOREX", label: "EUR/GBP" },
+];
+
+const CRYPTO_SYMBOLS = [
+  { symbol: "BTC", eohdSymbol: "BTC-USD.CC", label: "Bitcoin" },
+  { symbol: "ETH", eohdSymbol: "ETH-USD.CC", label: "Ethereum" },
+  { symbol: "SOL", eohdSymbol: "SOL-USD.CC", label: "Solana" },
+  { symbol: "BNB", eohdSymbol: "BNB-USD.CC", label: "BNB" },
+  { symbol: "XRP", eohdSymbol: "XRP-USD.CC", label: "XRP" },
+  { symbol: "DOGE", eohdSymbol: "DOGE-USD.CC", label: "Dogecoin" },
+  { symbol: "ADA", eohdSymbol: "ADA-USD.CC", label: "Cardano" },
+  { symbol: "AVAX", eohdSymbol: "AVAX-USD.CC", label: "Avalanche" },
+];
+
+// Futures tab uses major index instruments (continuous futures not available on this EODHD plan)
+const INDICES_SYMBOLS = [
+  { symbol: "SPX", eohdSymbol: "GSPC.INDX", label: "S&P 500" },
+  { symbol: "NDX", eohdSymbol: "NDX.INDX", label: "Nasdaq 100" },
+  { symbol: "DJI", eohdSymbol: "DJI.INDX", label: "Dow Jones" },
+  { symbol: "RUT", eohdSymbol: "RUT.INDX", label: "Russell 2000" },
+  { symbol: "VIX", eohdSymbol: "VIX.INDX", label: "VIX" },
+  { symbol: "DAX", eohdSymbol: "GDAXI.INDX", label: "DAX" },
+  { symbol: "FTSE", eohdSymbol: "FTSE.INDX", label: "FTSE 100" },
+  { symbol: "N225", eohdSymbol: "N225.INDX", label: "Nikkei 225" },
+];
+
+async function fetchCuratedBatch(items: { symbol: string; eohdSymbol: string; label: string }[]) {
+  const normSymbols = items.map(i => i.eohdSymbol);
+  const url = `${EODHD_BASE}/real-time/${normSymbols[0]}?api_token=${ENV.eohdApiKey}&fmt=json&s=${normSymbols.slice(1).join(",")}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`EODHD curated batch error ${resp.status}`);
+  const raw = await resp.json();
+  const dataArr = Array.isArray(raw) ? raw : [raw];
+  return dataArr.map((data: any, i: number) => ({
+    symbol: items[i]?.symbol ?? data.code?.split(".")[0] ?? "",
+    label: items[i]?.label ?? items[i]?.symbol ?? "",
+    eohdSymbol: items[i]?.eohdSymbol ?? data.code ?? "",
+    price: data.close ?? data.previousClose ?? 0,
+    change: data.change ?? 0,
+    change_pct: data.change_p ?? 0,
+    open: data.open ?? 0,
+    high: data.high ?? 0,
+    low: data.low ?? 0,
+    volume: data.volume ?? 0,
+    previousClose: data.previousClose ?? 0,
+    timestamp: data.timestamp ?? Math.floor(Date.now() / 1000),
+  }));
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 export const marketDataRouter = router({
   /**
@@ -106,6 +164,50 @@ export const marketDataRouter = router({
     .query(async ({ input }) => {
       if (!ENV.eohdApiKey) throw new Error("EODHD_API_KEY not configured");
       return fetchEohdQuote(input.symbol);
+    }),
+
+  /**
+   * Live Forex quotes — 8 major pairs
+   */
+  forexQuotes: publicProcedure
+    .query(async () => {
+      if (!ENV.eohdApiKey) throw new Error("EODHD_API_KEY not configured");
+      try {
+        return await fetchCuratedBatch(FOREX_SYMBOLS);
+      } catch (err) {
+        console.error("[marketData.forexQuotes]", err);
+        throw err;
+      }
+    }),
+
+  /**
+   * Live Crypto quotes — top 8 by market cap
+   */
+  cryptoQuotes: publicProcedure
+    .query(async () => {
+      if (!ENV.eohdApiKey) throw new Error("EODHD_API_KEY not configured");
+      try {
+        return await fetchCuratedBatch(CRYPTO_SYMBOLS);
+      } catch (err) {
+        console.error("[marketData.cryptoQuotes]", err);
+        throw err;
+      }
+    }),
+
+  /**
+   * Live Index/Futures quotes — major global indices
+   * (EODHD plan does not support continuous futures contracts;
+   *  indices are the closest proxy for the Futures filter)
+   */
+  indicesQuotes: publicProcedure
+    .query(async () => {
+      if (!ENV.eohdApiKey) throw new Error("EODHD_API_KEY not configured");
+      try {
+        return await fetchCuratedBatch(INDICES_SYMBOLS);
+      } catch (err) {
+        console.error("[marketData.indicesQuotes]", err);
+        throw err;
+      }
     }),
 
   /**

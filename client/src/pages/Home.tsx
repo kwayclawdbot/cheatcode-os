@@ -956,15 +956,47 @@ export default function Home() {
     { symbols: radarSymbols },
     { enabled: radarSymbols.length > 0, refetchInterval: 60_000, staleTime: 30_000 }
   );
+  // Asset-class specific live data feeds
+  const activeFilter = selected[0] ?? "all";
+  const { data: forexData } = trpc.marketData.forexQuotes.useQuery(
+    undefined,
+    { enabled: activeFilter === "forex", refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  const { data: cryptoData } = trpc.marketData.cryptoQuotes.useQuery(
+    undefined,
+    { enabled: activeFilter === "crypto", refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  const { data: indicesData } = trpc.marketData.indicesQuotes.useQuery(
+    undefined,
+    { enabled: activeFilter === "futures", refetchInterval: 60_000, staleTime: 30_000 }
+  );
   // Merge EODHD quotes into the quotes map whenever data arrives
   useEffect(() => {
     if (!eohdQuotes?.length) return;
     const map: Record<string, { price: number; change_pct: number }> = {};
     eohdQuotes.forEach((q: any) => {
-      if (q.symbol) map[q.symbol] = { price: q.price ?? q.close ?? 0, change_pct: q.change_pct ?? 0 };
+      if (q.symbol) map[q.symbol] = { price: q.price ?? q.close ?? 0, change_pct: q.changePercent ?? q.change_pct ?? 0 };
     });
-    setQuotes(map);
+    setQuotes(prev => ({ ...prev, ...map }));
   }, [eohdQuotes]);
+  useEffect(() => {
+    if (!forexData?.length) return;
+    const map: Record<string, { price: number; change_pct: number }> = {};
+    forexData.forEach((q: any) => { if (q.symbol) map[q.symbol] = { price: q.price, change_pct: q.change_pct }; });
+    setQuotes(map);
+  }, [forexData]);
+  useEffect(() => {
+    if (!cryptoData?.length) return;
+    const map: Record<string, { price: number; change_pct: number }> = {};
+    cryptoData.forEach((q: any) => { if (q.symbol) map[q.symbol] = { price: q.price, change_pct: q.change_pct }; });
+    setQuotes(map);
+  }, [cryptoData]);
+  useEffect(() => {
+    if (!indicesData?.length) return;
+    const map: Record<string, { price: number; change_pct: number }> = {};
+    indicesData.forEach((q: any) => { if (q.symbol) map[q.symbol] = { price: q.price, change_pct: q.change_pct }; });
+    setQuotes(map);
+  }, [indicesData]);
 
   // Load live feed
   useEffect(() => {
@@ -1086,39 +1118,85 @@ export default function Home() {
             className="flex gap-3 overflow-x-auto pb-2"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {radarTickers.length === 0 && !radarData && (
+            {/* Loading skeleton — only when stocks/all and radar not loaded yet */}
+            {isAll && !radarData && (
               Array.from({ length: 7 }).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
               ))
             )}
-            {/* When filter active + no matches: show inline empty state in the rail */}
-            {radarTickers.length === 0 && radarData && !isAll && (
-              <div className="flex-shrink-0 flex items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-4 min-w-[260px]">
-                <div className="text-center">
-                  <p className="text-xs font-semibold text-foreground mb-0.5">No tickers in today's radar</p>
-                  <p className="text-[11px] text-muted-foreground">Try All Markets to see all tickers</p>
-                </div>
-              </div>
+            {/* Forex filter — live EODHD forex pairs */}
+            {activeFilter === "forex" && (
+              (forexData?.length
+                ? forexData.map((q: any) => (
+                    <TickerSocialCardItem
+                      key={q.symbol}
+                      ticker={{ symbol: q.symbol, price: q.price, change_pct: q.change_pct, bullish_pct: 50, post_count: 0, top_traders: [] }}
+                      onClick={() => handleTickerClick(q.symbol)}
+                    />
+                  ))
+                : Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
+                  ))
+              )
             )}
-            {/* When radar loaded + filter matches (or All Markets): show live ticker cards */}
-            {(radarTickers.length > 0 ? radarTickers : isAll ? TRENDING_TICKERS.map(t => ({ symbol: t.symbol, direction: 'neutral', score: 50, confidence: 'watch', timeframe: 'swing' })) : []).map(rt => {
-              const q = quotes[(rt as any).symbol];
-              const ticker: TickerSocialCard = {
-                symbol: (rt as any).symbol,
-                price: q?.price ?? (rt as any).price ?? 0,
-                change_pct: q?.change_pct ?? (rt as any).change_pct ?? 0,
-                bullish_pct: (rt as any).direction === 'bullish' ? Math.round(60 + Math.random() * 25) : (rt as any).direction === 'bearish' ? Math.round(15 + Math.random() * 30) : 50,
-                post_count: Math.round(((rt as any).score ?? 50) * 1.5),
-                top_traders: [],
-              };
-              return (
-                <TickerSocialCardItem
-                  key={ticker.symbol}
-                  ticker={ticker}
-                  onClick={() => handleTickerClick(ticker.symbol)}
-                />
-              );
-            })}
+            {/* Crypto filter — live EODHD crypto prices */}
+            {activeFilter === "crypto" && (
+              (cryptoData?.length
+                ? cryptoData.map((q: any) => (
+                    <TickerSocialCardItem
+                      key={q.symbol}
+                      ticker={{ symbol: q.symbol, price: q.price, change_pct: q.change_pct, bullish_pct: 50, post_count: 0, top_traders: [] }}
+                      onClick={() => handleTickerClick(q.symbol)}
+                    />
+                  ))
+                : Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
+                  ))
+              )
+            )}
+            {/* Futures filter — major global indices as proxy */}
+            {activeFilter === "futures" && (
+              (indicesData?.length
+                ? indicesData.map((q: any) => (
+                    <TickerSocialCardItem
+                      key={q.symbol}
+                      ticker={{ symbol: q.symbol, price: q.price, change_pct: q.change_pct, bullish_pct: 50, post_count: 0, top_traders: [] }}
+                      onClick={() => handleTickerClick(q.symbol)}
+                    />
+                  ))
+                : Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
+                  ))
+              )
+            )}
+            {/* Stocks filter or All Markets — radar tickers with live quotes */}
+            {(isAll || activeFilter === "stocks") && radarData && (
+              (radarTickers.length > 0
+                ? radarTickers.map((rt: any) => {
+                    const q = quotes[rt.symbol];
+                    return (
+                      <TickerSocialCardItem
+                        key={rt.symbol}
+                        ticker={{
+                          symbol: rt.symbol,
+                          price: q?.price ?? 0,
+                          change_pct: q?.change_pct ?? 0,
+                          bullish_pct: rt.direction === 'bullish' ? Math.round(60 + Math.random() * 25) : rt.direction === 'bearish' ? Math.round(15 + Math.random() * 30) : 50,
+                          post_count: Math.round((rt.score ?? 50) * 1.5),
+                          top_traders: [],
+                        }}
+                        onClick={() => handleTickerClick(rt.symbol)}
+                      />
+                    );
+                  })
+                : <div className="flex-shrink-0 flex items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-4 min-w-[260px]">
+                    <div className="text-center">
+                      <p className="text-xs font-semibold text-foreground mb-0.5">No stock tickers in today's radar</p>
+                      <p className="text-[11px] text-muted-foreground">Try All Markets or check back after 6am UTC</p>
+                    </div>
+                  </div>
+              )
+            )}
           </div>
           </div>
         </div>
