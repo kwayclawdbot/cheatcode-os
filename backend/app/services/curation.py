@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 from app.core.config import get_settings
 from app.core.supabase import get_supabase, maybe_one
@@ -238,47 +238,117 @@ def score_relevance(
     radar_tickers: list[str],
     creator_quality: float = 0.7,
 ) -> float:
-    """Score content relevance 0-1 based on multiple factors."""
+    """Score content relevance 0-1 based on multiple factors.
+
+    Has a graceful-degradation fallback: if upstream intelligence (themes +
+    radar tickers) is empty, the weights for theme/ticker overlap (60% of
+    max) are redistributed across creator quality, recency, and engagement
+    so a quality video still passes the publish threshold on an intel drought.
+    """
+    active_set = set(active_themes)
+    radar_set = set(radar_tickers)
+    intel_available = bool(active_set or radar_set)
+
+    if intel_available:
+        weights = {
+            "creator": 0.20,
+            "theme": 0.30,
+            "ticker": 0.30,
+            "recency": 0.10,
+            "engagement": 0.10,
+        }
+    else:
+        # Fallback: redistribute the 60% theme/ticker weight across stable signals
+        weights = {
+            "creator": 0.50,
+            "theme": 0.0,
+            "ticker": 0.0,
+            "recency": 0.25,
+            "engagement": 0.25,
+        }
+        log.warning(
+            "score_relevance fallback active: no themes or radar tickers available — "
+            "redistributing theme/ticker weight to creator/recency/engagement"
+        )
+
     score = 0.0
 
-    # Creator quality (0-0.2)
-    score += creator_quality * 0.2
+    # Creator quality
+    score += creator_quality * weights["creator"]
 
-    # Theme overlap (0-0.3)
+    # Theme overlap
     content_themes = set(context.get("themes", []))
-    active_set = set(active_themes)
-    if active_set and content_themes:
+    if weights["theme"] > 0 and active_set and content_themes:
         overlap = len(content_themes & active_set) / max(len(active_set), 1)
-        score += min(overlap * 0.5, 0.3)
+        score += min(overlap * (weights["theme"] / 0.6), weights["theme"])
 
-    # Ticker overlap with radar (0-0.3)
+    # Ticker overlap with radar
     content_tickers = {t["symbol"] for t in context.get("tickers_mentioned", [])}
-    radar_set = set(radar_tickers)
-    if radar_set and content_tickers:
+    if weights["ticker"] > 0 and radar_set and content_tickers:
         overlap = len(content_tickers & radar_set) / max(len(radar_set), 1)
-        score += min(overlap * 0.6, 0.3)
+        score += min(overlap * (weights["ticker"] / 0.5), weights["ticker"])
 
-    # Recency bonus (0-0.1)
+    # Recency bonus (scaled to weight)
     published = video.get("published_at")
     if published:
         try:
             pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
             hours_ago = (datetime.now(timezone.utc) - pub_dt).total_seconds() / 3600
             if hours_ago < 24:
-                score += 0.1
+                score += weights["recency"]
             elif hours_ago < 72:
-                score += 0.05
+                score += weights["recency"] * 0.5
         except (ValueError, TypeError):
             pass
 
-    # Engagement signal (0-0.1)
+    # Engagement signal (scaled to weight)
     views = video.get("view_count", 0)
     if views > 100000:
-        score += 0.1
+        score += weights["engagement"]
     elif views > 10000:
-        score += 0.05
+        score += weights["engagement"] * 0.5
 
     return min(score, 1.0)
+
+
+def _fetch_intel_with_lookback(db, days: int = 7) -> tuple[list[str], list[str]]:
+    """Fetch active themes + radar tickers with a lookback window.
+
+    If today's themes table is empty, fall back to themes that were active
+    any time in the last `days` days. Same for radar tickers. Prevents a
+    1-day intel drought from killing content publishing.
+    """
+    # Today's active themes
+    themes_result = db.table("themes").select("name").in_("status", ["active", "escalating"]).execute()
+    active_themes = [t["name"] for t in (themes_result.data or [])]
+
+    # If empty, look back
+    if not active_themes:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        lookback = db.table("themes").select("name").gte("updated_at", cutoff).execute()
+        active_themes = [t["name"] for t in (lookback.data or [])]
+        if active_themes:
+            log.info("Themes lookback: no active themes today, using %d from last %d days", len(active_themes), days)
+
+    # Today's radar tickers
+    tickers_result = db.table("tickers").select("symbol").gte("convergence_score", 60).execute()
+    radar_tickers = [t["symbol"] for t in (tickers_result.data or [])]
+
+    # If empty, look back with a lower threshold
+    if not radar_tickers:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        lookback = (
+            db.table("tickers")
+            .select("symbol")
+            .gte("convergence_score", 40)
+            .gte("scored_at", cutoff)
+            .execute()
+        )
+        radar_tickers = [t["symbol"] for t in (lookback.data or [])]
+        if radar_tickers:
+            log.info("Radar lookback: no tickers ≥60 today, using %d at ≥40 from last %d days", len(radar_tickers), days)
+
+    return active_themes, radar_tickers
 
 
 # ── Embedding Generation ─────────────────────────────────────────────────────
@@ -330,12 +400,8 @@ async def process_video(video: dict, creator: dict) -> dict | None:
         # Still proceed with description-only context
         transcript = video.get("description", "")
 
-    # Get active themes and radar tickers for context
-    themes_result = db.table("themes").select("name").in_("status", ["active", "escalating"]).execute()
-    active_themes = [t["name"] for t in (themes_result.data or [])]
-
-    tickers_result = db.table("tickers").select("symbol").gte("convergence_score", 60).execute()
-    radar_tickers = [t["symbol"] for t in (tickers_result.data or [])]
+    # Get active themes and radar tickers for context (with 7-day lookback fallback)
+    active_themes, radar_tickers = _fetch_intel_with_lookback(db, days=7)
 
     # Generate AI context layer
     context = await generate_context_layer(
