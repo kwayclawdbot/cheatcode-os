@@ -116,7 +116,10 @@ function SentimentBar({ bullish_pct }: { bullish_pct: number }) {
 }
 
 function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; onClick: () => void }) {
-  const isUp = ticker.change_pct >= 0;
+  // Defensively coerce to numbers — EODHD API may return strings in some responses
+  const changePct = typeof ticker.change_pct === 'number' ? ticker.change_pct : parseFloat(ticker.change_pct as any) || 0;
+  const price = typeof ticker.price === 'number' ? ticker.price : parseFloat(ticker.price as any) || 0;
+  const isUp = changePct >= 0;
 
   return (
     <motion.button
@@ -140,14 +143,14 @@ function TickerSocialCardItem({ ticker, onClick }: { ticker: TickerSocialCard; o
           }}
         >
           {isUp ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
-          {isUp ? "+" : ""}{ticker.change_pct !== 0 ? ticker.change_pct.toFixed(2) : "—"}%
+          {isUp ? "+" : ""}{changePct !== 0 ? changePct.toFixed(2) : "—"}%
         </span>
       </div>
 
       {/* Price left + Sparkline right — side by side, sparkline takes right 40% */}
       <div className="flex items-center justify-between mb-2 gap-2">
         <p className="text-lg font-black text-foreground leading-none" style={{ fontFamily: "var(--font-mono)" }}>
-          {ticker.price > 0 ? `$${ticker.price > 999 ? ticker.price.toLocaleString() : ticker.price.toFixed(2)}` : "—"}
+          {price > 0 ? `$${price > 999 ? price.toLocaleString() : price.toFixed(2)}` : "—"}
         </p>
         <div className="flex-shrink-0" style={{ width: 80, height: 36 }}>
           <MiniSparkline symbol={ticker.symbol} width={80} height={36} />
