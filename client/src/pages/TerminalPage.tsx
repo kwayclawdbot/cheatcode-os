@@ -958,36 +958,6 @@ export default function TerminalPage() {
             <TradingViewChart symbol={symbol} mode={mode} />
           </div>
 
-          {/* Right panel: CheatCode ALGO signals + stats */}
-          <div className="hidden lg:flex w-52 flex-shrink-0 border-l flex-col overflow-y-auto" style={{ borderColor: "#1e2a3a" }}>
-            {/* <AlgoSignalPanel symbol={symbol.includes(":") ? symbol.split(":")[1].replace("1!", "") : symbol} /> */}
-
-            <div className="px-3 py-2 border-t flex-shrink-0" style={{ borderColor: "#1e2a3a" }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#667085" }}>
-                Market Stats
-              </p>
-              <div className="space-y-1.5">
-                {[
-                  { label: "Open", value: mode === "stocks" ? "5,218.40" : mode === "crypto" ? "67,180" : "1.0824" },
-                  { label: "High", value: mode === "stocks" ? "5,261.20" : mode === "crypto" ? "68,920" : "1.0868" },
-                  { label: "Low", value: mode === "stocks" ? "5,198.80" : mode === "crypto" ? "67,040" : "1.0812" },
-                  { label: "Volume", value: mode === "stocks" ? "2.4B" : mode === "crypto" ? "28.4B" : "142K" },
-                ].map(stat => (
-                  <div key={stat.label} className="flex justify-between">
-                    <span className="text-[10px]" style={{ color: "#667085" }}>{stat.label}</span>
-                    <span className="text-[10px] font-semibold" style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)" }}>
-                      {stat.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <OrderPanel mode={mode} isLoggedIn={isLoggedIn} />
-            </div>
-          </div>
-
           {/* Community Chat — far right (hidden on mobile) */}
           <div className="hidden lg:block w-64 flex-shrink-0 border-l overflow-hidden" style={{ borderColor: "#1e2a3a" }}>
             <ChatSidebar mode={mode} />

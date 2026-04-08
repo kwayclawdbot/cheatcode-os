@@ -213,3 +213,6 @@
 ## Sparkline Bugs (Apr 8 #18)
 - [x] Fix BTC/USD MiniSparkline line chart overflowing outside its container
 - [x] Fix Forex symbol MiniSparklines not rendering (no chart shown)
+
+## Terminal Layout (Apr 8 #19)
+- [x] Remove market stats bar from Terminal page — layout should be Watchlist + Chart + Chat only
