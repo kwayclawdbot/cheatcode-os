@@ -351,6 +351,102 @@ def _fetch_intel_with_lookback(db, days: int = 7) -> tuple[list[str], list[str]]
     return active_themes, radar_tickers
 
 
+# ── Value Scoring (user-facing "worth watching") ─────────────────────────────
+
+# Topics that make a video timeless — if any of these are present, the
+# video bypasses the recency decay in value_score.
+EDUCATIONAL_TOPICS = frozenset({
+    "education",
+    "psychology",
+    "risk_management",
+    "fundamentals",
+    "market_structure",
+})
+
+
+def score_value(video: dict, context: dict, creator_quality: float, transcript: str) -> dict:
+    """Compute user-facing value_score (0-100) — "is this video worth watching?".
+
+    Separate from relevance_score (market-timing) and convergence_score
+    (ticker intelligence). Stable across time: an educational video scores
+    the same today as next month.
+
+    Components (max 100):
+      - Creator quality      (0-30)  trustworthy source baseline
+      - Insight density      (0-25)  actionable insights per hour runtime
+      - Transcript density   (0-15)  words-per-minute vs 180 wpm target
+      - Skill clarity        (0-10)  AI successfully classified skill level
+      - Engagement quality   (0-10)  like-to-view ratio, not raw views
+      - Recency              (0-10)  time-decayed, EXCEPT for educational topics
+
+    Returns: {"score": int, "components": dict} — components exposed for UI debug.
+    """
+    components = {}
+
+    # Creator quality (0-30): trusted source is half the battle
+    components["creator"] = round(creator_quality * 30, 2)
+
+    # Insight density (0-25): actionable insights per hour of runtime.
+    # 8+ insights/hour caps out the score — rewards tight content.
+    duration_sec = video.get("duration_seconds") or 0
+    duration_min = max(duration_sec / 60, 1)  # avoid div/0
+    key_insights = context.get("key_insights") or []
+    insights_per_hour = (len(key_insights) / duration_min) * 60
+    # Target: 8 insights/hour = 25 points (divisor = 8/25 = 0.32)
+    components["insight_density"] = round(min(25.0, (insights_per_hour / 8) * 25), 2)
+
+    # Transcript density (0-15): words per minute vs 180 wpm speech target.
+    # Catches low-effort vlog-style fluff that talks slowly and says little.
+    word_count = len((transcript or "").split())
+    wpm = word_count / duration_min
+    # Target: 180 wpm = 15 points. Cap at 15.
+    components["transcript_density"] = round(min(15.0, (wpm / 180) * 15), 2)
+
+    # Skill clarity (0-10): proxy for "AI could cleanly classify = well-structured"
+    skill = context.get("skill_level")
+    components["skill_clarity"] = 10.0 if skill in {"beginner", "intermediate", "advanced"} else 0.0
+
+    # Engagement quality (0-10): like-to-view RATIO (not raw views).
+    # Kills the "viral clickbait" inflation. 1% like rate ≈ max.
+    views = video.get("view_count") or 0
+    likes = video.get("like_count") or 0
+    if views > 0:
+        like_ratio = likes / views
+        components["engagement"] = round(min(10.0, like_ratio * 1000), 2)
+    else:
+        components["engagement"] = 0.0
+
+    # Recency (0-10): time-decay, EXCEPT for educational topics which never decay.
+    topics = set(context.get("topics") or [])
+    is_educational = bool(topics & EDUCATIONAL_TOPICS)
+    if is_educational:
+        components["recency"] = 10.0  # Timeless content
+    else:
+        published = video.get("published_at")
+        components["recency"] = 0.0
+        if published:
+            try:
+                pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                hours_ago = (datetime.now(timezone.utc) - pub_dt).total_seconds() / 3600
+                if hours_ago < 48:
+                    components["recency"] = 10.0
+                elif hours_ago < 24 * 7:
+                    components["recency"] = 7.0
+                elif hours_ago < 24 * 30:
+                    components["recency"] = 5.0
+            except (ValueError, TypeError):
+                pass
+
+    total = int(round(sum(components.values())))
+    total = max(0, min(100, total))
+
+    return {
+        "score": total,
+        "components": components,
+        "word_count": word_count,
+    }
+
+
 # ── Embedding Generation ─────────────────────────────────────────────────────
 
 async def generate_embedding(text: str) -> list[float]:
@@ -416,11 +512,15 @@ async def process_video(video: dict, creator: dict) -> dict | None:
         log.warning("Failed to generate context for %s", video_id)
         return None
 
-    # Score relevance
+    # Score relevance (market-timing, 0-1)
+    creator_quality = creator.get("quality_score", 0.7)
     relevance = score_relevance(
         video, context, active_themes, radar_tickers,
-        creator_quality=creator.get("quality_score", 0.7),
+        creator_quality=creator_quality,
     )
+
+    # Score value (user-facing "worth watching", 0-100, stable)
+    value = score_value(video, context, creator_quality, transcript or "")
 
     # Generate embedding for semantic search
     embed_text = f"{video['title']}. {context.get('quick_take', '')}. {' '.join(context.get('topics', []))}"
@@ -446,6 +546,11 @@ async def process_video(video: dict, creator: dict) -> dict | None:
         "themes": context.get("themes", []),
         "skill_level": context.get("skill_level", "intermediate"),
         "relevance_score": relevance,
+        "value_score": value["score"],
+        "value_score_components": value["components"],
+        "view_count": video.get("view_count"),
+        "like_count": video.get("like_count"),
+        "word_count": value["word_count"],
         "embedding": embedding,
         "is_published": relevance >= s.relevance_threshold,
         "is_featured": relevance >= 0.8,
