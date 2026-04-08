@@ -518,7 +518,13 @@ def reindex_vault():
 # ── FULL INGESTION PIPELINE ─────────────────────────────────────────────────
 
 async def ingest_content(content_id: str):
-    """Run the full ingestion pipeline for a single piece of curated content."""
+    """Run the full ingestion pipeline for a single piece of curated content.
+
+    Lifecycle: pending → in_progress → succeeded | failed
+    On failure, the row gets ingestion_error + incremented ingestion_attempts
+    so orphans are visible in the admin dashboard and can be retried (up to 5)
+    by ingest_all_pending.
+    """
     db = get_supabase()
 
     # Fetch content + tickers
@@ -529,83 +535,130 @@ async def ingest_content(content_id: str):
 
     content = content_row.data
 
-    # Check if already ingested
-    if content.get("_ingested"):
+    # Idempotency: if already succeeded, don't reprocess
+    if content.get("ingestion_status") == "succeeded":
         return
 
-    tickers_result = db.table("content_tickers").select("*").eq("content_id", content_id).execute()
-    tickers = tickers_result.data or []
+    # Mark in_progress + increment attempts
+    current_attempts = content.get("ingestion_attempts") or 0
+    db.table("content").update({
+        "ingestion_status": "in_progress",
+        "ingestion_attempts": current_attempts + 1,
+    }).eq("id", content_id).execute()
 
-    # Get creator name
-    creator_name = "Unknown"
-    creator_slug = "unknown"
-    if content.get("creator_id"):
-        creator_row = maybe_one(db.table("creators").select("name, slug").eq("id", content["creator_id"]))
-        if creator_row.data:
-            creator_name = creator_row.data["name"]
-            creator_slug = creator_row.data["slug"]
+    try:
+        tickers_result = db.table("content_tickers").select("*").eq("content_id", content_id).execute()
+        tickers = tickers_result.data or []
 
-    themes = content.get("themes", [])
-    topics = content.get("topics", [])
-    title = content["title"]
+        # Get creator name
+        creator_name = "Unknown"
+        creator_slug = "unknown"
+        if content.get("creator_id"):
+            creator_row = maybe_one(db.table("creators").select("name, slug").eq("id", content["creator_id"]))
+            if creator_row.data:
+                creator_name = creator_row.data["name"]
+                creator_slug = creator_row.data["slug"]
 
-    log.info("Ingesting: %s by %s", title[:50], creator_name)
+        themes = content.get("themes", [])
+        topics = content.get("topics", [])
+        title = content["title"]
 
-    # 1. Create master vault note
-    video_note_path = create_video_vault_note(content, creator_name, tickers, themes)
+        log.info("Ingesting: %s by %s (attempt %d)", title[:50], creator_name, current_attempts + 1)
 
-    # 2. Extract frameworks from transcript
-    content["_creator_name"] = creator_name
-    framework_paths = await extract_frameworks(content, title)
+        # 1. Create master vault note
+        video_note_path = create_video_vault_note(content, creator_name, tickers, themes)
 
-    # 3. Update ticker notes with backlinks
-    update_ticker_notes(tickers, title, creator_name, content.get("quick_take", ""))
+        # 2. Extract frameworks from transcript
+        content["_creator_name"] = creator_name
+        framework_paths = await extract_frameworks(content, title)
 
-    # 4. Update theme notes with backlinks
-    update_theme_notes(themes, title, creator_name)
+        # 3. Update ticker notes with backlinks
+        update_ticker_notes(tickers, title, creator_name, content.get("quick_take", ""))
 
-    # 5. Update creator note
-    update_creator_note(creator_name, creator_slug, title, topics)
+        # 4. Update theme notes with backlinks
+        update_theme_notes(themes, title, creator_name)
 
-    # 6. Chunk transcript and embed for granular KB search
-    chunks_stored = await chunk_and_embed(
-        content_id, title,
-        content.get("transcript", ""),
-        content.get("quick_take", ""),
-        topics,
+        # 5. Update creator note
+        update_creator_note(creator_name, creator_slug, title, topics)
+
+        # 6. Chunk transcript and embed for granular KB search
+        chunks_stored = await chunk_and_embed(
+            content_id, title,
+            content.get("transcript", ""),
+            content.get("quick_take", ""),
+            topics,
+        )
+
+        # 7. Reindex vault FTS5
+        reindex_vault()
+
+        # Mark as succeeded
+        db.table("content").update({
+            "ingestion_status": "succeeded",
+            "ingestion_error": None,
+            "ingested_at": datetime.now(timezone.utc).isoformat(),
+            # Keep legacy "ingested" tag for any downstream consumers still reading tags
+            "tags": list(set((content.get("tags") or []) + ["ingested"])),
+        }).eq("id", content_id).execute()
+
+        log.info("Ingestion complete for %s: vault_note=%s, frameworks=%d, chunks=%d",
+                 title[:40], video_note_path.name, len(framework_paths), chunks_stored)
+
+        return {
+            "vault_note": str(video_note_path),
+            "frameworks": len(framework_paths),
+            "chunks": chunks_stored,
+            "tickers_updated": len(tickers),
+            "themes_updated": len(themes),
+        }
+
+    except Exception as e:
+        error_msg = f"{type(e).__name__}: {str(e)[:500]}"
+        log.error("Ingestion failed for %s: %s", content_id, error_msg, exc_info=True)
+        db.table("content").update({
+            "ingestion_status": "failed",
+            "ingestion_error": error_msg,
+        }).eq("id", content_id).execute()
+        # Re-raise so callers (like process_video) can observe the failure,
+        # but the DB state is now accurate either way.
+        raise
+
+
+async def ingest_all_pending(max_attempts: int = 5):
+    """Ingest all content that hasn't succeeded yet.
+
+    Picks up:
+    - Rows with ingestion_status='pending' (never attempted)
+    - Rows with ingestion_status='failed' below the attempt cap (retry)
+
+    Bounded by max_attempts (default 5) so we don't hammer permanently-broken
+    content. Failed rows above the cap are visible in the admin dashboard
+    and require manual intervention.
+    """
+    db = get_supabase()
+    pending = (
+        db.table("content")
+        .select("id, title, ingestion_status, ingestion_attempts")
+        .in_("ingestion_status", ["pending", "failed"])
+        .lt("ingestion_attempts", max_attempts)
+        .eq("is_published", True)
+        .execute()
     )
 
-    # 7. Reindex vault FTS5
-    reindex_vault()
-
-    # Mark as ingested in DB
-    db.table("content").update({"tags": content.get("tags", []) + ["ingested"]}).eq("id", content_id).execute()
-
-    log.info("Ingestion complete for %s: vault_note=%s, frameworks=%d, chunks=%d",
-             title[:40], video_note_path.name, len(framework_paths), chunks_stored)
-
-    return {
-        "vault_note": str(video_note_path),
-        "frameworks": len(framework_paths),
-        "chunks": chunks_stored,
-        "tickers_updated": len(tickers),
-        "themes_updated": len(themes),
-    }
-
-
-async def ingest_all_pending():
-    """Ingest all published content that hasn't been ingested yet."""
-    db = get_supabase()
-    pending = db.table("content").select("id, title").eq("is_published", True).not_.contains("tags", ["ingested"]).execute()
+    rows = pending.data or []
+    log.info("ingest_all_pending: %d rows to process (max_attempts=%d)", len(rows), max_attempts)
 
     results = []
-    for row in (pending.data or []):
+    failures = 0
+    for row in rows:
         try:
             result = await ingest_content(row["id"])
             if result:
                 results.append(result)
         except Exception as e:
-            log.error("Ingestion failed for %s: %s", row["title"][:40], e)
+            # Error state is already persisted inside ingest_content — just count it
+            failures += 1
+            log.warning("Batch skip for %s: %s", row.get("title", row["id"])[:40], e)
 
-    log.info("Batch ingestion complete: %d items processed", len(results))
-    return results
+    log.info("Batch ingestion complete: %d succeeded, %d failed", len(results), failures)
+    return {"succeeded": len(results), "failed": failures, "scanned": len(rows)}
