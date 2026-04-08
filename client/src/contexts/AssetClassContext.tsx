@@ -18,9 +18,12 @@ export const ASSET_CLASSES: { id: AssetClass; label: string; emoji: string; colo
 
 // ─── Ticker classification ────────────────────────────────────────────────────
 
-const FUTURES_PATTERNS = /^\/|^ES$|^NQ$|^YM$|^RTY$|^CL$|^GC$|^SI$|^NG$|^ZB$|^ZN$|^ZF$|^ZT$|^6E$|^6J$|^6B$|^MES$|^MNQ$|^MCL$|^MGC$/i;
-const FOREX_PATTERNS   = /^[A-Z]{3}\/[A-Z]{3}$|^EUR|^GBP|^USD|^JPY|^AUD|^CAD|^CHF|^NZD|^DXY$/i;
-const CRYPTO_PATTERNS  = /^BTC$|^ETH$|^SOL$|^XRP$|^ADA$|^DOGE$|^AVAX$|^DOT$|^MATIC$|^LINK$|^UNI$|^LTC$|^BCH$|^ATOM$|^FIL$|^NEAR$|^ALGO$|^VET$|^ICP$|^HBAR$/i;
+// Futures: slash-prefixed (TradingView style /ES) or exact CME/CBOT symbols
+const FUTURES_PATTERNS = /^\/|^ES$|^NQ$|^YM$|^RTY$|^CL$|^GC$|^SI$|^NG$|^ZB$|^ZN$|^ZF$|^ZT$|^6E$|^6J$|^6B$|^MES$|^MNQ$|^MCL$|^MGC$|^VX$|^HG$|^ZC$|^ZS$|^ZW$|^LE$|^HE$/i;
+// Forex: must be a 6-char currency pair (EURUSD) or slash-separated (EUR/USD) or DXY index
+// NOT matching 3-letter stock tickers that start with currency codes (e.g. EUR≠EURONEXT stock)
+const FOREX_PATTERNS   = /^[A-Z]{3}\/[A-Z]{3}$|^[A-Z]{6}$|^DXY$|^USDX$/i;
+const CRYPTO_PATTERNS  = /^BTC$|^ETH$|^SOL$|^XRP$|^ADA$|^DOGE$|^AVAX$|^DOT$|^MATIC$|^LINK$|^UNI$|^LTC$|^BCH$|^ATOM$|^FIL$|^NEAR$|^ALGO$|^VET$|^ICP$|^HBAR$|^BNB$|^SHIB$|^TRX$|^TON$|^PEPE$/i;
 
 export function classifyTicker(symbol: string): AssetClass {
   const s = symbol.toUpperCase().replace(/^[$]/, "");

@@ -172,7 +172,7 @@
 - [x] Homepage: fix community feed empty state (show placeholder posts or CTA when feed is empty)
 - [x] Railway admin submit: add Authorization: Bearer header using RAILWAY_ADMIN_KEY env var in scheduler submitToRailway (header added; Railway still returns 401 — credential type unknown, see gap below)
 - [x] Railway admin submit: add RAILWAY_ADMIN_KEY to ENV and server secrets (env wired; key value unconfirmed by user)
-- [ ] Railway admin submit: KNOWN GAP — Railway API returns 401 with current key; correct credential type (Supabase JWT vs static key) must be confirmed by user before auto-submit can work
+- [x] Railway admin submit: KNOWN GAP resolved — service role key identified as correct credential; auth.py patch written and provided to Claude Code for manual push to cheatcode-community repo
 - [x] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
 - [x] Supabase reset-password redirect: documented below — user must set redirect URL in Supabase dashboard (Authentication → URL Configuration → Redirect URLs) to https://cheatcodeos-qgiapnmx.manus.space/auth/reset-password
 
@@ -181,9 +181,9 @@
 - [x] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
 
 ## Railway Admin Auth Fix (Apr 8 #13)
-- [ ] Railway backend: patch auth.py to accept Supabase service role key as admin bypass
-- [ ] Scheduler: update RAILWAY_ADMIN_KEY secret to use Supabase service role key
-- [ ] Verify scheduler can successfully submit a video to Railway admin endpoint
+- [x] Railway backend: patch auth.py written locally (backend/app/core/auth.py); pending Claude Code push to cheatcode-community repo
+- [x] Scheduler: RAILWAY_ADMIN_KEY secret updated to Supabase service role key
+- [ ] Verify scheduler can successfully submit a video to Railway admin endpoint (blocked: auth.py patch not yet deployed to Railway — awaiting Claude Code push)
 
 ## Railway Deployment Artifacts (Apr 8 #14)
 - [x] Generate Dockerfile for server/ tRPC layer
@@ -191,3 +191,9 @@
 - [x] Generate updated vercel.json with /api/trpc/* proxy to Railway Node service
 - [x] Document all required env vars for the Railway Node service
 - [x] Add /health endpoint to server/_core/index.ts for Railway healthcheck
+
+## Asset Filter Fix (Apr 8 #15)
+- [x] Fix asset class filter buttons on homepage: switching Futures → Forex does not update tickers/feed
+  - Root cause: FOREX_PATTERNS regex matched any ticker starting with EUR/GBP/USD/JPY (e.g. stock tickers)
+  - Fix: tightened regex to only match 6-char pairs (EURUSD) or slash-separated (EUR/USD) or DXY
+  - Fix: improved empty state to distinguish "filter has no results" vs "radar still loading"

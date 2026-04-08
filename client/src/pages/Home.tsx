@@ -32,7 +32,7 @@ import {
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { MiniSparkline } from "@/components/shared/MiniSparkline";
-import { useAssetClass } from "@/contexts/AssetClassContext";
+import { useAssetClass, ASSET_CLASSES } from "@/contexts/AssetClassContext";
 import { trpc } from "@/lib/trpc";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
@@ -916,7 +916,7 @@ export default function Home() {
   const tickerRailRef = useRef<HTMLDivElement>(null);
   const { isAuthenticated } = useAuth();
 
-  const { matchesTicker, isAll } = useAssetClass();
+  const { matchesTicker, isAll, selected } = useAssetClass();
 
   // Feed state — Trending is now the default primary tab
   const [feedTab, setFeedTab] = useState<"trending" | "for_you" | "trade_ideas" | "wall_of_fame">("trending");
@@ -1238,13 +1238,34 @@ export default function Home() {
                 {/* Ticker focus sections — show live radar tickers; if none, show empty state */}
                 {radarTickers.length === 0 ? (
                   <div className="text-center py-10 rounded-xl border border-border bg-card/50">
-                    <p className="text-sm font-semibold text-foreground mb-1">Radar loading…</p>
-                    <p className="text-xs text-muted-foreground mb-3">Today’s market radar is being generated. Check back shortly.</p>
-                    <Link href="/search">
-                      <button className="text-xs font-bold text-[#4DC820] hover:underline flex items-center gap-1 mx-auto">
-                        Browse all content <ArrowUpRight size={11} />
-                      </button>
-                    </Link>
+                    {!isAll && allRadarTickers.length > 0 ? (
+                      // Filter active but no tickers match it in today's radar
+                      <>
+                        <p className="text-2xl mb-2">
+                          {ASSET_CLASSES.find(ac => selected.includes(ac.id))?.emoji ?? "🔍"}
+                        </p>
+                        <p className="text-sm font-semibold text-foreground mb-1">
+                          No {selected.map(id => ASSET_CLASSES.find(ac => ac.id === id)?.label).filter(Boolean).join(" / ")} tickers in today's radar
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-3">Today's radar is focused on other asset classes. Try switching to Stocks or All Markets.</p>
+                        <Link href="/search">
+                          <button className="text-xs font-bold text-[#4DC820] hover:underline flex items-center gap-1 mx-auto">
+                            Search all content <ArrowUpRight size={11} />
+                          </button>
+                        </Link>
+                      </>
+                    ) : (
+                      // Radar hasn't loaded yet
+                      <>
+                        <p className="text-sm font-semibold text-foreground mb-1">Radar loading…</p>
+                        <p className="text-xs text-muted-foreground mb-3">Today's market radar is being generated. Check back shortly.</p>
+                        <Link href="/search">
+                          <button className="text-xs font-bold text-[#4DC820] hover:underline flex items-center gap-1 mx-auto">
+                            Browse all content <ArrowUpRight size={11} />
+                          </button>
+                        </Link>
+                      </>
+                    )}
                   </div>
                 ) : null}
                 {radarTickers.slice(0, 4).map((rt, idx) => {
