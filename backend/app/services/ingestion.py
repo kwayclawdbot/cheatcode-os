@@ -1,4 +1,4 @@
-"""Ingestion Engine — curated content → Supabase vault rows + KB chunks.
+"""Ingestion Engine — curated content → Supabase cheatcode_vault rows + KB chunks.
 
 ARCHITECTURE NOTE (2026-04-08 rebuild):
     The original implementation wrote markdown files to `~/.openclaw/vault/`
@@ -7,15 +7,19 @@ ARCHITECTURE NOTE (2026-04-08 rebuild):
     ephemeral disk on the next container restart. The "vault" was effectively
     invisible in production.
 
-    The rebuild stores vault notes as rows in the Supabase `vault_store`
-    table, keyed by relative path. The Python backend writes rows. A
-    separate sync agent running on the user's Mac (scripts/vault_sync.py)
-    polls the table and writes any new rows to `~/.openclaw/vault/{path}`
-    as real files, which the user's Obsidian opens normally.
+    The rebuild stores vault notes as rows in a dedicated Supabase
+    `cheatcode_vault` table (migration 009), keyed by relative path. The
+    Python backend writes rows. A sync agent running on the user's Mac
+    (scripts/vault_sync.py) polls the table and writes any new rows to
+    `~/.openclaw/vault/{path}` as real files, which the user's Obsidian
+    opens normally.
 
-    This decouples cloud compute from local filesystem and makes the
-    architecture sane: Railway is cron-only, Supabase is the source of
-    truth, Obsidian is a mirror on the user's Mac.
+    IMPORTANT: this table is ISOLATED from `vault_store` (which another
+    personal-vault sync process uses for unrelated data). cheatcode-os
+    writes go HERE — to `cheatcode_vault` — so the two systems don't
+    collide. A CHECK constraint on cheatcode_vault.path enforces the
+    "06 - Knowledge Base/CheatCode OS/%" prefix so accidental out-of-scope
+    writes fail loudly.
 
 Path convention — all paths are POSIX-style relative strings (no home dir):
     06 - Knowledge Base/CheatCode OS/Frameworks/{slug}.md
@@ -41,6 +45,8 @@ from app.services.curation import generate_embedding
 log = logging.getLogger("ingestion")
 
 # All relative paths live under this base inside the vault.
+# The cheatcode_vault CHECK constraint enforces this prefix — accidental
+# writes outside it will fail loudly instead of polluting unrelated data.
 VAULT_BASE = "06 - Knowledge Base/CheatCode OS"
 VIDEOS_DIR = f"{VAULT_BASE}/Videos"
 FRAMEWORKS_DIR = f"{VAULT_BASE}/Frameworks"
@@ -48,8 +54,12 @@ TICKERS_DIR = f"{VAULT_BASE}/Tickers"
 THEMES_DIR = f"{VAULT_BASE}/Themes"
 CREATORS_DIR = f"{VAULT_BASE}/Creators"
 
+# Supabase table for cheatcode-os vault rows — isolated from the personal
+# vault_store table that another sync process uses for unrelated data.
+VAULT_TABLE = "cheatcode_vault"
 
-# ── Vault row I/O (Supabase vault_store table) ─────────────────────────────
+
+# ── Vault row I/O (Supabase cheatcode_vault table) ─────────────────────────
 
 def _slugify(text: str) -> str:
     """Convert text to a safe path segment."""
@@ -58,9 +68,16 @@ def _slugify(text: str) -> str:
 
 
 def _vault_put(path: str, content: str) -> None:
-    """Upsert a vault note by path. Idempotent."""
+    """Upsert a vault note by path into cheatcode_vault. Idempotent.
+
+    The DB-side CHECK constraint rejects any path not under
+    "06 - Knowledge Base/CheatCode OS/...", so a bug that tries to write
+    elsewhere will raise a clear error instead of silently polluting.
+    """
+    if not path.startswith(VAULT_BASE + "/"):
+        raise ValueError(f"vault path must start with '{VAULT_BASE}/': got {path!r}")
     db = get_supabase()
-    db.table("vault_store").upsert(
+    db.table(VAULT_TABLE).upsert(
         {
             "path": path,
             "content": content,
@@ -73,7 +90,7 @@ def _vault_put(path: str, content: str) -> None:
 def _vault_get(path: str) -> str | None:
     """Fetch an existing vault note by path. Returns None if not present."""
     db = get_supabase()
-    result = maybe_one(db.table("vault_store").select("content").eq("path", path))
+    result = maybe_one(db.table(VAULT_TABLE).select("content").eq("path", path))
     if not result.data:
         return None
     return result.data.get("content")

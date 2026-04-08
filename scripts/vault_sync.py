@@ -3,9 +3,19 @@
 CheatCode OS → local Obsidian vault sync agent.
 
 Runs on your Mac as a LaunchAgent (or manually). Pulls rows from the
-Supabase `vault_store` table and writes them as markdown files under
-~/.openclaw/vault/{path}, which is the root of your personal Obsidian
-vault.
+Supabase `cheatcode_vault` table and writes them as markdown files under
+~/.openclaw/vault/06 - Knowledge Base/CheatCode OS/..., which is the
+cheatcode-os section of your personal Obsidian vault.
+
+IMPORTANT — scope:
+    This script reads ONLY from `cheatcode_vault`, which is isolated
+    from the `vault_store` table used by another personal-vault sync
+    process. These two tables do not collide. cheatcode-os ingestion
+    output lives in cheatcode_vault; everything else lives elsewhere.
+
+    The script is strictly one-way: Supabase → Mac. It never reads disk
+    and never writes to Supabase. Your personal vault cannot accidentally
+    leak into cheatcode-os data.
 
 Why this exists:
     The Python backend running on Railway cannot write to your Mac's
@@ -140,8 +150,18 @@ def write_note(rel_path: str, content: str) -> bool:
 
 # ── Supabase REST ──────────────────────────────────────────────────────────
 
+# Supabase table that cheatcode-os ingestion writes to. Isolated from the
+# personal vault_store table. See migration 009 for details.
+VAULT_TABLE = "cheatcode_vault"
+
+# Additional defense-in-depth: reject any row whose path doesn't start with
+# this prefix. Should never trigger because cheatcode_vault has a CHECK
+# constraint enforcing the same rule, but belt + suspenders.
+REQUIRED_PATH_PREFIX = "06 - Knowledge Base/CheatCode OS/"
+
+
 def fetch_rows(since: str | None) -> list[dict]:
-    """Fetch vault_store rows newer than `since` (ISO timestamp) via PostgREST."""
+    """Fetch cheatcode_vault rows newer than `since` (ISO timestamp) via PostgREST."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         log.error("SUPABASE_URL and SUPABASE_SERVICE_KEY (or ANON_KEY) are required")
         sys.exit(2)
@@ -159,7 +179,7 @@ def fetch_rows(since: str | None) -> list[dict]:
     if since:
         params["updated_at"] = f"gte.{since}"
 
-    url = f"{SUPABASE_URL}/rest/v1/vault_store"
+    url = f"{SUPABASE_URL}/rest/v1/{VAULT_TABLE}"
     with httpx.Client(timeout=30) as client:
         resp = client.get(url, headers=headers, params=params)
         resp.raise_for_status()
@@ -173,8 +193,8 @@ def run_once(full: bool = False) -> dict:
     since = None if full else state.get("last_sync")
 
     log.info(
-        "syncing vault_store → %s (incremental from %s)",
-        VAULT_ROOT, since or "beginning",
+        "syncing %s → %s (incremental from %s)",
+        VAULT_TABLE, VAULT_ROOT, since or "beginning",
     )
 
     try:
@@ -187,12 +207,19 @@ def run_once(full: bool = False) -> dict:
 
     written = 0
     skipped = 0
+    rejected = 0
     max_updated = since
     for row in rows:
         path = row.get("path")
         content = row.get("content") or ""
         updated_at = row.get("updated_at")
         if not path:
+            continue
+        # Defense-in-depth scope check. cheatcode_vault's CHECK constraint
+        # already enforces this; this catches any future drift or bypass.
+        if not path.startswith(REQUIRED_PATH_PREFIX):
+            log.warning("out-of-scope path rejected: %s", path)
+            rejected += 1
             continue
         if write_note(path, content):
             written += 1
@@ -206,8 +233,8 @@ def run_once(full: bool = False) -> dict:
         state["last_run"] = datetime.now(timezone.utc).isoformat()
         save_state(state)
 
-    log.info("sync complete: written=%d skipped=%d", written, skipped)
-    return {"fetched": len(rows), "written": written, "skipped": skipped}
+    log.info("sync complete: written=%d skipped=%d rejected=%d", written, skipped, rejected)
+    return {"fetched": len(rows), "written": written, "skipped": skipped, "rejected": rejected}
 
 
 def main() -> int:
