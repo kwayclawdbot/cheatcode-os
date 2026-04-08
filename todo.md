@@ -209,3 +209,7 @@
 - [x] Add tRPC marketData.indicesQuotes procedure using EODHD API (SPX, NDX, DJI, RUT, VIX, DAX, FTSE, N225)
 - [x] Wire Forex/Crypto/Futures quotes into homepage ticker rail — each filter shows its own live tickers
 - [x] Remove "honest" placeholder / fix corrupted fallback string in ticker cards — each filter now uses dedicated curated symbol list with proper display labels
+
+## Sparkline Bugs (Apr 8 #18)
+- [x] Fix BTC/USD MiniSparkline line chart overflowing outside its container
+- [x] Fix Forex symbol MiniSparklines not rendering (no chart shown)
