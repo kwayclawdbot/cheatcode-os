@@ -87,16 +87,17 @@ STYLE_POST_TYPES = {
     "earnings":   [("market_take", 0.60), ("thesis", 0.40)],
 }
 
-# Map our post-type vocabulary → values feed_posts.post_type already accepts.
-# feed_posts has no CHECK constraint on post_type, but the frontend filters
-# on it — so we keep the vocabulary small and stable.
+# Map internal post-type vocabulary → values feed_posts.post_type's CHECK
+# constraint actually accepts: trade_idea, pl_share, market_take, chart_post.
+# Anything talking about a setup or thesis maps to trade_idea; everything
+# else lands as market_take.
 POST_TYPE_NORMALIZATION = {
-    "market_take": "take",
-    "thesis":      "take",
-    "setup":       "setup",
-    "question":    "question",
-    "education":   "take",
-    "recap":       "take",
+    "market_take": "market_take",
+    "thesis":      "trade_idea",
+    "setup":       "trade_idea",
+    "question":    "market_take",
+    "education":   "market_take",
+    "recap":       "market_take",
 }
 
 
