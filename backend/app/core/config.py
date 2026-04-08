@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_key: str = ""
     supabase_anon_key: str = ""
+    # Direct Postgres connection, used ONLY by the migration runner at
+    # startup (DDL can't go through PostgREST). Grab from Supabase Dashboard
+    # → Settings → Database → Connection string (Session mode).
+    database_url: str = ""
 
     # Anthropic (Kai Chat)
     anthropic_api_key: str = ""

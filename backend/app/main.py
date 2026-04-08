@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import get_settings
+from app.core.migrations import run_migrations
 from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market, coach, chart
 from app.services.curation import run_curation_cycle, rescore_recent_content
 from app.services.intelligence import run_brain_cycle, generate_radar
@@ -17,6 +18,13 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Run pending DB migrations before anything touches the schema.
+    # Fails loud (raises) if DATABASE_URL is missing or a migration fails —
+    # better to crash the deploy than start a service that will error on
+    # first database write.
+    settings_for_mig = get_settings()
+    run_migrations(database_url=settings_for_mig.database_url or None)
+
     # Start background jobs
     scheduler.add_job(run_curation_cycle, "cron", hour=6, minute=0, id="curation")  # Once daily at 6am UTC
     scheduler.add_job(run_brain_cycle, "interval", minutes=60, id="brain")
