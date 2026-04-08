@@ -1362,7 +1362,9 @@ export default function Home() {
                   const generalPosts = posts.filter(p => !p.ticker);
                   const displayPosts = tickerPosts.length > 0 ? tickerPosts : generalPosts.slice(idx * 2, idx * 2 + 2);
                   const q = quotes[rt.symbol];
-                  const isUp = (q?.change_pct ?? 0) >= 0;
+                  const qChangePct = typeof q?.change_pct === 'number' ? q.change_pct : parseFloat(q?.change_pct as any) || 0;
+                  const qPrice = typeof q?.price === 'number' ? q.price : parseFloat(q?.price as any) || 0;
+                  const isUp = qChangePct >= 0;
                   return (
                     <div key={rt.symbol} className="mb-5">
                       {/* Ticker focus header — clickable to ticker detail page */}
@@ -1377,9 +1379,9 @@ export default function Home() {
                                   {rt.symbol}
                                 </span>
                                 {/* Live price */}
-                                {q && q.price > 0 && (
+                                {q && qPrice > 0 && (
                                   <span className="text-sm font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                                    ${q.price > 999 ? q.price.toLocaleString() : q.price.toFixed(2)}
+                                    ${qPrice > 999 ? qPrice.toLocaleString() : qPrice.toFixed(2)}
                                   </span>
                                 )}
                                 {/* % change badge */}
@@ -1388,7 +1390,7 @@ export default function Home() {
                                     color: isUp ? "#00C47A" : "#E8193C",
                                     background: isUp ? "rgba(0,196,122,0.12)" : "rgba(232,25,60,0.12)",
                                   }}>
-                                    {isUp ? "+" : ""}{q.change_pct.toFixed(2)}%
+                                    {isUp ? "+" : ""}{qChangePct.toFixed(2)}%
                                   </span>
                                 )}
                                 {/* Kai signal — hidden on very small screens */}
