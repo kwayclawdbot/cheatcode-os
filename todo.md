@@ -168,12 +168,13 @@
 - [x] Auth hardening: add rate limiting on ingest endpoints (max 10 req/min per IP)
 
 ## Homepage Fix + Next Steps (Apr 8 #11)
-- [ ] Homepage: fix empty/loading state for trending tickers carousel (show skeleton while loading, not blank cards)
-- [ ] Homepage: fix community feed empty state (show placeholder posts or CTA when feed is empty)
-- [ ] Railway admin submit: add Authorization header using RAILWAY_ADMIN_KEY env var in scheduler submitToRailway
-- [ ] Railway admin submit: add RAILWAY_ADMIN_KEY to ENV and server secrets
-- [ ] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
-- [ ] Supabase reset-password redirect: document the Supabase dashboard config step for the user
+- [x] Homepage: fix empty/loading state for trending tickers carousel (show skeleton while loading, not blank cards)
+- [x] Homepage: fix community feed empty state (show placeholder posts or CTA when feed is empty)
+- [x] Railway admin submit: add Authorization: Bearer header using RAILWAY_ADMIN_KEY env var in scheduler submitToRailway (header added; Railway still returns 401 — credential type unknown, see gap below)
+- [x] Railway admin submit: add RAILWAY_ADMIN_KEY to ENV and server secrets (env wired; key value unconfirmed by user)
+- [ ] Railway admin submit: KNOWN GAP — Railway API returns 401 with current key; correct credential type (Supabase JWT vs static key) must be confirmed by user before auto-submit can work
+- [x] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
+- [x] Supabase reset-password redirect: documented below — user must set redirect URL in Supabase dashboard (Authentication → URL Configuration → Redirect URLs) to https://cheatcodeos-qgiapnmx.manus.space/auth/reset-password
 
 ## Trending Tickers Fix + VideoPage Related Videos (Apr 8 #12)
 - [x] Homepage: trending tickers carousel not displaying — debug fetchRadar response and fix empty state
