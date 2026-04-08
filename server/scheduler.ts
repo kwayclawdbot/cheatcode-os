@@ -295,7 +295,11 @@ export async function runAutoIngest(): Promise<IngestSummary[]> {
         try {
           // Fetch full video details
           const videoDetails = await fetchYouTubeVideoDetails(result.videoId);
-          if (!videoDetails) { summary.errors++; continue; }
+          if (!videoDetails) {
+            console.warn(`[Scheduler] Could not fetch details for ${result.videoId} ("${result.title}")`);
+            summary.errors++;
+            continue;
+          }
 
           // Skip shorts
           if (videoDetails.durationSeconds > 0 && videoDetails.durationSeconds < 180) {
@@ -307,7 +311,11 @@ export async function runAutoIngest(): Promise<IngestSummary[]> {
 
           // Run quality filter
           const quality = await runQualityFilter(videoDetails);
-          if (!quality) { summary.errors++; continue; }
+          if (!quality) {
+            console.warn(`[Scheduler] LLM quality filter failed for "${videoDetails.title}"`);
+            summary.errors++;
+            continue;
+          }
 
           if (!quality.passes || quality.score < QUALITY_THRESHOLD) {
             summary.skipped++;
@@ -321,6 +329,7 @@ export async function runAutoIngest(): Promise<IngestSummary[]> {
             summary.submitted++;
             console.log(`[Scheduler] Submitted "${videoDetails.title}" (score: ${quality.score})`);
           } else {
+            console.warn(`[Scheduler] Railway rejected "${videoDetails.title}" (score: ${quality.score})`);
             summary.errors++;
           }
 

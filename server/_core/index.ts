@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerUploadRoute } from "../upload";
 import { startScheduler } from "../scheduler";
+import { createRateLimiter } from "./rateLimiter";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -39,6 +40,10 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Media upload endpoint
   registerUploadRoute(app);
+  // Rate limit ingest endpoints: max 10 requests per IP per minute
+  // This covers all /api/trpc/ingest.* procedures (analyseVideo, submitVideo, etc.)
+  app.use("/api/trpc/ingest", createRateLimiter({ maxRequests: 10, windowMs: 60_000 }));
+
   // tRPC API
   app.use(
     "/api/trpc",

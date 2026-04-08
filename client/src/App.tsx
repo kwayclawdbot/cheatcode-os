@@ -55,6 +55,7 @@ import KaiAssistPage from "./pages/KaiAssistPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 import TickerPage from "./pages/TickerPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 /**
  * Redirect new authenticated users to onboarding if they haven't completed it.
  * Uses two signals:
@@ -146,6 +147,7 @@ function Router() {
       {/* ── Auth ── */}
       <Route path="/auth" component={AuthPage} />
       <Route path="/auth/callback" component={AuthCallbackPage} />
+      <Route path="/auth/reset-password" component={ResetPasswordPage} />
 
       {/* ── Creator / topic routes ── */}
       <Route path="/topics/:id" component={TopicsPage} />

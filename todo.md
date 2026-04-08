@@ -164,5 +164,5 @@
 - [x] Auth hardening: add token refresh guard — re-read token from Supabase session before every tRPC request
 - [x] Auth hardening: verify all protectedProcedures return UNAUTHED_ERR_MSG (not generic 401) so frontend redirect works
 - [x] Auth hardening: unified all auth consumers to single Supabase hook (removed _core/hooks/useAuth dual-auth drift)
-- [ ] Auth hardening: add /auth/reset-password route and ResetPasswordPage (reset emails point to this route)
-- [ ] Auth hardening: add rate limiting on ingest endpoints (max 10 req/min per IP)
+- [x] Auth hardening: add /auth/reset-password route and ResetPasswordPage (reset emails point to this route)
+- [x] Auth hardening: add rate limiting on ingest endpoints (max 10 req/min per IP)
