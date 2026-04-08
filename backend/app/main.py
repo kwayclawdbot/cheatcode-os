@@ -14,6 +14,8 @@ from app.services.market_data import sync_eod_prices, sync_eod_prices_24_7
 from app.services.ticker_analysis import run_daily_analysis
 from app.services.ingestion import ingest_all_pending
 from app.services.trending import compute_trending_scores
+from app.services.ai_agent_poster import run_scheduled_post_job_async
+from app.services.ai_agent_reactor import react_to_big_movers_async, batch_add_reactions_async
 
 scheduler = AsyncIOScheduler()
 
@@ -36,6 +38,26 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(with_telemetry(rescore_recent_content, "daily_rescore"), "cron", hour=7, minute=20, id="daily_rescore")
     scheduler.add_job(with_telemetry(run_daily_analysis, "daily_analysis"), "cron", hour=7, minute=30, id="daily_analysis")
     scheduler.add_job(with_telemetry(compute_trending_scores, "trending_score"), "interval", minutes=15, id="trending_score")
+
+    # AI persona agents seed the community feed before real members arrive.
+    # Gated behind `app_settings.agent_posting_enabled` — safe to leave the jobs
+    # registered even when the feature is off (each call is a cheap DB read
+    # that exits immediately). Cadence knobs:
+    #   - scheduled posts:  every 20 min (generates 1 post/run, weighted by style + market hours)
+    #   - hot takes:        every 15 min (fires only on >5% movers, per-agent cooldown prevents spam)
+    #   - reactions batch:  every 60 min (DB-only, zero Anthropic cost)
+    scheduler.add_job(
+        with_telemetry(run_scheduled_post_job_async, "agent_post"),
+        "interval", minutes=20, id="agent_post",
+    )
+    scheduler.add_job(
+        with_telemetry(react_to_big_movers_async, "agent_hot_takes"),
+        "interval", minutes=15, id="agent_hot_takes",
+    )
+    scheduler.add_job(
+        with_telemetry(batch_add_reactions_async, "agent_reactions"),
+        "interval", minutes=60, id="agent_reactions",
+    )
     scheduler.start()
     yield
     scheduler.shutdown()

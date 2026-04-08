@@ -350,8 +350,14 @@ if (typeof window !== "undefined") {
 
 // ── Social Feed ─────────────────────────────────────────────────────────────
 
-export async function fetchFeed(tab = "discover", page = 1): Promise<any[]> {
-  return apiFetch(`/social/feed?tab=${tab}&page=${page}`);
+export async function fetchFeed(
+  tab = "discover",
+  page = 1,
+  options?: { hideAgents?: boolean },
+): Promise<any[]> {
+  const qs = new URLSearchParams({ tab, page: String(page) });
+  if (options?.hideAgents) qs.set("hide_agents", "true");
+  return apiFetch(`/social/feed?${qs.toString()}`);
 }
 
 export async function createPost(data: Record<string, unknown>): Promise<any> {

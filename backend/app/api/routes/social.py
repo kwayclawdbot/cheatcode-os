@@ -38,14 +38,23 @@ async def get_feed(
     tab: str = "discover",  # following, discover, trending, live
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
+    hide_agents: bool = Query(False, description="Exclude posts authored by AI persona agents"),
     user: dict | None = Depends(get_current_user),
 ):
     db = get_supabase()
     offset = (page - 1) * per_page
 
     q = db.table("feed_posts").select(
-        "*, profiles:user_id(display_name, handle, avatar_url, trading_style, xp)"
+        "*, profiles:user_id(display_name, handle, avatar_url, trading_style, xp, is_agent)"
     )
+
+    agent_ids_to_exclude: set[str] = set()
+    if hide_agents:
+        # Fetch the (small) list of AI persona profile ids once and filter
+        # them out in Python after the main query lands. Keeps the filter
+        # logic simple and avoids supabase-py version-specific .not_ syntax.
+        agent_rows = db.table("profiles").select("id").eq("is_agent", True).execute()
+        agent_ids_to_exclude = {r["id"] for r in (agent_rows.data or [])}
 
     if tab == "following" and user:
         follows = db.table("follows").select("following_id").eq("follower_id", user["id"]).execute()
@@ -66,6 +75,8 @@ async def get_feed(
 
     posts = []
     for p in (result.data or []):
+        if agent_ids_to_exclude and p.get("user_id") in agent_ids_to_exclude:
+            continue
         profile = p.pop("profiles", None) or {}
         # Check if current user liked/bookmarked
         user_liked = False
@@ -88,6 +99,7 @@ async def get_feed(
                 "avatar_url": profile.get("avatar_url"),
                 "style": profile.get("trading_style", ""),
                 "xp": profile.get("xp", 0),
+                "is_agent": bool(profile.get("is_agent", False)),
             },
             "user_liked": user_liked,
             "user_bookmarked": user_bookmarked,
