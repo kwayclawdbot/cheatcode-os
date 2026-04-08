@@ -10,7 +10,7 @@ from app.core.telemetry import with_telemetry
 from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market, coach, chart
 from app.services.curation import run_curation_cycle, rescore_recent_content
 from app.services.intelligence import run_brain_cycle, generate_radar
-from app.services.market_data import sync_ticker_prices
+from app.services.market_data import sync_eod_prices, sync_eod_prices_24_7
 from app.services.ticker_analysis import run_daily_analysis
 from app.services.ingestion import ingest_all_pending
 from app.services.trending import compute_trending_scores
@@ -27,7 +27,11 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(with_telemetry(run_brain_cycle, "brain"),             "interval", minutes=60,    id="brain")
     scheduler.add_job(with_telemetry(generate_radar, "radar_morning"),      "cron", hour=6, minute=30, id="radar_morning")
     scheduler.add_job(with_telemetry(generate_radar, "radar_midday"),       "cron", hour=14, minute=0, id="radar_midday")
-    scheduler.add_job(with_telemetry(sync_ticker_prices, "price_sync"),     "interval", minutes=60,    id="price_sync")
+    # EOD price sync strategy (cheap — ~50 API calls/day vs ~2300/day for per-symbol):
+    #   - Daily 21:00 UTC: bulk sync ALL 4 exchanges (US stocks+ETFs, crypto, forex, indices) = 4 API calls
+    #   - Every hour:       bulk sync CC + FOREX only (24/7 markets) = 2 API calls/hour
+    scheduler.add_job(with_telemetry(sync_eod_prices,      "eod_daily"),   "cron", hour=21, minute=0, id="eod_daily")
+    scheduler.add_job(with_telemetry(sync_eod_prices_24_7, "eod_hourly"),  "interval", minutes=60,   id="eod_hourly")
     scheduler.add_job(with_telemetry(ingest_all_pending, "daily_ingest"),   "cron", hour=7, minute=15, id="daily_ingest")
     scheduler.add_job(with_telemetry(rescore_recent_content, "daily_rescore"), "cron", hour=7, minute=20, id="daily_rescore")
     scheduler.add_job(with_telemetry(run_daily_analysis, "daily_analysis"), "cron", hour=7, minute=30, id="daily_analysis")

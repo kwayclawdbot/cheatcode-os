@@ -275,102 +275,298 @@ async def get_market_summary() -> dict:
     return summary
 
 
-async def sync_ticker_prices() -> dict:
-    """Update ticker table with latest prices from EODHD.
+# ── Bulk EOD price sync (cheap, covers entire universe) ──────────────────
 
-    Universe strategy (respects EODHD rate limits):
-      - ALL crypto (~2K symbols, small universe)
-      - ALL forex (~900 symbols)
-      - ALL indices (~1.6K symbols)
-      - TRACKED_STOCKS curated list (~22 US majors)
-      - Any stock/ETF with convergence_score > 0 (curation-covered)
-    ~4.5K symbols total → ~90 EODHD calls at 50 symbols/batch.
+# Yesterday-close cache per exchange. Populated on first sync of the day,
+# reused across all subsequent syncs until it's 12h old. Yesterday's close
+# doesn't change intraday, so fetching it once is enough even for hourly
+# 24/7 crypto/forex syncs.
+_prev_close_cache: dict[str, dict] = {
+    # exchange_code: {"data": {code: close}, "expires": epoch_seconds}
+}
+_PREV_CLOSE_TTL_SECONDS = 12 * 60 * 60  # 12 hours
 
-    Stocks not in any of these buckets get their prices fetched on
-    demand when a user hits /market/quote/:symbol (see fetch_bulk_quotes
-    cache path). This keeps the recurring cron cost bounded.
+
+async def _fetch_bulk_for_date(exchange: str, date_str: str | None) -> list[dict]:
+    """Low-level bulk fetch. `date_str` None = latest trading day."""
+    s = get_settings()
+    if not s.eodhd_api_key:
+        return []
+
+    params: dict[str, str] = {
+        "api_token": s.eodhd_api_key,
+        "fmt": "json",
+        "filter": "extended",
+    }
+    if date_str:
+        params["date"] = date_str
+
+    url = f"https://eodhistoricaldata.com/api/eod-bulk-last-day/{exchange}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, params=params, timeout=120)
+        if resp.status_code != 200:
+            log.error("_fetch_bulk_for_date(%s date=%s): HTTP %d", exchange, date_str, resp.status_code)
+            return []
+        raw = resp.json()
+        if not isinstance(raw, list):
+            return []
+        return raw
+
+
+async def _get_prev_close_map(exchange: str, reference_date: str | None = None) -> dict[str, float]:
+    """Return {code: prev_close_price} for the most recent trading day
+    BEFORE `reference_date`. If reference_date is None, uses Python's
+    date.today(). This matters for markets that are closed — e.g.,
+    on a Tuesday morning EODHD's latest US data is from Monday, so
+    "yesterday" must be computed from Monday (the data date) not
+    Tuesday (the wall-clock date).
+
+    Cached for 12 hours per (exchange, reference_date) key.
     """
-    db = get_supabase()
+    import time
+    from datetime import date, datetime, timedelta
 
-    # Build the sync set. Paginate all three "small universe" asset classes.
-    sync_symbols: set[str] = set(TRACKED_STOCKS)
-
-    for asset_class in ("crypto", "forex", "index"):
-        offset = 0
-        while True:
-            res = (
-                db.table("tickers")
-                .select("symbol")
-                .eq("asset_class", asset_class)
-                .range(offset, offset + 999)
-                .execute()
-            )
-            batch = res.data or []
-            if not batch:
-                break
-            sync_symbols.update(r["symbol"] for r in batch)
-            if len(batch) < 1000:
-                break
-            offset += 1000
-
-    # Plus anything curation has touched (convergence_score > 0)
-    curated = (
-        db.table("tickers")
-        .select("symbol")
-        .gt("convergence_score", 0)
-        .execute()
-    )
-    sync_symbols.update(r["symbol"] for r in (curated.data or []))
-
-    all_symbols = sorted(sync_symbols)
-    log.info("sync_ticker_prices: syncing %d symbols", len(all_symbols))
-    if not all_symbols:
-        return {"synced": 0}
-
-    # Batch into 50-symbol EODHD calls. EODHD real-time endpoint accepts
-    # one symbol in the path + remaining via `s=` param; in practice 50
-    # is a safe batch size per call.
-    BATCH_SIZE = 50
-    updated = 0
-    failed_batches = 0
-    for i in range(0, len(all_symbols), BATCH_SIZE):
-        batch = all_symbols[i:i + BATCH_SIZE]
+    if reference_date:
         try:
-            quotes = await fetch_bulk_quotes(batch)
-        except Exception as e:
-            log.warning("sync_ticker_prices: batch %d failed: %s", i, e)
-            failed_batches += 1
+            ref = datetime.strptime(reference_date, "%Y-%m-%d").date()
+        except ValueError:
+            ref = date.today()
+    else:
+        ref = date.today()
+
+    cache_key = f"{exchange}:{ref.isoformat()}"
+    now = time.time()
+    cached = _prev_close_cache.get(cache_key)
+    if cached and now < cached["expires"]:
+        return cached["data"]
+
+    # Walk back up to 6 days from the reference date to skip weekends
+    # and holidays. Start at days_back=1 so we always ask for something
+    # strictly before ref.
+    prev_map: dict[str, float] = {}
+    used_date: str | None = None
+    for days_back in range(1, 7):
+        prev_date = (ref - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        raw = await _fetch_bulk_for_date(exchange, prev_date)
+        if raw:
+            # Guard: if EODHD silently ignored our date param and returned
+            # today's data, skip it — we'd end up comparing today to today.
+            sample_date = (raw[0].get("date") or "") if raw else ""
+            if sample_date and sample_date == ref.isoformat():
+                continue  # got the same day as ref — try further back
+            for row in raw:
+                code = (row.get("code") or "").upper()
+                close = row.get("close")
+                try:
+                    if code and close:
+                        prev_map[code] = float(close)
+                except (ValueError, TypeError):
+                    continue
+            if prev_map:
+                used_date = sample_date or prev_date
+                log.info(
+                    "prev_close_map(%s ref=%s): %d entries from %s",
+                    exchange, ref.isoformat(), len(prev_map), used_date,
+                )
+                break
+
+    _prev_close_cache[cache_key] = {
+        "data": prev_map,
+        "expires": now + _PREV_CLOSE_TTL_SECONDS,
+    }
+    return prev_map
+
+
+async def fetch_bulk_eod(exchange: str) -> list[dict]:
+    """Fetch latest close + computed change_pct for every symbol on an
+    EODHD exchange. Uses 2 API calls: today's bulk + yesterday's bulk
+    (yesterday is cached 12h per exchange).
+
+    exchange: 'US' | 'CC' | 'FOREX' | 'INDX'
+
+    Returns normalised rows:
+        {code, close, change_pct, volume, avg_volume, ema_50d, ema_200d,
+         hi_250d, lo_250d, date}
+
+    EODHD's extended-filter response does NOT include change_p or prev_close
+    — it gives us avgvol_14d/50d/200d, ema_50d/200d, hi_250d/lo_250d
+    instead. We fetch yesterday's bulk separately to compute the daily
+    change_pct ourselves.
+    """
+    # Step 1: today's bulk (EODHD returns the latest available trading day)
+    today_raw = await _fetch_bulk_for_date(exchange, None)
+    if not today_raw:
+        log.warning("fetch_bulk_eod(%s): no today data", exchange)
+        return []
+
+    # Step 2: yesterday's close map — computed relative to the DATE in
+    # today's response, not Python's wall-clock date. This handles the
+    # "market closed overnight" case where today's data is actually
+    # yesterday's wall-clock date.
+    reference_date = None
+    if today_raw and today_raw[0].get("date"):
+        reference_date = today_raw[0].get("date")
+    prev_map = await _get_prev_close_map(exchange, reference_date=reference_date)
+
+    results: list[dict] = []
+    computed_with_prev = 0
+    for row in today_raw:
+        code = (row.get("code") or "").upper()
+        if not code:
+            continue
+        try:
+            close = float(row.get("close") or 0)
+        except (ValueError, TypeError):
+            continue
+        if close <= 0:
             continue
 
-        if not quotes:
-            continue
-
-        # Collect row updates for this batch
-        update_rows = []
-        for sym, q in quotes.items():
-            update_rows.append({
-                "symbol": sym,
-                "last_price": q.get("price"),
-                "price_change_pct": q.get("change_pct"),
-                "last_volume": q.get("volume") or None,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
-        if update_rows:
+        prev_close = prev_map.get(code)
+        if prev_close and prev_close > 0:
+            change_pct = round((close - prev_close) / prev_close * 100, 4)
+            computed_with_prev += 1
+        else:
+            # No yesterday data — fall back to intraday (close vs open).
+            # Better than zero, and reflects today's actual trading.
             try:
-                db.table("tickers").upsert(update_rows, on_conflict="symbol").execute()
-                updated += len(update_rows)
-            except Exception as e:
-                log.warning("sync_ticker_prices: upsert batch %d failed: %s", i, e)
+                open_price = float(row.get("open") or 0)
+                change_pct = round((close - open_price) / open_price * 100, 4) if open_price > 0 else 0
+            except (ValueError, TypeError):
+                change_pct = 0
+
+        try:
+            volume = int(row.get("volume") or 0)
+        except (ValueError, TypeError):
+            volume = 0
+
+        # EODHD gives 14d/50d/200d average volumes — use 14d as our
+        # 20d-ish baseline for the volume_anomaly trending score.
+        def _f(key):
+            try:
+                v = row.get(key)
+                return float(v) if v not in (None, "") else None
+            except (ValueError, TypeError):
+                return None
+
+        results.append({
+            "code": code,
+            "close": close,
+            "change_pct": change_pct,
+            "volume": volume,
+            "avg_volume": _f("avgvol_14d"),
+            "ema_50d": _f("ema_50d"),
+            "ema_200d": _f("ema_200d"),
+            "hi_250d": _f("hi_250d"),
+            "lo_250d": _f("lo_250d"),
+            "date": row.get("date"),
+        })
 
     log.info(
-        "sync_ticker_prices complete: %d updated across %d batches (%d failed)",
-        updated, (len(all_symbols) + BATCH_SIZE - 1) // BATCH_SIZE, failed_batches,
+        "fetch_bulk_eod(%s): %d rows (%d with true day-over-day, %d with intraday fallback)",
+        exchange, len(results), computed_with_prev, len(results) - computed_with_prev,
     )
+    return results
+
+
+async def sync_eod_prices(exchanges: list[str] | None = None) -> dict:
+    """Bulk EOD sync across one or more EODHD exchanges.
+
+    Default exchanges = all 4 (US, CC, FOREX, INDX) = ~4 API calls,
+    covers the entire 33K-ticker universe. This should be the ONLY
+    regularly-scheduled price sync.
+
+    Mapping of EODHD code → tickers.symbol:
+        US       → stocks and ETFs (EODHD returns symbol like "AAPL")
+        CC       → crypto (EODHD returns "BTC-USD" style)
+        FOREX    → forex (EODHD returns "EURUSD" style)
+        INDX     → indices (EODHD returns various codes)
+
+    We only update tickers that already exist in our table (from the
+    preset universe) — unknown symbols in the EODHD response are
+    ignored, and existing tickers not in the response keep their
+    previous data (we never null out prices).
+    """
+    exchanges = exchanges or ["US", "CC", "FOREX", "INDX"]
+    db = get_supabase()
+
+    # Load all ticker symbols that exist in our universe so we only
+    # write data for symbols we care about.
+    known_symbols: set[str] = set()
+    offset = 0
+    while True:
+        res = db.table("tickers").select("symbol").range(offset, offset + 999).execute()
+        batch = res.data or []
+        if not batch:
+            break
+        known_symbols.update(r["symbol"] for r in batch)
+        if len(batch) < 1000:
+            break
+        offset += 1000
+
+    log.info("sync_eod_prices: universe has %d known symbols", len(known_symbols))
+
+    total_updated = 0
+    per_exchange: dict[str, int] = {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    for exchange in exchanges:
+        rows = await fetch_bulk_eod(exchange)
+        if not rows:
+            per_exchange[exchange] = 0
+            continue
+
+        # Filter to symbols we know about, build upsert payload.
+        # We also populate volume_avg_20d from EODHD's avgvol_14d so the
+        # volume_anomaly component of trending scoring starts working
+        # without a separate backfill job.
+        update_rows = []
+        for r in rows:
+            sym = r["code"]
+            if sym not in known_symbols:
+                continue
+            if r["close"] <= 0:
+                continue  # skip bad data
+            row_update = {
+                "symbol": sym,
+                "last_price": r["close"],
+                "price_change_pct": r["change_pct"],
+                "last_volume": r["volume"] or None,
+                "updated_at": now_iso,
+            }
+            if r.get("avg_volume") is not None and r["avg_volume"] > 0:
+                row_update["volume_avg_20d"] = int(r["avg_volume"])
+            update_rows.append(row_update)
+
+        # Upsert in 500-row batches (Supabase REST payload limits).
+        written = 0
+        for i in range(0, len(update_rows), 500):
+            chunk = update_rows[i:i + 500]
+            try:
+                db.table("tickers").upsert(chunk, on_conflict="symbol").execute()
+                written += len(chunk)
+            except Exception as e:
+                log.warning("sync_eod_prices(%s): upsert chunk %d failed: %s", exchange, i, e)
+
+        per_exchange[exchange] = written
+        total_updated += written
+        log.info("sync_eod_prices(%s): %d tickers updated", exchange, written)
+
+    log.info("sync_eod_prices complete: %d total updated (%d API calls)", total_updated, len(exchanges))
     return {
-        "synced": updated,
-        "total_symbols": len(all_symbols),
-        "failed_batches": failed_batches,
+        "total_updated": total_updated,
+        "per_exchange": per_exchange,
+        "api_calls": len(exchanges),
     }
+
+
+async def sync_eod_prices_24_7() -> dict:
+    """Hourly sync for 24/7 asset classes (crypto + forex). 2 API calls."""
+    return await sync_eod_prices(["CC", "FOREX"])
+
+
+# Legacy alias kept for compatibility with anything that still imports it —
+# now backed by the bulk approach instead of per-symbol fetches.
+sync_ticker_prices = sync_eod_prices
 
 
 # In-memory cache for sparkline data (5-minute TTL)

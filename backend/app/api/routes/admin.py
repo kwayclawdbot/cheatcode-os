@@ -239,11 +239,16 @@ async def trigger_recompute_trending(user: dict = Depends(_require_admin)):
 
 @router.post("/tickers/sync-prices")
 async def trigger_sync_prices(user: dict = Depends(_require_admin)):
-    """Manually trigger EODHD price sync across the small-universe
-    asset classes (crypto + forex + index + curated stocks). Normally
-    runs automatically every hour via scheduler."""
-    from app.services.market_data import sync_ticker_prices
-    return await sync_ticker_prices()
+    """Manually trigger the daily bulk EOD sync across all 4 EODHD
+    exchanges (US, CC, FOREX, INDX). Uses the bulk endpoint — 4 API
+    calls total — and covers the full 33K-ticker universe.
+
+    Normally runs automatically at 21:00 UTC daily. Crypto + forex
+    also refresh hourly via a separate 2-call job since those markets
+    are 24/7.
+    """
+    from app.services.market_data import sync_eod_prices
+    return await sync_eod_prices()
 
 
 @router.post("/analysis/{symbol}")
