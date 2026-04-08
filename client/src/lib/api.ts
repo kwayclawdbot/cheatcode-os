@@ -236,11 +236,13 @@ export async function fetchTicker(symbol: string): Promise<TickerData> {
 }
 
 export async function fetchRadar(date?: string): Promise<RadarData> {
-  // If a specific date is requested, use the intelligence radar directly.
+  // If a specific date is requested, use it directly
   if (date) return apiFetch(`/intelligence/radar?date=${date}`);
 
-  // Try today first, then walk back up to 7 days for the most recent
-  // intelligence-scored radar.
+  // Try today first, then walk back up to 7 days to find the most recent radar.
+  // The backend now populates radar with a trending-ticker fallback whenever
+  // intelligence-scored tickers are sparse, so this request returns real
+  // data (mid-cap+ filtered) without any frontend transform.
   for (let daysBack = 0; daysBack <= 7; daysBack++) {
     const d = new Date(Date.now() - daysBack * 86_400_000);
     const dateStr = d.toISOString().split("T")[0];
@@ -252,59 +254,8 @@ export async function fetchRadar(date?: string): Promise<RadarData> {
       // 404 or other error — try previous day
     }
   }
-
-  // No intelligence-scored radar in the last 7 days — fall back to the
-  // live trending tickers, which are recomputed every 15 minutes from
-  // ~33K real tickers across stocks/ETFs/crypto/forex/indices.
-  // RANK-based bucketing (top 5 / next 10 / next 15) instead of score
-  // thresholds, because the cold-start trending formula maxes around
-  // 60 (no social/content signal yet), so threshold-based bucketing
-  // would leave critical/high_conviction empty.
-  try {
-    const trending = await apiFetch<{ tickers: any[] }>(`/market/trending?limit=30`);
-    const tickers = trending?.tickers ?? [];
-    if (tickers.length === 0) {
-      throw new Error("trending also empty");
-    }
-
-    const toRadarItem = (t: any) => ({
-      symbol: t.symbol,
-      name: t.name,
-      score: Math.round(t.trending_score ?? 0),
-      direction: (t.price_change_pct ?? 0) > 0.5 ? "bullish" : (t.price_change_pct ?? 0) < -0.5 ? "bearish" : "neutral",
-      timeframe: "intraday",
-      confidence: (t.trending_score ?? 0) >= 50 ? "high" : (t.trending_score ?? 0) >= 30 ? "medium" : "low",
-      last_price: t.last_price,
-      price_change_pct: t.price_change_pct,
-      themes: t.themes ?? [],
-    });
-
-    const critical = tickers.slice(0, 5).map(toRadarItem);
-    const high_conviction = tickers.slice(5, 15).map(toRadarItem);
-    const watch = tickers.slice(15, 30).map(toRadarItem);
-
-    // Compute aggregate sentiment from movers
-    const bullishCount = tickers.filter((t: any) => (t.price_change_pct ?? 0) > 0).length;
-    const bearishCount = tickers.filter((t: any) => (t.price_change_pct ?? 0) < 0).length;
-    const sentiment = bullishCount > bearishCount * 1.5 ? "bullish"
-      : bearishCount > bullishCount * 1.5 ? "bearish"
-      : "neutral";
-
-    return {
-      date: new Date().toISOString().split("T")[0],
-      market_sentiment: sentiment,
-      sentiment_summary: `${tickers.length} tickers moving across all asset classes`,
-      critical,
-      high_conviction,
-      watch,
-      contested: [],
-      theme_heatmap: [],
-      sector_rotation: {},
-    };
-  } catch {
-    // Final fallback: empty radar
-    return { date: "", market_sentiment: "neutral", sentiment_summary: null, critical: [], high_conviction: [], watch: [], contested: [], theme_heatmap: [], sector_rotation: {} };
-  }
+  // Return empty radar if nothing found in the last 7 days
+  return { date: "", market_sentiment: "neutral", sentiment_summary: null, critical: [], high_conviction: [], watch: [], contested: [], theme_heatmap: [], sector_rotation: {} };
 }
 
 export async function fetchPredictions(minScore = 60): Promise<any[]> {
