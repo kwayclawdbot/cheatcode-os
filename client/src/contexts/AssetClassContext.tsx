@@ -42,6 +42,7 @@ export function tickerMatchesFilter(symbol: string, selected: AssetClass[]): boo
 
 interface AssetClassContextValue {
   selected: AssetClass[];
+  /** Single-select: switches to this class exclusively; clicking the active class returns to All */
   toggle: (ac: AssetClass) => void;
   selectAll: () => void;
   isSelected: (ac: AssetClass) => boolean;
@@ -81,12 +82,13 @@ export function AssetClassProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [selected]);
 
+  // Single-select radio: clicking the active class returns to All; clicking another switches to it
   const toggle = useCallback((ac: AssetClass) => {
     setSelected(prev => {
-      if (prev.includes(ac)) {
-        return prev.filter(x => x !== ac);
-      }
-      return [...prev, ac];
+      // If this class is the only one selected, clicking it again → All Markets
+      if (prev.length === 1 && prev[0] === ac) return [];
+      // Otherwise switch exclusively to this class
+      return [ac];
     });
   }, []);
 

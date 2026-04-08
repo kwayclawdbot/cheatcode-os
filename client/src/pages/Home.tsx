@@ -1091,26 +1091,34 @@ export default function Home() {
                 <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
               ))
             )}
-            {(radarTickers.length > 0
-              ? radarTickers.map(rt => {
-                  const q = quotes[rt.symbol];
-                  return {
-                    symbol: rt.symbol,
-                    price: q?.price ?? 0,
-                    change_pct: q?.change_pct ?? 0,
-                    bullish_pct: rt.direction === "bullish" ? Math.round(60 + Math.random() * 25) : rt.direction === "bearish" ? Math.round(15 + Math.random() * 30) : 50,
-                    post_count: Math.round(rt.score * 1.5),
-                    top_traders: [],
-                  } as TickerSocialCard;
-                })
-              : TRENDING_TICKERS
-            ).map(ticker => (
-              <TickerSocialCardItem
-                key={ticker.symbol}
-                ticker={ticker}
-                onClick={() => handleTickerClick(ticker.symbol)}
-              />
-            ))}
+            {/* When filter active + no matches: show inline empty state in the rail */}
+            {radarTickers.length === 0 && radarData && !isAll && (
+              <div className="flex-shrink-0 flex items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-4 min-w-[260px]">
+                <div className="text-center">
+                  <p className="text-xs font-semibold text-foreground mb-0.5">No tickers in today's radar</p>
+                  <p className="text-[11px] text-muted-foreground">Try All Markets to see all tickers</p>
+                </div>
+              </div>
+            )}
+            {/* When radar loaded + filter matches (or All Markets): show live ticker cards */}
+            {(radarTickers.length > 0 ? radarTickers : isAll ? TRENDING_TICKERS.map(t => ({ symbol: t.symbol, direction: 'neutral', score: 50, confidence: 'watch', timeframe: 'swing' })) : []).map(rt => {
+              const q = quotes[(rt as any).symbol];
+              const ticker: TickerSocialCard = {
+                symbol: (rt as any).symbol,
+                price: q?.price ?? (rt as any).price ?? 0,
+                change_pct: q?.change_pct ?? (rt as any).change_pct ?? 0,
+                bullish_pct: (rt as any).direction === 'bullish' ? Math.round(60 + Math.random() * 25) : (rt as any).direction === 'bearish' ? Math.round(15 + Math.random() * 30) : 50,
+                post_count: Math.round(((rt as any).score ?? 50) * 1.5),
+                top_traders: [],
+              };
+              return (
+                <TickerSocialCardItem
+                  key={ticker.symbol}
+                  ticker={ticker}
+                  onClick={() => handleTickerClick(ticker.symbol)}
+                />
+              );
+            })}
           </div>
           </div>
         </div>
