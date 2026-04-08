@@ -141,10 +141,15 @@ async def extract_transcript(video_id: str) -> str | None:
     except Exception as e:
         log.warning("Caption extraction failed for %s: %s", video_id, e)
 
-    # Fallback: yt-dlp subtitle download
+    # Fallback: yt-dlp subtitle download.
+    # Wrapped in asyncio.to_thread so the blocking subprocess doesn't freeze
+    # the entire event loop for ~30s. Other scheduler jobs + API requests
+    # would have been queued behind this on the old sync path.
     try:
+        import asyncio
         import subprocess
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             ["yt-dlp", "--write-auto-sub", "--sub-lang", "en", "--skip-download",
              "--sub-format", "json3", "-o", "/tmp/%(id)s", f"https://youtube.com/watch?v={video_id}"],
             capture_output=True, text=True, timeout=30,
@@ -554,21 +559,36 @@ async def process_video(video: dict, creator: dict) -> dict | None:
         "embedding": embedding,
         "is_published": relevance >= s.relevance_threshold,
         "is_featured": relevance >= 0.8,
+        # Initialize ingestion lifecycle fields so the orphan picker
+        # (ingest_all_pending) never misses this row because of NULL.
+        "ingestion_status": "pending",
+        "ingestion_attempts": 0,
     }
 
-    # Insert content
-    result = db.table("content").insert(record).execute()
+    # Idempotent upsert on (source_platform, external_id) — if the curation
+    # cycle retries after a network cut, we don't create duplicate rows.
+    # Requires the partial unique index from migration 007.
+    result = (
+        db.table("content")
+        .upsert(record, on_conflict="source_platform,external_id")
+        .execute()
+    )
     content_id = result.data[0]["id"]
 
-    # Insert ticker mentions
+    # Insert ticker mentions — idempotent by (content_id, ticker) if such
+    # a constraint exists; otherwise tolerate duplicates silently.
     for ticker in context.get("tickers_mentioned", []):
-        db.table("content_tickers").insert({
-            "content_id": content_id,
-            "ticker": ticker["symbol"],
-            "mention_context": ticker.get("context"),
-            "sentiment": ticker.get("sentiment"),
-            "is_primary": ticker.get("is_primary", False),
-        }).execute()
+        try:
+            db.table("content_tickers").insert({
+                "content_id": content_id,
+                "ticker": ticker["symbol"],
+                "mention_context": ticker.get("context"),
+                "sentiment": ticker.get("sentiment"),
+                "is_primary": ticker.get("is_primary", False),
+            }).execute()
+        except Exception as e:
+            # Duplicate ticker mention on retry — log and continue.
+            log.debug("content_tickers insert skipped for %s/%s: %s", content_id, ticker.get("symbol"), e)
 
     log.info("Curated %s (relevance=%.2f, published=%s): %s",
              video_id, relevance, record["is_published"], video["title"][:60])

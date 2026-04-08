@@ -1,7 +1,7 @@
 """Admin API — curation management, brain triggers, creator management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.core.supabase import get_supabase
 from app.core.auth import require_user
 from app.core.config import get_settings
@@ -12,9 +12,30 @@ from app.services.ingestion import ingest_all_pending, ingest_content
 from app.services.repurposing import repurpose_content, repurpose_all_pending, extract_clips, render_clip, post_clip
 from app.services.live_clipper import clip_content, find_clip_segments, render_live_clip
 from app.services.ticker_analysis import run_daily_analysis, analyze_ticker
-from app.services.discovery import seed_creators, discover_channels, add_creator
+from app.services.discovery import seed_creators, discover_channels, add_creator as discover_add_creator
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+# ── Request models — validated Pydantic shapes replace raw query params ──
+
+class DiscoverRequest(BaseModel):
+    query: str = Field("trading education", min_length=1, max_length=200)
+    max_results: int = Field(10, ge=1, le=50)
+
+
+class AddCreatorRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    handle: str = Field(..., min_length=1, max_length=100)
+    tags: list[str] = Field(default_factory=lambda: ["trading", "finance"])
+
+
+class RepurposeRequest(BaseModel):
+    auto_render: bool = False
+
+
+class PostClipRequest(BaseModel):
+    platforms: list[str] = Field(default_factory=lambda: ["instagram", "tiktok", "youtube", "twitter"])
 
 
 def _require_admin(user: dict = Depends(require_user)) -> dict:
@@ -150,16 +171,16 @@ async def trigger_seed(user: dict = Depends(_require_admin)):
 
 
 @router.post("/discovery/search")
-async def trigger_discover(query: str = "trading education", max_results: int = 10, user: dict = Depends(_require_admin)):
+async def trigger_discover(req: DiscoverRequest, user: dict = Depends(_require_admin)):
     """Search YouTube for new finance channels."""
-    results = await discover_channels(query, max_results)
+    results = await discover_channels(req.query, req.max_results)
     return {"discovered": len(results), "creators": [r["name"] for r in results]}
 
 
 @router.post("/discovery/add")
-async def add_single_creator(name: str = "", handle: str = "", tags: str = "trading,finance", user: dict = Depends(_require_admin)):
+async def add_single_creator(req: AddCreatorRequest, user: dict = Depends(_require_admin)):
     """Add a single creator by YouTube handle."""
-    result = await add_creator(name or handle, handle, tags.split(","))
+    result = await discover_add_creator(req.name, req.handle, req.tags)
     return result or {"error": "Failed to add creator"}
 
 
