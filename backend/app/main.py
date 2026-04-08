@@ -31,6 +31,8 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
+s = get_settings()  # loaded once; validates required env vars on startup
+
 app = FastAPI(
     title="CheatCode OS",
     description="Curated finance media platform with AI intelligence layer",
@@ -38,17 +40,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — locked to allow-listed origins only (set via CORS_ALLOWED_ORIGINS env var,
+# comma-separated). Wide-open "*" is a CSRF vector for authenticated users.
+_cors_origins = [o.strip() for o in s.cors_allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Lock down in production
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    max_age=600,
 )
 
 # Routes
-s = get_settings()
 app.include_router(home.router, prefix=s.api_prefix)
 app.include_router(content.router, prefix=s.api_prefix)
 app.include_router(intelligence.router, prefix=s.api_prefix)

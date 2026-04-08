@@ -2,6 +2,13 @@
 dockerfilePath = "Dockerfile"
 
 [deploy]
+# Pinned to 1 replica: the backend embeds an APScheduler for cron jobs
+# (curation, ingest, rescore, analysis). Running >1 replica would duplicate
+# every scheduled run — double YouTube API calls, double Anthropic cost,
+# race conditions on ticker convergence scores.
+# If horizontal scaling is ever needed, move the scheduler into a dedicated
+# single-replica "worker" service and keep this HTTP service scale-free.
+numReplicas = 1
 healthcheckPath = "/health"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
