@@ -1,54 +1,96 @@
-"""Ingestion Engine — curated content → vault notes + KB chunks + connections."""
+"""Ingestion Engine — curated content → Supabase vault rows + KB chunks.
+
+ARCHITECTURE NOTE (2026-04-08 rebuild):
+    The original implementation wrote markdown files to `~/.openclaw/vault/`
+    on the Railway container's filesystem. Railway containers don't have
+    persistent home directories, so every write was silently lost to
+    ephemeral disk on the next container restart. The "vault" was effectively
+    invisible in production.
+
+    The rebuild stores vault notes as rows in the Supabase `vault_store`
+    table, keyed by relative path. The Python backend writes rows. A
+    separate sync agent running on the user's Mac (scripts/vault_sync.py)
+    polls the table and writes any new rows to `~/.openclaw/vault/{path}`
+    as real files, which the user's Obsidian opens normally.
+
+    This decouples cloud compute from local filesystem and makes the
+    architecture sane: Railway is cron-only, Supabase is the source of
+    truth, Obsidian is a mirror on the user's Mac.
+
+Path convention — all paths are POSIX-style relative strings (no home dir):
+    06 - Knowledge Base/CheatCode OS/Frameworks/{slug}.md
+    06 - Knowledge Base/CheatCode OS/Tickers/{symbol}.md
+    06 - Knowledge Base/CheatCode OS/Themes/{slug}.md
+    06 - Knowledge Base/CheatCode OS/Creators/{slug}.md
+    06 - Knowledge Base/CheatCode OS/Videos/{creator_slug}/{title_slug}.md
+
+The sync agent maps these 1:1 under `~/.openclaw/vault/`.
+"""
 
 import json
 import logging
 import re
-import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
 
 import anthropic
+
 from app.core.config import get_settings
 from app.core.supabase import get_supabase, maybe_one
 from app.services.curation import generate_embedding
 
 log = logging.getLogger("ingestion")
 
-VAULT_ROOT = Path.home() / ".openclaw" / "vault"
-CHEATCODE_KB = VAULT_ROOT / "06 - Knowledge Base" / "CheatCode OS"
-FRAMEWORK_DIR = CHEATCODE_KB / "Frameworks"
-TICKER_DIR = CHEATCODE_KB / "Tickers"
-THEME_DIR = CHEATCODE_KB / "Themes"
-CREATOR_DIR = CHEATCODE_KB / "Creators"
+# All relative paths live under this base inside the vault.
+VAULT_BASE = "06 - Knowledge Base/CheatCode OS"
+VIDEOS_DIR = f"{VAULT_BASE}/Videos"
+FRAMEWORKS_DIR = f"{VAULT_BASE}/Frameworks"
+TICKERS_DIR = f"{VAULT_BASE}/Tickers"
+THEMES_DIR = f"{VAULT_BASE}/Themes"
+CREATORS_DIR = f"{VAULT_BASE}/Creators"
 
+
+# ── Vault row I/O (Supabase vault_store table) ─────────────────────────────
 
 def _slugify(text: str) -> str:
-    """Convert text to filesystem-safe slug."""
-    text = re.sub(r'[^\w\s-]', '', text.strip())
-    return re.sub(r'[-\s]+', '-', text)[:80]
+    """Convert text to a safe path segment."""
+    text = re.sub(r'[^\w\s-]', '', (text or "").strip())
+    return re.sub(r'[-\s]+', '-', text)[:80] or "untitled"
 
 
-def _ensure_dirs():
-    for d in [CHEATCODE_KB, FRAMEWORK_DIR, TICKER_DIR, THEME_DIR, CREATOR_DIR]:
-        d.mkdir(parents=True, exist_ok=True)
+def _vault_put(path: str, content: str) -> None:
+    """Upsert a vault note by path. Idempotent."""
+    db = get_supabase()
+    db.table("vault_store").upsert(
+        {
+            "path": path,
+            "content": content,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        on_conflict="path",
+    ).execute()
 
 
-# ── 1. Master Vault Note ────────────────────────────────────────────────────
+def _vault_get(path: str) -> str | None:
+    """Fetch an existing vault note by path. Returns None if not present."""
+    db = get_supabase()
+    result = maybe_one(db.table("vault_store").select("content").eq("path", path))
+    if not result.data:
+        return None
+    return result.data.get("content")
 
-def create_video_vault_note(content: dict, creator_name: str, tickers: list[dict], themes: list[str]) -> Path:
-    """Create the master vault note for a curated video."""
-    _ensure_dirs()
 
+# ── 1. Master Video Vault Note ──────────────────────────────────────────────
+
+def create_video_vault_note(content: dict, creator_name: str, tickers: list[dict], themes: list[str]) -> str:
+    """Create the master vault note for a curated video. Returns the vault path."""
     title = content["title"]
     safe_title = _slugify(title)
     creator_slug = _slugify(creator_name)
 
-    # Build wikilinks
     ticker_links = [f"[[{t['ticker']}]]" for t in tickers]
     theme_links = [f"[[{t}]]" for t in themes]
     creator_link = f"[[{creator_name}]]"
 
-    # Build related frameworks placeholder (filled after extraction)
     insights = content.get("key_insights") or []
     insight_bullets = "\n".join(f"- {i.get('insight', '')}" for i in insights[:6])
 
@@ -60,17 +102,20 @@ def create_video_vault_note(content: dict, creator_name: str, tickers: list[dict
 
     ticker_sections = ""
     for t in tickers:
-        sentiment_badge = {"bullish": "🟢", "bearish": "🔴", "neutral": "⚪", "mixed": "🟡"}.get(t.get("sentiment", ""), "")
+        sentiment_badge = {
+            "bullish": "🟢", "bearish": "🔴", "neutral": "⚪", "mixed": "🟡"
+        }.get(t.get("sentiment", ""), "")
         ticker_sections += f"\n### {sentiment_badge} {t['ticker']}\n{t.get('mention_context', 'Mentioned in video.')}\n"
 
     duration_min = (content.get("duration_seconds") or 0) // 60
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     note = f"""---
 title: "{title}"
 type: reference
 tags: [cheatcode-os, curated-video, {', '.join(content.get('topics', [])[:5])}]
-created: {datetime.now().strftime('%Y-%m-%d')}
-updated: {datetime.now().strftime('%Y-%m-%d')}
+created: {today}
+updated: {today}
 status: active
 source: youtube
 creator: {creator_name}
@@ -113,22 +158,22 @@ _Frameworks extracted from this video will be linked here._
 _Auto-populated by vault connections._
 
 ---
-*Curated by CheatCode OS on {datetime.now().strftime('%Y-%m-%d')}*
+*Curated by CheatCode OS on {today}*
 """
 
-    # Save to creator subfolder
-    creator_dir = CHEATCODE_KB / creator_slug
-    creator_dir.mkdir(parents=True, exist_ok=True)
-    filepath = creator_dir / f"{safe_title}.md"
-    filepath.write_text(note)
-    log.info("Vault note created: %s", filepath)
-    return filepath
+    path = f"{VIDEOS_DIR}/{creator_slug}/{safe_title}.md"
+    _vault_put(path, note)
+    log.info("vault: wrote video note %s", path)
+    return path
 
 
 # ── 2. Framework Extraction ──────────────────────────────────────────────────
 
-async def extract_frameworks(content: dict, video_note_title: str) -> list[Path]:
-    """Extract teachable frameworks from transcript and save as vault notes."""
+async def extract_frameworks(content: dict, video_note_title: str, video_note_path: str) -> list[str]:
+    """Extract teachable frameworks from transcript and save as vault notes.
+
+    Returns the list of vault paths for the framework notes created.
+    """
     transcript = content.get("transcript", "")
     if not transcript or len(transcript) < 500:
         return []
@@ -161,7 +206,7 @@ Return ONLY valid JSON."""
 
     try:
         resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=s.kai_haiku_model,
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -169,31 +214,34 @@ Return ONLY valid JSON."""
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0]
         frameworks = json.loads(text)
-    except (json.JSONDecodeError, IndexError, Exception) as e:
-        log.warning("Framework extraction failed for %s: %s", content["title"][:40], e)
+    except (json.JSONDecodeError, IndexError) as e:
+        log.warning("Framework extraction parse failed for %s: %s", content["title"][:40], e)
+        return []
+    except anthropic.APIError as e:
+        log.warning("Framework extraction API failed for %s: %s", content["title"][:40], e)
         return []
 
     if not frameworks:
         return []
 
-    _ensure_dirs()
-    paths = []
-    framework_links = []
+    paths: list[str] = []
+    framework_links: list[str] = []
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for fw in frameworks[:5]:  # Max 5 per video
         fw_title = fw.get("title", "Unnamed Framework")
         safe_name = _slugify(fw_title)
         fw_tags = fw.get("tags", [])
 
-        steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(fw.get("steps", [])))
+        steps = "\n".join(f"{i+1}. {step}" for i, step in enumerate(fw.get("steps", [])))
         rules = "\n".join(f"- {r}" for r in fw.get("key_rules", []))
 
         note = f"""---
 title: "{fw_title}"
 type: framework
 tags: [cheatcode-os, framework, {', '.join(fw_tags[:5])}]
-created: {datetime.now().strftime('%Y-%m-%d')}
-updated: {datetime.now().strftime('%Y-%m-%d')}
+created: {today}
+updated: {today}
 status: active
 source_video: "[[{video_note_title}]]"
 framework_type: {fw.get('type', 'strategy')}
@@ -227,75 +275,71 @@ links: [[[{video_note_title}]]]
 *Extracted by CheatCode OS Ingestion Engine*
 """
 
-        filepath = FRAMEWORK_DIR / f"{safe_name}.md"
-        filepath.write_text(note)
-        paths.append(filepath)
+        path = f"{FRAMEWORKS_DIR}/{safe_name}.md"
+        _vault_put(path, note)
+        paths.append(path)
         framework_links.append(f"[[{fw_title}]]")
-        log.info("Framework extracted: %s", fw_title)
+        log.info("vault: wrote framework %s", path)
 
     # Backlink: update the video vault note with framework links
     if framework_links:
-        _append_framework_links(video_note_title, framework_links)
+        _append_framework_links(video_note_path, framework_links)
 
     return paths
 
 
-def _append_framework_links(video_note_title: str, framework_links: list[str]):
+def _append_framework_links(video_note_path: str, framework_links: list[str]) -> None:
     """Replace the framework placeholder in the video note with actual links."""
-    safe_title = _slugify(video_note_title)
-    # Search for the file
-    for f in CHEATCODE_KB.rglob(f"{safe_title}.md"):
-        text = f.read_text()
-        replacement = "\n".join(f"- {link}" for link in framework_links)
-        text = text.replace(
-            "_Frameworks extracted from this video will be linked here._",
-            replacement,
-        )
-        f.write_text(text)
-        break
+    existing = _vault_get(video_note_path)
+    if not existing:
+        return
+    replacement = "\n".join(f"- {link}" for link in framework_links)
+    updated = existing.replace(
+        "_Frameworks extracted from this video will be linked here._",
+        replacement,
+    )
+    _vault_put(video_note_path, updated)
 
 
 # ── 3. Ticker Notes ──────────────────────────────────────────────────────────
 
-def update_ticker_notes(tickers: list[dict], video_title: str, creator_name: str, quick_take: str):
+def update_ticker_notes(tickers: list[dict], video_title: str, creator_name: str, quick_take: str) -> None:
     """Create/update per-ticker vault notes with video mention."""
-    _ensure_dirs()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for t in tickers:
         symbol = t["ticker"]
-        filepath = TICKER_DIR / f"{symbol}.md"
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        path = f"{TICKERS_DIR}/{symbol}.md"
         sentiment = t.get("sentiment", "neutral")
         context = t.get("mention_context", "Mentioned in video.")
-        sentiment_emoji = {"bullish": "🟢", "bearish": "🔴", "neutral": "⚪", "mixed": "🟡"}.get(sentiment, "")
+        sentiment_emoji = {
+            "bullish": "🟢", "bearish": "🔴", "neutral": "⚪", "mixed": "🟡"
+        }.get(sentiment, "")
 
         entry = f"""
-### {sentiment_emoji} [[{video_title}]] ({date_str})
+### {sentiment_emoji} [[{video_title}]] ({today})
 **Creator:** [[{creator_name}]] · **Sentiment:** {sentiment}
 {context}
 
 """
 
-        if filepath.exists():
-            # Append new mention
-            existing = filepath.read_text()
-            # Insert before the closing --- if present, or just append
+        existing = _vault_get(path)
+        if existing:
             if "\n## Recent Mentions" in existing:
-                existing = existing.replace(
+                updated = existing.replace(
                     "\n## Recent Mentions\n",
                     f"\n## Recent Mentions\n{entry}",
                 )
             else:
-                existing += f"\n## Recent Mentions\n{entry}"
-            filepath.write_text(existing)
+                updated = existing + f"\n## Recent Mentions\n{entry}"
+            _vault_put(path, updated)
         else:
-            # Create new ticker note
             note = f"""---
 title: "{symbol}"
 type: reference
 tags: [cheatcode-os, ticker, {symbol.lower()}]
-created: {date_str}
-updated: {date_str}
+created: {today}
+updated: {today}
 status: active
 links: []
 ---
@@ -307,45 +351,41 @@ Ticker tracking note. Updated automatically by CheatCode OS ingestion.
 ## Recent Mentions
 {entry}
 """
-            filepath.write_text(note)
+            _vault_put(path, note)
 
-        log.info("Ticker note updated: %s", symbol)
+        log.info("vault: ticker %s updated", symbol)
 
 
 # ── 4. Theme Notes ───────────────────────────────────────────────────────────
 
-def update_theme_notes(themes: list[str], video_title: str, creator_name: str):
+def update_theme_notes(themes: list[str], video_title: str, creator_name: str) -> None:
     """Create/update per-theme vault notes with video reference."""
-    _ensure_dirs()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for theme in themes:
         safe_theme = _slugify(theme)
-        filepath = THEME_DIR / f"{safe_theme}.md"
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        path = f"{THEMES_DIR}/{safe_theme}.md"
         display_name = theme.replace("_", " ").title()
+        entry = f"- [[{video_title}]] by [[{creator_name}]] ({today})\n"
 
-        entry = f"- [[{video_title}]] by [[{creator_name}]] ({date_str})\n"
-
-        if filepath.exists():
-            existing = filepath.read_text()
+        existing = _vault_get(path)
+        if existing:
             if "\n## Content Coverage\n" in existing:
-                existing = existing.replace(
+                updated = existing.replace(
                     "\n## Content Coverage\n",
                     f"\n## Content Coverage\n{entry}",
                 )
             else:
-                existing += f"\n## Content Coverage\n{entry}"
-
-            # Update the updated date in frontmatter
-            existing = re.sub(r'updated: \d{4}-\d{2}-\d{2}', f'updated: {date_str}', existing)
-            filepath.write_text(existing)
+                updated = existing + f"\n## Content Coverage\n{entry}"
+            updated = re.sub(r'updated: \d{4}-\d{2}-\d{2}', f'updated: {today}', updated)
+            _vault_put(path, updated)
         else:
             note = f"""---
 title: "{display_name}"
 type: reference
 tags: [cheatcode-os, theme, {theme.replace('_', '-')}]
-created: {date_str}
-updated: {date_str}
+created: {today}
+updated: {today}
 status: active
 links: []
 ---
@@ -360,41 +400,38 @@ Market theme tracked by CheatCode OS.
 
 _Updated as more content is curated on this theme._
 """
-            filepath.write_text(note)
+            _vault_put(path, note)
 
-        log.info("Theme note updated: %s", display_name)
+        log.info("vault: theme %s updated", display_name)
 
 
 # ── 5. Creator Notes ─────────────────────────────────────────────────────────
 
-def update_creator_note(creator_name: str, creator_slug: str, video_title: str, topics: list[str]):
+def update_creator_note(creator_name: str, creator_slug: str, video_title: str, topics: list[str]) -> None:
     """Create/update per-creator vault note."""
-    _ensure_dirs()
+    path = f"{CREATORS_DIR}/{_slugify(creator_name)}.md"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    entry = f"- [[{video_title}]] ({today})\n"
 
-    filepath = CREATOR_DIR / f"{_slugify(creator_name)}.md"
-    date_str = datetime.now().strftime("%Y-%m-%d")
-
-    entry = f"- [[{video_title}]] ({date_str})\n"
-
-    if filepath.exists():
-        existing = filepath.read_text()
+    existing = _vault_get(path)
+    if existing:
         if "\n## Curated Videos\n" in existing:
-            existing = existing.replace(
+            updated = existing.replace(
                 "\n## Curated Videos\n",
                 f"\n## Curated Videos\n{entry}",
             )
         else:
-            existing += f"\n## Curated Videos\n{entry}"
-        existing = re.sub(r'updated: \d{4}-\d{2}-\d{2}', f'updated: {date_str}', existing)
-        filepath.write_text(existing)
+            updated = existing + f"\n## Curated Videos\n{entry}"
+        updated = re.sub(r'updated: \d{4}-\d{2}-\d{2}', f'updated: {today}', updated)
+        _vault_put(path, updated)
     else:
         topic_tags = ", ".join(topics[:5])
         note = f"""---
 title: "{creator_name}"
 type: reference
 tags: [cheatcode-os, creator, {topic_tags}]
-created: {date_str}
-updated: {date_str}
+created: {today}
+updated: {today}
 status: active
 links: []
 ---
@@ -413,21 +450,21 @@ Finance content creator curated by CheatCode OS.
 
 _Observations about this creator's style, quality, and focus areas._
 """
-        filepath.write_text(note)
+        _vault_put(path, note)
 
-    log.info("Creator note updated: %s", creator_name)
+    log.info("vault: creator %s updated", creator_name)
 
 
-# ── 6. KB Chunking + Embedding ──────────────────────────────────────────────
+# ── 6. KB Chunking + Embedding (unchanged — already Supabase-backed) ────────
 
-async def chunk_and_embed(content_id: str, title: str, transcript: str, quick_take: str, topics: list[str]):
+async def chunk_and_embed(content_id: str, title: str, transcript: str, quick_take: str, topics: list[str]) -> int:
     """Split transcript into chunks, embed each, store in kb_chunks table."""
     if not transcript or len(transcript) < 200:
         return 0
 
     db = get_supabase()
 
-    # Check if already chunked
+    # Skip if already chunked (idempotent retries)
     existing = db.table("kb_chunks").select("id", count="exact").eq("content_id", content_id).execute()
     if existing.count and existing.count > 0:
         return 0
@@ -436,19 +473,16 @@ async def chunk_and_embed(content_id: str, title: str, transcript: str, quick_ta
     words = transcript.split()
     chunk_size = 500
     overlap = 50
-    chunks = []
+    chunks: list[str] = []
     i = 0
     while i < len(words):
         chunk_words = words[i:i + chunk_size]
-        chunk_text = " ".join(chunk_words)
-        chunks.append(chunk_text)
+        chunks.append(" ".join(chunk_words))
         i += chunk_size - overlap
 
-    # Embed and store each chunk
     topic_str = ", ".join(topics[:5])
     stored = 0
     for idx, chunk_text in enumerate(chunks):
-        # Contextual prefix for better embeddings
         embed_input = f"[Video: {title} | Topics: {topic_str}]\n\n{chunk_text}"
 
         try:
@@ -457,27 +491,28 @@ async def chunk_and_embed(content_id: str, title: str, transcript: str, quick_ta
             log.warning("Embedding failed for chunk %d of %s: %s", idx, content_id[:8], e)
             continue
 
-        # Extract keywords from chunk
         keywords = _extract_keywords(chunk_text)
 
-        db.table("kb_chunks").insert({
-            "content_id": content_id,
-            "chunk_index": idx,
-            "text": chunk_text,
-            "section": f"chunk_{idx}",
-            "keywords": keywords,
-            "embedding_text": embed_input[:500],
-            "embedding": embedding,
-        }).execute()
-        stored += 1
+        try:
+            db.table("kb_chunks").insert({
+                "content_id": content_id,
+                "chunk_index": idx,
+                "text": chunk_text,
+                "section": f"chunk_{idx}",
+                "keywords": keywords,
+                "embedding_text": embed_input[:500],
+                "embedding": embedding,
+            }).execute()
+            stored += 1
+        except Exception as e:
+            log.warning("kb_chunks insert failed for chunk %d of %s: %s", idx, content_id[:8], e)
 
-    log.info("Chunked %s: %d chunks stored", title[:40], stored)
+    log.info("kb_chunks: %s → %d chunks stored", title[:40], stored)
     return stored
 
 
 def _extract_keywords(text: str, max_keywords: int = 10) -> list[str]:
-    """Extract simple keywords from text."""
-    # Common finance terms to prioritize
+    """Extract simple keywords from text, prioritizing finance terms."""
     finance_terms = {
         "bullish", "bearish", "breakout", "resistance", "support", "volume",
         "momentum", "trend", "reversal", "consolidation", "accumulation",
@@ -488,31 +523,13 @@ def _extract_keywords(text: str, max_keywords: int = 10) -> list[str]:
     }
 
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    # Count frequency
-    freq = {}
+    freq: dict[str, int] = {}
     for w in words:
         if w in finance_terms or len(w) > 5:
             freq[w] = freq.get(w, 0) + 1
 
-    # Sort by frequency, return top N
     sorted_words = sorted(freq.items(), key=lambda x: -x[1])
     return [w for w, _ in sorted_words[:max_keywords]]
-
-
-# ── 7. Reindex Vault ────────────────────────────────────────────────────────
-
-def reindex_vault():
-    """Trigger FTS5 reindex via vault_brain.py."""
-    vault_brain = Path.home() / ".openclaw" / "vault_brain.py"
-    if vault_brain.exists():
-        try:
-            result = subprocess.run(
-                ["python3", str(vault_brain), "index"],
-                capture_output=True, text=True, timeout=30,
-            )
-            log.info("Vault reindexed: %s", result.stdout.strip()[:100])
-        except Exception as e:
-            log.warning("Vault reindex failed: %s", e)
 
 
 # ── FULL INGESTION PIPELINE ─────────────────────────────────────────────────
@@ -530,14 +547,14 @@ async def ingest_content(content_id: str):
     # Fetch content + tickers
     content_row = maybe_one(db.table("content").select("*").eq("id", content_id))
     if not content_row.data:
-        log.warning("Content not found: %s", content_id)
-        return
+        log.warning("ingest_content: content %s not found", content_id)
+        return None
 
     content = content_row.data
 
     # Idempotency: if already succeeded, don't reprocess
     if content.get("ingestion_status") == "succeeded":
-        return
+        return None
 
     # Mark in_progress + increment attempts
     current_attempts = content.get("ingestion_attempts") or 0
@@ -550,7 +567,6 @@ async def ingest_content(content_id: str):
         tickers_result = db.table("content_tickers").select("*").eq("content_id", content_id).execute()
         tickers = tickers_result.data or []
 
-        # Get creator name
         creator_name = "Unknown"
         creator_slug = "unknown"
         if content.get("creator_id"):
@@ -563,25 +579,25 @@ async def ingest_content(content_id: str):
         topics = content.get("topics", [])
         title = content["title"]
 
-        log.info("Ingesting: %s by %s (attempt %d)", title[:50], creator_name, current_attempts + 1)
+        log.info("ingest_content: %s by %s (attempt %d)", title[:50], creator_name, current_attempts + 1)
 
-        # 1. Create master vault note
+        # 1. Master video vault note
         video_note_path = create_video_vault_note(content, creator_name, tickers, themes)
 
-        # 2. Extract frameworks from transcript
+        # 2. Extract frameworks (Claude call over transcript)
         content["_creator_name"] = creator_name
-        framework_paths = await extract_frameworks(content, title)
+        framework_paths = await extract_frameworks(content, title, video_note_path)
 
-        # 3. Update ticker notes with backlinks
+        # 3. Ticker backlinks
         update_ticker_notes(tickers, title, creator_name, content.get("quick_take", ""))
 
-        # 4. Update theme notes with backlinks
+        # 4. Theme backlinks
         update_theme_notes(themes, title, creator_name)
 
-        # 5. Update creator note
+        # 5. Creator note
         update_creator_note(creator_name, creator_slug, title, topics)
 
-        # 6. Chunk transcript and embed for granular KB search
+        # 6. Chunk + embed for granular KB search
         chunks_stored = await chunk_and_embed(
             content_id, title,
             content.get("transcript", ""),
@@ -589,23 +605,21 @@ async def ingest_content(content_id: str):
             topics,
         )
 
-        # 7. Reindex vault FTS5
-        reindex_vault()
-
-        # Mark as succeeded
+        # 7. Mark succeeded
         db.table("content").update({
             "ingestion_status": "succeeded",
             "ingestion_error": None,
             "ingested_at": datetime.now(timezone.utc).isoformat(),
-            # Keep legacy "ingested" tag for any downstream consumers still reading tags
             "tags": list(set((content.get("tags") or []) + ["ingested"])),
         }).eq("id", content_id).execute()
 
-        log.info("Ingestion complete for %s: vault_note=%s, frameworks=%d, chunks=%d",
-                 title[:40], video_note_path.name, len(framework_paths), chunks_stored)
+        log.info(
+            "ingest_content: %s → vault_note=%s frameworks=%d chunks=%d",
+            title[:40], video_note_path, len(framework_paths), chunks_stored,
+        )
 
         return {
-            "vault_note": str(video_note_path),
+            "vault_note": video_note_path,
             "frameworks": len(framework_paths),
             "chunks": chunks_stored,
             "tickers_updated": len(tickers),
@@ -614,22 +628,20 @@ async def ingest_content(content_id: str):
 
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)[:500]}"
-        log.error("Ingestion failed for %s: %s", content_id, error_msg, exc_info=True)
+        log.error("ingest_content failed for %s: %s", content_id, error_msg, exc_info=True)
         db.table("content").update({
             "ingestion_status": "failed",
             "ingestion_error": error_msg,
         }).eq("id", content_id).execute()
-        # Re-raise so callers (like process_video) can observe the failure,
-        # but the DB state is now accurate either way.
         raise
 
 
-async def ingest_all_pending(max_attempts: int = 5):
+async def ingest_all_pending(max_attempts: int = 5) -> dict:
     """Ingest all content that hasn't succeeded yet.
 
     Picks up:
-    - Rows with ingestion_status='pending' (never attempted)
-    - Rows with ingestion_status='failed' below the attempt cap (retry)
+      - Rows with ingestion_status='pending' (never attempted)
+      - Rows with ingestion_status='failed' below the attempt cap
 
     Bounded by max_attempts (default 5) so we don't hammer permanently-broken
     content. Failed rows above the cap are visible in the admin dashboard
@@ -648,17 +660,16 @@ async def ingest_all_pending(max_attempts: int = 5):
     rows = pending.data or []
     log.info("ingest_all_pending: %d rows to process (max_attempts=%d)", len(rows), max_attempts)
 
-    results = []
-    failures = 0
+    succeeded = 0
+    failed = 0
     for row in rows:
         try:
             result = await ingest_content(row["id"])
             if result:
-                results.append(result)
+                succeeded += 1
         except Exception as e:
-            # Error state is already persisted inside ingest_content — just count it
-            failures += 1
-            log.warning("Batch skip for %s: %s", row.get("title", row["id"])[:40], e)
+            failed += 1
+            log.warning("ingest_all_pending: batch skip %s: %s", row.get("title", row["id"])[:40], e)
 
-    log.info("Batch ingestion complete: %d succeeded, %d failed", len(results), failures)
-    return {"succeeded": len(results), "failed": failures, "scanned": len(rows)}
+    log.info("ingest_all_pending: %d succeeded, %d failed, %d scanned", succeeded, failed, len(rows))
+    return {"succeeded": succeeded, "failed": failed, "scanned": len(rows)}

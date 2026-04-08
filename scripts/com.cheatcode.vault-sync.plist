@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  CheatCode OS vault sync LaunchAgent.
+
+  Install:
+    1. Edit this file: update <string> paths below to match your setup
+       (PYTHON_PATH, SCRIPT_PATH, WORKING_DIR, VAULT_ROOT)
+    2. Copy to ~/Library/LaunchAgents/
+         cp com.cheatcode.vault-sync.plist ~/Library/LaunchAgents/
+    3. Load it:
+         launchctl load ~/Library/LaunchAgents/com.cheatcode.vault-sync.plist
+    4. Check it's running:
+         launchctl list | grep cheatcode
+    5. View logs:
+         tail -f ~/Library/Logs/cheatcode-vault-sync.log
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.cheatcode.vault-sync.plist
+    rm ~/Library/LaunchAgents/com.cheatcode.vault-sync.plist
+
+  Alternative: run manually with
+    python3 /path/to/vault_sync.py --loop
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cheatcode.vault-sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/YOUR_USERNAME/projects/cheatcode-os/scripts/vault_sync.py</string>
+        <string>--loop</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/YOUR_USERNAME/projects/cheatcode-os/scripts</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Fill these in before installing the LaunchAgent.
+             Alternatively, put them in a .env file next to vault_sync.py. -->
+        <key>SUPABASE_URL</key>
+        <string>https://YOUR_PROJECT.supabase.co</string>
+
+        <key>SUPABASE_SERVICE_KEY</key>
+        <string>REPLACE_WITH_SERVICE_ROLE_KEY</string>
+
+        <key>VAULT_ROOT</key>
+        <string>/Users/YOUR_USERNAME/.openclaw/vault</string>
+
+        <key>VAULT_SYNC_INTERVAL</key>
+        <string>300</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/Library/Logs/cheatcode-vault-sync.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/Library/Logs/cheatcode-vault-sync.err.log</string>
+</dict>
+</plist>
