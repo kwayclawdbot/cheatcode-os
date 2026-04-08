@@ -40,6 +40,9 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Media upload endpoint
   registerUploadRoute(app);
+  // Health check for Railway / load balancers
+  app.get("/health", (_req, res) => res.json({ status: "ok", service: "cheatcode-os-trpc" }));
+
   // Rate limit ingest endpoints: max 10 requests per IP per minute
   // This covers all /api/trpc/ingest.* procedures (analyseVideo, submitVideo, etc.)
   app.use("/api/trpc/ingest", createRateLimiter({ maxRequests: 10, windowMs: 60_000 }));

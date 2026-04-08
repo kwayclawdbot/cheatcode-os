@@ -8,6 +8,15 @@ from app.core.supabase import get_supabase, maybe_one
 
 security = HTTPBearer(auto_error=False)
 
+# Synthetic admin user returned when the service role key is used (server-to-server)
+_SERVICE_ROLE_ADMIN = {
+    "id": "service-role",
+    "email": "service@internal",
+    "tier": "admin",
+    "display_name": "Scheduler",
+    "avatar_url": None,
+}
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
@@ -17,7 +26,15 @@ async def get_current_user(
         return None
     token = credentials.credentials
     s = get_settings()
-    # Verify JWT via Supabase auth
+
+    # ── Service-role bypass ──────────────────────────────────────────────────
+    # Allow the Supabase service role key to act as a permanent admin identity.
+    # This is safe for server-to-server calls (scheduler, CI) where a real user
+    # session is not available. The service key never leaves the server env.
+    if token == s.supabase_service_key:
+        return _SERVICE_ROLE_ADMIN
+
+    # ── Normal user JWT validation via Supabase ──────────────────────────────
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(

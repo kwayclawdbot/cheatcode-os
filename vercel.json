@@ -8,6 +8,21 @@
       "source": "/api/v1/:path*",
       "destination": "https://cheatcode-os-api-production.up.railway.app/api/v1/:path*"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/trpc/:path*",
+      "destination": "https://cheatcode-os-trpc-production.up.railway.app/api/trpc/:path*"
+    },
+    {
+      "source": "/api/oauth/:path*",
+      "destination": "https://cheatcode-os-trpc-production.up.railway.app/api/oauth/:path*"
+    },
+    {
+      "source": "/api/upload",
+      "destination": "https://cheatcode-os-trpc-production.up.railway.app/api/upload"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

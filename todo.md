@@ -179,3 +179,15 @@
 ## Trending Tickers Fix + VideoPage Related Videos (Apr 8 #12)
 - [x] Homepage: trending tickers carousel not displaying — debug fetchRadar response and fix empty state
 - [x] VideoPage: add "More on $TICKER" related-videos shelf using getVideosByTicker for primary ticker
+
+## Railway Admin Auth Fix (Apr 8 #13)
+- [ ] Railway backend: patch auth.py to accept Supabase service role key as admin bypass
+- [ ] Scheduler: update RAILWAY_ADMIN_KEY secret to use Supabase service role key
+- [ ] Verify scheduler can successfully submit a video to Railway admin endpoint
+
+## Railway Deployment Artifacts (Apr 8 #14)
+- [x] Generate Dockerfile for server/ tRPC layer
+- [x] Generate railway.json for server/ Railway service
+- [x] Generate updated vercel.json with /api/trpc/* proxy to Railway Node service
+- [x] Document all required env vars for the Railway Node service
+- [x] Add /health endpoint to server/_core/index.ts for Railway healthcheck
