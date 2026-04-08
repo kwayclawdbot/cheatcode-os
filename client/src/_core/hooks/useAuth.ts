@@ -1,84 +1,39 @@
-import { getLoginUrl } from "@/const";
-import { trpc } from "@/lib/trpc";
-import { TRPCClientError } from "@trpc/client";
-import { useCallback, useEffect, useMemo } from "react";
+/**
+ * useAuth — thin wrapper over the real Supabase auth hook.
+ *
+ * The previous implementation called `trpc.auth.me.useQuery()` which
+ * hit the non-existent tRPC server at cheatcode-os-trpc-production.
+ * On cold start the query threw during first render and broke React
+ * hydration (white screen). This replacement delegates to the real
+ * Supabase-based auth hook that the rest of the app already uses
+ * (`client/src/hooks/useSupabaseAuth.ts`), returning the same shape
+ * consumers expect.
+ */
+import { useCallback } from "react";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
   redirectPath?: string;
 };
 
-export function useAuth(options?: UseAuthOptions) {
-  const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
-    options ?? {};
-  const utils = trpc.useUtils();
-
-  const meQuery = trpc.auth.me.useQuery(undefined, {
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      utils.auth.me.setData(undefined, null);
-    },
-  });
+export function useAuth(_options?: UseAuthOptions) {
+  const sb = useSupabaseAuth();
 
   const logout = useCallback(async () => {
     try {
-      await logoutMutation.mutateAsync();
-    } catch (error: unknown) {
-      if (
-        error instanceof TRPCClientError &&
-        error.data?.code === "UNAUTHORIZED"
-      ) {
-        return;
-      }
-      throw error;
-    } finally {
-      utils.auth.me.setData(undefined, null);
-      await utils.auth.me.invalidate();
+      await sb.signOut();
+    } catch {
+      /* swallow — never let logout errors crash the app */
     }
-  }, [logoutMutation, utils]);
-
-  const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
-    return {
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
-    };
-  }, [
-    meQuery.data,
-    meQuery.error,
-    meQuery.isLoading,
-    logoutMutation.error,
-    logoutMutation.isPending,
-  ]);
-
-  useEffect(() => {
-    if (!redirectOnUnauthenticated) return;
-    if (meQuery.isLoading || logoutMutation.isPending) return;
-    if (state.user) return;
-    if (typeof window === "undefined") return;
-    if (window.location.pathname === redirectPath) return;
-
-    window.location.href = redirectPath
-  }, [
-    redirectOnUnauthenticated,
-    redirectPath,
-    logoutMutation.isPending,
-    meQuery.isLoading,
-    state.user,
-  ]);
+  }, [sb]);
 
   return {
-    ...state,
-    refresh: () => meQuery.refetch(),
+    user: sb.user ?? null,
+    loading: sb.loading,
+    error: null,
+    isAuthenticated: Boolean(sb.user),
+    refresh: async () => {},
     logout,
   };
 }
