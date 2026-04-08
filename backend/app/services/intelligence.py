@@ -377,11 +377,21 @@ async def _maybe_create_prediction(ticker: str, convergence: dict, evidence: lis
 # ── Radar Generation ─────────────────────────────────────────────────────────
 
 async def generate_radar() -> dict:
-    """Generate daily radar snapshot from current ticker data."""
+    """Generate daily radar snapshot from current ticker data.
+
+    Two-tier sourcing strategy:
+      1. Primary: tickers with convergence_score >= 40 (intelligence-scored)
+      2. Fallback: top trending tickers if intelligence is sparse
+
+    The fallback was added 2026-04-08 because the convergence brain only
+    covers ~40 manually-curated tickers — leaving the radar mostly empty
+    against the new 33K-ticker universe. The trending fallback ensures
+    the radar always has real content from real movers.
+    """
     db = get_supabase()
     s = get_settings()
 
-    # Get all scored tickers
+    # Get intelligence-scored tickers first
     tickers = db.table("tickers").select("*").gte("convergence_score", 40).order("convergence_score", desc=True).execute()
 
     critical = []     # 90+
@@ -406,6 +416,55 @@ async def generate_radar() -> dict:
             high_conv.append(entry)
         elif t["convergence_score"] >= 60:
             watch.append(entry)
+
+    # Always supplement with trending tickers up to ~30 total. This fills
+    # the radar with real content from the live trending system whenever
+    # the convergence brain isn't producing enough scored tickers
+    # (which is the default state for the new 33K-ticker universe).
+    #
+    # We use RANK-based bucketing (top 5 = critical, next 10 = high_conv,
+    # next 15 = watch) instead of absolute score thresholds because the
+    # trending formula's max score in the cold-start state (no social,
+    # no content signal) is ~60, so threshold-based bucketing would
+    # leave critical/high_conviction empty even when we have great data.
+    TARGET_TOTAL = 30
+    if (len(critical) + len(high_conv) + len(watch)) < TARGET_TOTAL:
+        log.info("generate_radar: intelligence sparse — falling back to trending tickers")
+        # Filter out the existing intelligence tickers + the obvious junk
+        # (microcaps under $0.01, names that look like derivative tokens)
+        already_symbols = {x["symbol"] for x in critical + high_conv + watch + contested}
+
+        trending = (
+            db.table("tickers")
+            .select("symbol, name, trending_score, price_change_pct, last_price, asset_class")
+            .gt("trending_score", 0)
+            .gt("last_price", 0.01)  # filter penny stocks / dust crypto
+            .order("trending_score", desc=True)
+            .limit(60)  # over-fetch so the dedup pass still leaves enough
+            .execute()
+        )
+
+        deduped = [t for t in (trending.data or []) if t["symbol"] not in already_symbols]
+
+        def _entry(t):
+            score = int(t.get("trending_score") or 0)
+            change = float(t.get("price_change_pct") or 0)
+            direction = "bullish" if change > 0.5 else "bearish" if change < -0.5 else "neutral"
+            return {
+                "symbol": t["symbol"],
+                "name": t.get("name"),
+                "score": score,
+                "direction": direction,
+                "timeframe": "intraday",
+                "confidence": "high" if score >= 50 else "medium" if score >= 30 else "low",
+                "last_price": t.get("last_price"),
+                "price_change_pct": t.get("price_change_pct"),
+            }
+
+        # Rank-based bucketing — always produces 30 tickers split across 3 buckets
+        critical.extend(_entry(t) for t in deduped[:5])
+        high_conv.extend(_entry(t) for t in deduped[5:15])
+        watch.extend(_entry(t) for t in deduped[15:30])
 
     # Get theme heatmap
     themes = db.table("themes").select("name, status, escalation_score, tickers").in_("status", ["emerging", "active", "escalating"]).execute()
