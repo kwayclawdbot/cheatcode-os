@@ -583,6 +583,120 @@ async def process_video(video: dict, creator: dict) -> dict | None:
     return record
 
 
+async def rescore_recent_content(days: int = 14) -> dict:
+    """Re-score content from the last `days` days against today's intelligence.
+
+    Why: relevance_score is market-timing — it depends on what's hot TODAY.
+    A video curated on Monday when AAPL wasn't on radar stays unfeatured
+    even if AAPL dominates Friday's radar. This cron fixes that.
+
+    Behavior:
+    - Re-fetches today's active themes + radar tickers (with 7-day lookback)
+    - Re-runs score_relevance + score_value on each video
+    - Updates relevance_score, value_score, value_score_components, is_featured
+    - is_published CAN flip from false→true (promotion) but NOT true→false
+      (sticky publish gate — never yank content users may already have seen)
+    - Skips micro-updates (|delta| < 0.05 on relevance_score) to avoid DB churn
+    """
+    db = get_supabase()
+    s = get_settings()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    # Today's intelligence (with lookback fallback)
+    active_themes, radar_tickers = _fetch_intel_with_lookback(db, days=7)
+
+    # Fetch recent content
+    recent = (
+        db.table("content")
+        .select("*")
+        .gte("published_at", cutoff)
+        .eq("content_type", "video")
+        .execute()
+    )
+    rows = recent.data or []
+
+    # Preload creators once
+    creator_ids = list({r["creator_id"] for r in rows if r.get("creator_id")})
+    creator_map = {}
+    if creator_ids:
+        creators_result = db.table("creators").select("id, quality_score").in_("id", creator_ids).execute()
+        creator_map = {c["id"]: c.get("quality_score", 0.7) for c in (creators_result.data or [])}
+
+    updated = 0
+    promoted = 0
+    featured_changes = 0
+
+    for row in rows:
+        creator_quality = creator_map.get(row.get("creator_id"), 0.7)
+
+        # Reconstruct the video + context shapes expected by the scoring fns
+        video_like = {
+            "duration_seconds": row.get("duration_seconds") or 0,
+            "view_count": row.get("view_count") or 0,
+            "like_count": row.get("like_count") or 0,
+            "published_at": row.get("published_at"),
+        }
+
+        # Ticker symbols for this content — look up from content_tickers
+        tickers_result = db.table("content_tickers").select("ticker").eq("content_id", row["id"]).execute()
+        ticker_syms = [t["ticker"] for t in (tickers_result.data or [])]
+
+        context_like = {
+            "themes": row.get("themes") or [],
+            "tickers_mentioned": [{"symbol": t} for t in ticker_syms],
+            "topics": row.get("topics") or [],
+            "key_insights": row.get("key_insights") or [],
+            "skill_level": row.get("skill_level"),
+            "quick_take": row.get("quick_take"),
+        }
+
+        new_rel = score_relevance(video_like, context_like, active_themes, radar_tickers, creator_quality)
+        new_val = score_value(video_like, context_like, creator_quality, row.get("transcript") or "")
+
+        old_rel = row.get("relevance_score") or 0
+        old_val = row.get("value_score") or 0
+        old_featured = bool(row.get("is_featured"))
+        old_published = bool(row.get("is_published"))
+
+        rel_delta = abs(new_rel - old_rel)
+        val_delta = abs(new_val["score"] - old_val)
+        new_featured = new_rel >= 0.80
+        # Sticky publish: never un-publish, but allow promotion
+        new_published = old_published or (new_rel >= s.relevance_threshold)
+
+        # Skip if nothing meaningful changed
+        if (rel_delta < 0.05 and val_delta < 2
+                and new_featured == old_featured
+                and new_published == old_published):
+            continue
+
+        db.table("content").update({
+            "relevance_score": new_rel,
+            "value_score": new_val["score"],
+            "value_score_components": new_val["components"],
+            "word_count": new_val["word_count"],
+            "is_featured": new_featured,
+            "is_published": new_published,
+        }).eq("id", row["id"]).execute()
+
+        updated += 1
+        if new_published and not old_published:
+            promoted += 1
+        if new_featured != old_featured:
+            featured_changes += 1
+
+    log.info(
+        "Rescore complete: %d/%d updated (promoted=%d, featured_flips=%d)",
+        updated, len(rows), promoted, featured_changes,
+    )
+    return {
+        "scanned": len(rows),
+        "updated": updated,
+        "promoted": promoted,
+        "featured_changes": featured_changes,
+    }
+
+
 async def run_curation_cycle():
     """Run one full curation cycle: scan all active creators, process new uploads."""
     db = get_supabase()

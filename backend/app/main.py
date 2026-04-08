@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import get_settings
 from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market, coach, chart
-from app.services.curation import run_curation_cycle
+from app.services.curation import run_curation_cycle, rescore_recent_content
 from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.market_data import sync_ticker_prices
 from app.services.ticker_analysis import run_daily_analysis
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(generate_radar, "cron", hour=14, minute=0, id="radar_midday")
     scheduler.add_job(sync_ticker_prices, "interval", minutes=60, id="price_sync")  # Hourly EODHD
     scheduler.add_job(ingest_all_pending, "cron", hour=7, minute=15, id="daily_ingest")  # After curation + radar, before analysis
+    scheduler.add_job(rescore_recent_content, "cron", hour=7, minute=20, id="daily_rescore")  # Rescore last 14 days against today's intel
     scheduler.add_job(run_daily_analysis, "cron", hour=7, minute=30, id="daily_analysis")
     scheduler.start()
     yield
