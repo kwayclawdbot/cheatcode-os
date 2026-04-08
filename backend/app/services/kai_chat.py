@@ -7,6 +7,7 @@ import anthropic
 from app.core.config import get_settings
 from app.core.supabase import get_supabase, maybe_one
 from app.services.curation import generate_embedding
+from app.services.kai_budget import check_budget, record_usage
 
 log = logging.getLogger("kai_chat")
 
@@ -96,6 +97,25 @@ async def chat(
         remaining = None
         messages_today = 0
 
+        # Paid tiers (pro/elite): enforce per-user monthly budget + global
+        # daily circuit breaker. Free tier is gated by the message counter
+        # above, so check_budget is only meaningful for pro/elite here.
+        budget = check_budget(user_id, user_tier)
+        if not budget.allowed:
+            return {
+                "conversation_id": conversation_id or "",
+                "message": {
+                    "role": "assistant",
+                    "content": budget.reason or "Kai is temporarily unavailable.",
+                    "sources": None,
+                },
+                "remaining_messages": None,
+                "budget": {
+                    "monthly_spent_usd": budget.monthly_spent_usd,
+                    "monthly_budget_usd": budget.monthly_budget_usd,
+                },
+            }
+
     # Get or create conversation
     if conversation_id:
         conv = maybe_one(db.table("kai_conversations").select("id").eq("id", conversation_id).eq("user_id", user_id))
@@ -141,6 +161,23 @@ async def chat(
     )
 
     assistant_text = response.content[0].text
+
+    # Record token usage for budget enforcement.
+    # Free tier is tracked too so we have visibility into free-tier cost
+    # (useful if you ever want to tune the 5-msg/day limit).
+    try:
+        input_tokens = getattr(response.usage, "input_tokens", 0) or 0
+        output_tokens = getattr(response.usage, "output_tokens", 0) or 0
+        record_usage(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            model=s.kai_model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            tier=user_tier,
+        )
+    except Exception as e:
+        log.warning("usage recording failed (non-fatal): %s", e)
 
     # Extract sources mentioned
     sources = _extract_sources(context)
