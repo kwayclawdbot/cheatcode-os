@@ -66,10 +66,45 @@ const trpcClient = trpc.createClient({
   ],
 });
 
-createRoot(document.getElementById("root")!).render(
-  <trpc.Provider client={trpcClient} queryClient={queryClient}>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </trpc.Provider>
-);
+// Defense-in-depth: catch any synchronous error during React mount and
+// render it to the DOM so we never get a pure-white screen. Also catches
+// uncaught promise rejections and window errors for the first 5 seconds
+// so we can see what's failing on cold start.
+function renderFatal(msg: string, stack?: string) {
+  const root = document.getElementById("root");
+  if (!root) return;
+  root.innerHTML = `
+    <div style="font-family:ui-monospace,monospace;padding:2rem;max-width:900px;margin:2rem auto;background:#fee;border:2px solid #c00;border-radius:8px;color:#000">
+      <h2 style="margin:0 0 1rem;color:#c00">cheatcode-os: client crashed during mount</h2>
+      <pre style="white-space:pre-wrap;word-break:break-word;background:#fff;padding:1rem;border-radius:4px;margin:0;font-size:12px">${msg.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!))}</pre>
+      ${stack ? `<details style="margin-top:1rem"><summary style="cursor:pointer;font-weight:bold">stack</summary><pre style="white-space:pre-wrap;background:#fff;padding:1rem;font-size:11px">${stack.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!))}</pre></details>` : ""}
+      <p style="margin-top:1rem;font-size:13px">Send this to Claude. Build: ${new Date().toISOString()}</p>
+    </div>
+  `;
+}
+
+window.addEventListener("error", (e) => {
+  console.error("[window.error]", e);
+  if (!document.getElementById("root")?.firstElementChild?.hasAttribute("data-reactroot") && !document.querySelector("#root *")) {
+    renderFatal(String(e.error?.message || e.message), e.error?.stack);
+  }
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[unhandledrejection]", e);
+  if (!document.querySelector("#root *")) {
+    renderFatal("Unhandled promise rejection: " + String(e.reason?.message || e.reason), e.reason?.stack);
+  }
+});
+
+try {
+  createRoot(document.getElementById("root")!).render(
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </trpc.Provider>
+  );
+} catch (err: any) {
+  console.error("[mount crash]", err);
+  renderFatal(String(err?.message || err), err?.stack);
+}
