@@ -11,15 +11,46 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      // Early error catcher — installed BEFORE the module bundle loads so
+      // any module-evaluation-time throw is captured and rendered visibly
+      // to the DOM instead of a pure-white screen.
+      (function(){
+        function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+        function render(title, msg, stack){
+          var root = document.getElementById("root");
+          if (!root) return;
+          root.innerHTML = '<div style="font-family:ui-monospace,monospace;padding:2rem;max-width:960px;margin:2rem auto;background:#fee;border:2px solid #c00;border-radius:8px;color:#000"><h2 style="margin:0 0 1rem;color:#c00">' + esc(title) + '</h2><pre style="white-space:pre-wrap;word-break:break-word;background:#fff;padding:1rem;border-radius:4px;margin:0;font-size:12px">' + esc(msg) + '</pre>' + (stack ? '<details style="margin-top:1rem" open><summary style="cursor:pointer;font-weight:bold">stack</summary><pre style="white-space:pre-wrap;background:#fff;padding:1rem;font-size:11px">' + esc(stack) + '</pre></details>' : '') + '<p style="margin-top:1rem;font-size:13px">Build: ' + new Date().toISOString() + '</p></div>';
+        }
+        window.addEventListener("error", function(e){
+          if (e && (e.filename || e.message)) {
+            render("cheatcode-os: script error", (e.message || "") + (e.filename ? (" @ " + e.filename + ":" + e.lineno) : ""), e.error && e.error.stack);
+          }
+        });
+        window.addEventListener("unhandledrejection", function(e){
+          var r = e && e.reason;
+          render("cheatcode-os: unhandled promise rejection", (r && (r.message || String(r))) || "unknown", r && r.stack);
+        });
+        // If nothing rendered after 10 seconds, show a timeout notice.
+        setTimeout(function(){
+          var root = document.getElementById("root");
+          if (root && !root.firstElementChild) {
+            render("cheatcode-os: mount timeout", "The React app did not render within 10 seconds. Check browser console for errors. The JS bundle may have failed to load, or module evaluation is hanging.", "");
+          }
+        }, 10000);
+      })();
+    </script>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="font-family:-apple-system,ui-sans-serif,sans-serif;padding:2rem;text-align:center;color:#888">
+        <div style="display:inline-block;width:24px;height:24px;border:3px solid #ddd;border-top-color:#00E5A0;border-radius:50%;animation:cc-spin 0.8s linear infinite"></div>
+        <div style="margin-top:1rem;font-size:14px">Loading cheatcode-os…</div>
+      </div>
+      <style>@keyframes cc-spin{to{transform:rotate(360deg)}}</style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
-    <script
-      defer
-      src="%VITE_ANALYTICS_ENDPOINT%/umami"
-      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
   </body>
 
 </html>
