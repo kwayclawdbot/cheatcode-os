@@ -150,7 +150,14 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+// Manus-sandbox plugins (jsxLocPlugin, vitePluginManusRuntime) are
+// disabled in production builds — they inject runtime scripts that
+// reference sandbox globals and cause a white-screen crash when the
+// bundle loads outside Manus's environment (e.g. on Vercel).
+const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+const plugins = isProd
+  ? [react(), tailwindcss(), vitePluginManusDebugCollector()]
+  : [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
 
 export default defineConfig({
   plugins,
