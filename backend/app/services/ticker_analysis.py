@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import anthropic
 from app.core.config import get_settings
-from app.core.supabase import get_supabase
+from app.core.supabase import get_supabase, maybe_one
 from app.services.market_data import fetch_bulk_quotes
 
 log = logging.getLogger("ticker_analysis")
@@ -17,8 +17,8 @@ async def analyze_ticker(symbol: str) -> dict | None:
     s = get_settings()
     db = get_supabase()
 
-    # Get ticker data
-    ticker = db.table("tickers").select("*").eq("symbol", symbol).single().execute()
+    # Get ticker data — returns None if symbol unknown (not an error)
+    ticker = maybe_one(db.table("tickers").select("*").eq("symbol", symbol))
     if not ticker.data:
         return None
 

@@ -52,9 +52,23 @@ async def chat(
 
     # Check message limits for free users
     if user_tier == "free":
-        profile = db.table("profiles").select("kai_messages_today, kai_messages_reset_at").eq("id", user_id).single().execute()
+        profile = maybe_one(
+            db.table("profiles").select("kai_messages_today, kai_messages_reset_at").eq("id", user_id)
+        )
+        if not profile.data:
+            log.error("kai_chat: profile missing for user %s", user_id)
+            return {
+                "conversation_id": conversation_id or "",
+                "message": {
+                    "role": "assistant",
+                    "content": "Account error. Please sign out and back in.",
+                    "sources": None,
+                },
+                "remaining_messages": 0,
+            }
         p = profile.data
-        reset_at = datetime.fromisoformat(p["kai_messages_reset_at"].replace("Z", "+00:00"))
+        reset_at_raw = p.get("kai_messages_reset_at") or datetime.now(timezone.utc).isoformat()
+        reset_at = datetime.fromisoformat(reset_at_raw.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
 
         # Reset daily counter if past midnight UTC
@@ -183,39 +197,40 @@ Evidence ({t.get('source_count', 0)} sources): {json.dumps(t.get('evidence_chain
 Themes: {', '.join(t.get('themes', []))}
 Catalyst: {t.get('catalyst', 'N/A')} | Invalidation: {t.get('invalidation', 'N/A')}""")
 
-    # 3. Semantic search for relevant curated content
+    # 3. Semantic search for relevant curated content + KB chunks.
+    # Share a single embedding between both lookups to avoid double-charging OpenAI.
+    query_embedding: list[float] | None = None
     try:
         query_embedding = await generate_embedding(query)
-        # Use Supabase RPC for vector similarity search
-        content_results = db.rpc("match_content", {
-            "query_embedding": query_embedding,
-            "match_threshold": 0.3,
-            "match_count": 5,
-        }).execute()
+    except Exception as e:
+        log.warning("Embedding generation failed: %s", e)
 
-        for c in (content_results.data or []):
-            sections.append(f"""CURATED CONTENT: "{c['title']}"
+    if query_embedding:
+        try:
+            content_results = db.rpc("match_content", {
+                "query_embedding": query_embedding,
+                "match_threshold": 0.3,
+                "match_count": 5,
+            }).execute()
+            for c in (content_results.data or []):
+                sections.append(f"""CURATED CONTENT: "{c['title']}"
 Creator: {c.get('creator_name', 'Unknown')} | Published: {c.get('published_at', '')}
 Quick Take: {c.get('quick_take', '')}
 Key Insights: {json.dumps(c.get('key_insights', [])[:3])}""")
-    except Exception as e:
-        log.warning("Semantic search failed: %s", e)
+        except Exception as e:
+            log.warning("match_content RPC failed: %s", e)
 
-    # 3b. Granular KB chunk search (deep transcript search)
-    try:
-        if not query_embedding:
-            query_embedding = await generate_embedding(query)
-        chunk_results = db.rpc("match_kb_chunks", {
-            "query_embedding": query_embedding,
-            "match_threshold": 0.35,
-            "match_count": 5,
-        }).execute()
-
-        for ch in (chunk_results.data or []):
-            sections.append(f"""TRANSCRIPT EXCERPT from "{ch.get('content_title', '')}" ({ch.get('creator_name', '')}):
+        try:
+            chunk_results = db.rpc("match_kb_chunks", {
+                "query_embedding": query_embedding,
+                "match_threshold": 0.35,
+                "match_count": 5,
+            }).execute()
+            for ch in (chunk_results.data or []):
+                sections.append(f"""TRANSCRIPT EXCERPT from "{ch.get('content_title', '')}" ({ch.get('creator_name', '')}):
 {ch['text'][:500]}""")
-    except Exception as e:
-        log.warning("KB chunk search failed: %s", e)
+        except Exception as e:
+            log.warning("match_kb_chunks RPC failed: %s", e)
 
     # 4. Active themes
     themes = db.table("themes").select("name, status, description, tickers, escalation_score").in_(
