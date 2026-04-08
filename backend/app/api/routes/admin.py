@@ -44,6 +44,72 @@ def _require_admin(user: dict = Depends(require_user)) -> dict:
     return user
 
 
+# ── Scheduler Runs Viewer ────────────────────────────────────────────────────
+
+@router.get("/runs")
+async def list_scheduler_runs(
+    job_id: str | None = None,
+    status: str | None = None,
+    limit: int = Query(50, ge=1, le=500),
+    user: dict = Depends(_require_admin),
+):
+    """Recent scheduler executions with status + duration + result summary.
+
+    Query params:
+        job_id: filter to a single job (curation, daily_ingest, etc.)
+        status: running | succeeded | failed
+        limit:  1-500, default 50
+
+    Returns rows sorted by started_at desc. Use this to debug "why did
+    my video not get ingested" without opening Supabase.
+    """
+    db = get_supabase()
+    q = db.table("scheduler_runs").select("*").order("started_at", desc=True).limit(limit)
+    if job_id:
+        q = q.eq("job_id", job_id)
+    if status:
+        if status not in ("running", "succeeded", "failed"):
+            raise HTTPException(400, "status must be running/succeeded/failed")
+        q = q.eq("status", status)
+    result = q.execute()
+    return {"runs": result.data or []}
+
+
+@router.get("/runs/summary")
+async def scheduler_runs_summary(user: dict = Depends(_require_admin)):
+    """24h-window summary: per-job run count + last status + last duration.
+
+    Useful quick-glance dashboard query — "are any of my crons broken?".
+    """
+    db = get_supabase()
+    # Fetch the last 24 hours of runs (max 500 — if you have more than that
+    # in 24h something is wrong anyway)
+    result = (
+        db.table("scheduler_runs")
+        .select("job_id, status, duration_seconds, started_at, error_message")
+        .order("started_at", desc=True)
+        .limit(500)
+        .execute()
+    )
+    by_job: dict[str, dict] = {}
+    for row in (result.data or []):
+        jid = row["job_id"]
+        if jid not in by_job:
+            by_job[jid] = {
+                "job_id": jid,
+                "last_run": row["started_at"],
+                "last_status": row["status"],
+                "last_duration_seconds": row.get("duration_seconds"),
+                "last_error": row.get("error_message"),
+                "total_runs_24h": 0,
+                "failed_runs_24h": 0,
+            }
+        by_job[jid]["total_runs_24h"] += 1
+        if row["status"] == "failed":
+            by_job[jid]["failed_runs_24h"] += 1
+    return {"jobs": list(by_job.values())}
+
+
 # ── Pipeline Triggers ────────────────────────────────────────────────────────
 
 @router.post("/curation/run")

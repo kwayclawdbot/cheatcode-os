@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import get_settings
+from app.core.supabase import get_supabase
+from app.core.telemetry import with_telemetry
 from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market, coach, chart
 from app.services.curation import run_curation_cycle, rescore_recent_content
 from app.services.intelligence import run_brain_cycle, generate_radar
@@ -17,15 +19,17 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start background jobs
-    scheduler.add_job(run_curation_cycle, "cron", hour=6, minute=0, id="curation")  # Once daily at 6am UTC
-    scheduler.add_job(run_brain_cycle, "interval", minutes=60, id="brain")
-    scheduler.add_job(generate_radar, "cron", hour=6, minute=30, id="radar_morning")  # After curation
-    scheduler.add_job(generate_radar, "cron", hour=14, minute=0, id="radar_midday")
-    scheduler.add_job(sync_ticker_prices, "interval", minutes=60, id="price_sync")  # Hourly EODHD
-    scheduler.add_job(ingest_all_pending, "cron", hour=7, minute=15, id="daily_ingest")  # After curation + radar, before analysis
-    scheduler.add_job(rescore_recent_content, "cron", hour=7, minute=20, id="daily_rescore")  # Rescore last 14 days against today's intel
-    scheduler.add_job(run_daily_analysis, "cron", hour=7, minute=30, id="daily_analysis")
+    # Start background jobs — every job is wrapped in with_telemetry so each
+    # run lands in the scheduler_runs table with start/end/status/duration.
+    # Admin endpoint GET /api/v1/admin/runs surfaces recent executions.
+    scheduler.add_job(with_telemetry(run_curation_cycle, "curation"),       "cron", hour=6, minute=0,  id="curation")
+    scheduler.add_job(with_telemetry(run_brain_cycle, "brain"),             "interval", minutes=60,    id="brain")
+    scheduler.add_job(with_telemetry(generate_radar, "radar_morning"),      "cron", hour=6, minute=30, id="radar_morning")
+    scheduler.add_job(with_telemetry(generate_radar, "radar_midday"),       "cron", hour=14, minute=0, id="radar_midday")
+    scheduler.add_job(with_telemetry(sync_ticker_prices, "price_sync"),     "interval", minutes=60,    id="price_sync")
+    scheduler.add_job(with_telemetry(ingest_all_pending, "daily_ingest"),   "cron", hour=7, minute=15, id="daily_ingest")
+    scheduler.add_job(with_telemetry(rescore_recent_content, "daily_rescore"), "cron", hour=7, minute=20, id="daily_rescore")
+    scheduler.add_job(with_telemetry(run_daily_analysis, "daily_analysis"), "cron", hour=7, minute=30, id="daily_analysis")
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -70,7 +74,22 @@ app.include_router(chart.router, prefix=s.api_prefix)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "cheatcode-os"}
+    """Liveness + DB reachability check.
+
+    Returns 200 only if we can reach the Supabase Postgres via PostgREST.
+    Railway uses this for its restart policy — a dead DB gets the container
+    restarted instead of serving broken requests.
+    """
+    db = get_supabase()
+    try:
+        # Trivial existence query — doesn't depend on any specific table shape.
+        db.table("profiles").select("id").limit(1).execute()
+    except Exception as e:
+        return (
+            {"status": "degraded", "service": "cheatcode-os", "db": "unreachable", "error": str(e)[:200]},
+            503,
+        )
+    return {"status": "ok", "service": "cheatcode-os", "db": "reachable"}
 
 
 @app.get(f"{s.api_prefix}/status")
