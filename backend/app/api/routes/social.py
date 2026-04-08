@@ -115,6 +115,27 @@ async def create_post(post: PostCreate, user: dict = Depends(require_user)):
         "tags": post.tags,
     }).execute()
 
+    created = result.data[0] if result.data else {}
+    post_id = created.get("id")
+
+    # Extract + validate $cashtags from thesis + body text. Only symbols
+    # that exist in the preset tickers universe get logged as mentions.
+    # Unknown cashtags are silently dropped (frontend renders them as
+    # plain text since GET /market/cashtag/{symbol} returns valid=false).
+    from app.services.trending import log_post_mentions
+    mentioned_tickers: list[str] = []
+    if post_id:
+        combined_text = " ".join(filter(None, [post.thesis, post.body]))
+        mentioned_tickers = log_post_mentions(
+            combined_text, post_id=post_id, user_id=user["id"]
+        )
+        # Also log the explicit post.ticker field if it's a real symbol
+        if post.ticker and post.ticker.upper() not in mentioned_tickers:
+            extra = log_post_mentions(
+                f"${post.ticker}", post_id=post_id, user_id=user["id"]
+            )
+            mentioned_tickers += extra
+
     # Update post count
     db.table("profiles").update({
         "post_count": db.table("feed_posts").select("id", count="exact").eq("user_id", user["id"]).execute().count or 0,
@@ -122,7 +143,11 @@ async def create_post(post: PostCreate, user: dict = Depends(require_user)):
 
     award_xp(user["id"], "post_create", {"post_type": post.post_type})
 
-    return result.data[0] if result.data else {}
+    # Include validated cashtags in the response so frontend can render
+    # them as clickable links without a second roundtrip.
+    if created:
+        created["validated_cashtags"] = mentioned_tickers
+    return created
 
 
 @router.get("/posts/{post_id}")

@@ -275,29 +275,102 @@ async def get_market_summary() -> dict:
     return summary
 
 
-async def sync_ticker_prices():
-    """Update ticker table with latest prices from EODHD."""
+async def sync_ticker_prices() -> dict:
+    """Update ticker table with latest prices from EODHD.
+
+    Universe strategy (respects EODHD rate limits):
+      - ALL crypto (~2K symbols, small universe)
+      - ALL forex (~900 symbols)
+      - ALL indices (~1.6K symbols)
+      - TRACKED_STOCKS curated list (~22 US majors)
+      - Any stock/ETF with convergence_score > 0 (curation-covered)
+    ~4.5K symbols total → ~90 EODHD calls at 50 symbols/batch.
+
+    Stocks not in any of these buckets get their prices fetched on
+    demand when a user hits /market/quote/:symbol (see fetch_bulk_quotes
+    cache path). This keeps the recurring cron cost bounded.
+    """
     db = get_supabase()
-    tickers = db.table("tickers").select("symbol").execute()
-    symbols = [t["symbol"] for t in (tickers.data or [])]
 
-    if not symbols:
-        return 0
+    # Build the sync set. Paginate all three "small universe" asset classes.
+    sync_symbols: set[str] = set(TRACKED_STOCKS)
 
-    quotes = await fetch_bulk_quotes(symbols)
+    for asset_class in ("crypto", "forex", "index"):
+        offset = 0
+        while True:
+            res = (
+                db.table("tickers")
+                .select("symbol")
+                .eq("asset_class", asset_class)
+                .range(offset, offset + 999)
+                .execute()
+            )
+            batch = res.data or []
+            if not batch:
+                break
+            sync_symbols.update(r["symbol"] for r in batch)
+            if len(batch) < 1000:
+                break
+            offset += 1000
 
+    # Plus anything curation has touched (convergence_score > 0)
+    curated = (
+        db.table("tickers")
+        .select("symbol")
+        .gt("convergence_score", 0)
+        .execute()
+    )
+    sync_symbols.update(r["symbol"] for r in (curated.data or []))
+
+    all_symbols = sorted(sync_symbols)
+    log.info("sync_ticker_prices: syncing %d symbols", len(all_symbols))
+    if not all_symbols:
+        return {"synced": 0}
+
+    # Batch into 50-symbol EODHD calls. EODHD real-time endpoint accepts
+    # one symbol in the path + remaining via `s=` param; in practice 50
+    # is a safe batch size per call.
+    BATCH_SIZE = 50
     updated = 0
-    for sym, q in quotes.items():
-        db.table("tickers").update({
-            "last_price": q["price"],
-            "price_change_pct": q["change_pct"],
-            "volume_ratio": None,  # TODO: compare to avg volume
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("symbol", sym).execute()
-        updated += 1
+    failed_batches = 0
+    for i in range(0, len(all_symbols), BATCH_SIZE):
+        batch = all_symbols[i:i + BATCH_SIZE]
+        try:
+            quotes = await fetch_bulk_quotes(batch)
+        except Exception as e:
+            log.warning("sync_ticker_prices: batch %d failed: %s", i, e)
+            failed_batches += 1
+            continue
 
-    log.info("Synced prices for %d tickers", updated)
-    return updated
+        if not quotes:
+            continue
+
+        # Collect row updates for this batch
+        update_rows = []
+        for sym, q in quotes.items():
+            update_rows.append({
+                "symbol": sym,
+                "last_price": q.get("price"),
+                "price_change_pct": q.get("change_pct"),
+                "last_volume": q.get("volume") or None,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+        if update_rows:
+            try:
+                db.table("tickers").upsert(update_rows, on_conflict="symbol").execute()
+                updated += len(update_rows)
+            except Exception as e:
+                log.warning("sync_ticker_prices: upsert batch %d failed: %s", i, e)
+
+    log.info(
+        "sync_ticker_prices complete: %d updated across %d batches (%d failed)",
+        updated, (len(all_symbols) + BATCH_SIZE - 1) // BATCH_SIZE, failed_batches,
+    )
+    return {
+        "synced": updated,
+        "total_symbols": len(all_symbols),
+        "failed_batches": failed_batches,
+    }
 
 
 # In-memory cache for sparkline data (5-minute TTL)

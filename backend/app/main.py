@@ -13,6 +13,7 @@ from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.market_data import sync_ticker_prices
 from app.services.ticker_analysis import run_daily_analysis
 from app.services.ingestion import ingest_all_pending
+from app.services.trending import compute_trending_scores
 
 scheduler = AsyncIOScheduler()
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(with_telemetry(ingest_all_pending, "daily_ingest"),   "cron", hour=7, minute=15, id="daily_ingest")
     scheduler.add_job(with_telemetry(rescore_recent_content, "daily_rescore"), "cron", hour=7, minute=20, id="daily_rescore")
     scheduler.add_job(with_telemetry(run_daily_analysis, "daily_analysis"), "cron", hour=7, minute=30, id="daily_analysis")
+    scheduler.add_job(with_telemetry(compute_trending_scores, "trending_score"), "interval", minutes=15, id="trending_score")
     scheduler.start()
     yield
     scheduler.shutdown()

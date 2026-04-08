@@ -13,6 +13,8 @@ from app.services.repurposing import repurpose_content, repurpose_all_pending, e
 from app.services.live_clipper import clip_content, find_clip_segments, render_live_clip
 from app.services.ticker_analysis import run_daily_analysis, analyze_ticker
 from app.services.discovery import seed_creators, discover_channels, add_creator as discover_add_creator
+from app.services.ticker_universe import seed_universe
+from app.services.trending import compute_trending_scores
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -211,6 +213,37 @@ async def trigger_daily_analysis(user: dict = Depends(_require_admin)):
     """Run daily analysis for all tracked tickers."""
     results = await run_daily_analysis()
     return {"analyzed": len(results), "results": results}
+
+
+# ── Ticker Universe + Trending ───────────────────────────────────────────────
+
+@router.post("/tickers/seed-universe")
+async def trigger_seed_universe(user: dict = Depends(_require_admin)):
+    """Pull the full ticker universe from EODHD (stocks, ETFs, crypto,
+    forex, indices) and upsert into the tickers table.
+
+    Safe to re-run monthly — existing rows are updated, intelligence
+    fields (convergence_score, daily_analysis) are preserved. Expect
+    ~7,000 rows after initial seed.
+    """
+    result = await seed_universe()
+    return result
+
+
+@router.post("/tickers/recompute-trending")
+async def trigger_recompute_trending(user: dict = Depends(_require_admin)):
+    """Manually trigger trending_score recomputation. Normally runs
+    automatically every 15 minutes via scheduler."""
+    return await compute_trending_scores()
+
+
+@router.post("/tickers/sync-prices")
+async def trigger_sync_prices(user: dict = Depends(_require_admin)):
+    """Manually trigger EODHD price sync across the small-universe
+    asset classes (crypto + forex + index + curated stocks). Normally
+    runs automatically every hour via scheduler."""
+    from app.services.market_data import sync_ticker_prices
+    return await sync_ticker_prices()
 
 
 @router.post("/analysis/{symbol}")
