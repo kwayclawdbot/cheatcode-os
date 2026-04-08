@@ -434,13 +434,17 @@ async def generate_radar() -> dict:
         # (microcaps under $0.01, names that look like derivative tokens)
         already_symbols = {x["symbol"] for x in critical + high_conv + watch + contested}
 
+        # Mid-cap+ stocks/ETFs only — no penny stocks or shell companies.
+        # Crypto/forex/index don't have meaningful market caps so we
+        # include those at any size.
         trending = (
             db.table("tickers")
-            .select("symbol, name, trending_score, price_change_pct, last_price, asset_class")
+            .select("symbol, name, trending_score, price_change_pct, last_price, asset_class, market_cap_tier")
             .gt("trending_score", 0)
-            .gt("last_price", 0.01)  # filter penny stocks / dust crypto
+            .gt("last_price", 0.01)
+            .or_("asset_class.in.(crypto,forex,index),market_cap_tier.in.(mid,large,mega)")
             .order("trending_score", desc=True)
-            .limit(60)  # over-fetch so the dedup pass still leaves enough
+            .limit(60)
             .execute()
         )
 

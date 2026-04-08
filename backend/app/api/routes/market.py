@@ -83,7 +83,7 @@ async def get_trending(
     q = (
         db.table("tickers")
         .select(
-            "symbol, name, asset_class, sector, "
+            "symbol, name, asset_class, sector, market_cap, market_cap_tier, "
             "last_price, price_change_pct, last_volume, volume_avg_20d, "
             "trending_score, content_mentions_48h, social_mentions_24h, social_comments_24h, "
             "convergence_score, direction, themes"
@@ -94,6 +94,12 @@ async def get_trending(
     )
     if asset_class:
         q = q.eq("asset_class", asset_class)
+
+    # For stocks and ETFs, filter to mid-cap and above ($2B+) so we don't
+    # surface penny stocks / shell companies. Crypto/forex/index don't
+    # have meaningful market caps so we don't filter them.
+    if asset_class in ("stocks", "etf") or asset_class is None:
+        q = q.in_("market_cap_tier", ["mid", "large", "mega"])
 
     result = q.execute()
     return {

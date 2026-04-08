@@ -448,6 +448,7 @@ async def fetch_bulk_eod(exchange: str) -> list[dict]:
             except (ValueError, TypeError):
                 return None
 
+        market_cap = _f("MarketCapitalization") or 0
         results.append({
             "code": code,
             "close": close,
@@ -458,6 +459,7 @@ async def fetch_bulk_eod(exchange: str) -> list[dict]:
             "ema_200d": _f("ema_200d"),
             "hi_250d": _f("hi_250d"),
             "lo_250d": _f("lo_250d"),
+            "market_cap": int(market_cap) if market_cap else None,
             "date": row.get("date"),
         })
 
@@ -535,6 +537,29 @@ async def sync_eod_prices(exchanges: list[str] | None = None) -> dict:
             }
             if r.get("avg_volume") is not None and r["avg_volume"] > 0:
                 row_update["volume_avg_20d"] = int(r["avg_volume"])
+            mc = r.get("market_cap")
+            if mc and mc > 0:
+                row_update["market_cap"] = mc
+                # Standard market cap tiers (USD):
+                #   mega   ≥ 200B
+                #   large  10B–200B
+                #   mid    2B–10B
+                #   small  300M–2B
+                #   micro  50M–300M
+                #   nano   < 50M
+                if mc >= 200_000_000_000:
+                    tier = "mega"
+                elif mc >= 10_000_000_000:
+                    tier = "large"
+                elif mc >= 2_000_000_000:
+                    tier = "mid"
+                elif mc >= 300_000_000:
+                    tier = "small"
+                elif mc >= 50_000_000:
+                    tier = "micro"
+                else:
+                    tier = "nano"
+                row_update["market_cap_tier"] = tier
             update_rows.append(row_update)
 
         # Upsert in 500-row batches (Supabase REST payload limits).
