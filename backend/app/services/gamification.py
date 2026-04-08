@@ -1,6 +1,10 @@
 """Gamification engine — XP, levels, badges."""
 
-from app.core.supabase import get_supabase
+import logging
+
+from app.core.supabase import get_supabase, maybe_one
+
+log = logging.getLogger("gamification")
 
 XP_ACTIONS = {
     "video_view": 5,
@@ -29,44 +33,61 @@ BADGE_DEFS = {
 }
 
 
-def award_xp(user_id: str, action: str, metadata: dict = None) -> int:
-    """Award XP for an action. Returns XP earned."""
+def award_xp(user_id: str, action: str, metadata: dict | None = None) -> int:
+    """Award XP for an action. Returns XP earned.
+
+    Never crashes the calling handler even if the profile is missing or
+    DB writes fail — logs a warning and returns 0 so user-facing endpoints
+    (post create, journal entry, etc.) aren't taken down by a gamification
+    bug.
+    """
     xp = XP_ACTIONS.get(action, 0)
     if xp <= 0:
         return 0
 
-    db = get_supabase()
-    db.table("user_xp_log").insert({
-        "user_id": user_id,
-        "action": action,
-        "xp_earned": xp,
-        "metadata": metadata or {},
-    }).execute()
+    try:
+        db = get_supabase()
+        db.table("user_xp_log").insert({
+            "user_id": user_id,
+            "action": action,
+            "xp_earned": xp,
+            "metadata": metadata or {},
+        }).execute()
 
-    # Update total XP on profile
-    profile = db.table("profiles").select("xp").eq("id", user_id).single().execute()
-    new_xp = (profile.data.get("xp", 0) if profile.data else 0) + xp
-    db.table("profiles").update({"xp": new_xp}).eq("id", user_id).execute()
+        # Update total XP on profile — maybe_single so missing profile doesn't crash
+        profile = maybe_one(db.table("profiles").select("xp").eq("id", user_id))
+        if not profile.data:
+            log.warning("award_xp: profile missing for user %s (action=%s)", user_id, action)
+            return 0
+        current_xp = profile.data.get("xp") or 0
+        db.table("profiles").update({"xp": current_xp + xp}).eq("id", user_id).execute()
 
-    # Check for new badges
-    check_badges(user_id)
+        # Check for new badges
+        check_badges(user_id)
 
-    return xp
+        return xp
+    except Exception as e:
+        log.error("award_xp failed (user=%s action=%s): %s", user_id, action, e)
+        return 0
 
 
-def check_badges(user_id: str):
-    """Check and award any newly earned badges."""
-    db = get_supabase()
-    profile = db.table("profiles").select("*").eq("id", user_id).single().execute()
-    if not profile.data:
-        return
+def check_badges(user_id: str) -> None:
+    """Check and award any newly earned badges. Never raises."""
+    try:
+        db = get_supabase()
+        profile = maybe_one(db.table("profiles").select("*").eq("id", user_id))
+        if not profile.data:
+            return
 
-    existing = db.table("user_badges").select("badge_id").eq("user_id", user_id).execute()
-    earned_ids = {b["badge_id"] for b in (existing.data or [])}
+        existing = db.table("user_badges").select("badge_id").eq("user_id", user_id).execute()
+        earned_ids = {b["badge_id"] for b in (existing.data or [])}
 
-    for badge_id, badge_def in BADGE_DEFS.items():
-        if badge_id not in earned_ids and badge_def["check"](profile.data):
-            db.table("user_badges").insert({
-                "user_id": user_id,
-                "badge_id": badge_id,
-            }).execute()
+        for badge_id, badge_def in BADGE_DEFS.items():
+            if badge_id not in earned_ids and badge_def["check"](profile.data):
+                db.table("user_badges").insert({
+                    "user_id": user_id,
+                    "badge_id": badge_id,
+                }).execute()
+                log.info("badge awarded: user=%s badge=%s", user_id, badge_id)
+    except Exception as e:
+        log.error("check_badges failed (user=%s): %s", user_id, e)

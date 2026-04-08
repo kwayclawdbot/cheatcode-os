@@ -1,10 +1,33 @@
-"""Market Data Service — live prices via EODHD, cached and served to frontend."""
+"""Market Data Service — live prices via EODHD, cached and served to frontend.
 
-import time
+Covers all four asset classes the frontend supports via EODHD's suffix
+convention. Symbol normalisation MIRRORS the frontend logic in
+client/src/components/shared/MiniSparkline.tsx so a symbol passed in
+from anywhere — forex pair, crypto base, stock ticker, pre-suffixed —
+reaches the right EODHD endpoint.
+
+EODHD suffix table:
+    .US      — US equities (AAPL.US, SPY.US, NVDA.US)
+    .FOREX   — currency pairs (EURUSD.FOREX, GBPUSD.FOREX)
+    .CC      — cryptocurrencies (BTC-USD.CC, ETH-USD.CC)
+    .INDX    — market indices (SPX.INDX, NDX.INDX)
+    .COMEX   — COMEX futures (GC.COMEX for gold)
+    .NYMEX   — NYMEX futures (CL.NYMEX for crude)
+
+Frontend asset class filters that must all work:
+    - stocks   ✓ (US equities)
+    - forex    ✓ (6-char pairs like EURUSD)
+    - crypto   ✓ (bases like BTC, full form like BTC-USD)
+    - futures  ✓ (treated as indices — SPY, QQQ, DIA proxies)
+"""
+
 import logging
+import re
+import time
 from datetime import datetime, timezone
 
 import httpx
+
 from app.core.config import get_settings
 from app.core.supabase import get_supabase
 
@@ -14,18 +37,102 @@ log = logging.getLogger("market_data")
 _quote_cache: dict = {"data": {}, "expires": 0}
 _market_summary_cache: dict = {"data": None, "expires": 0}
 
-TRACKED_TICKERS = [
-    "SPY", "QQQ", "DIA", "IWM",  # Indices
+
+# ── Symbol normalisation (mirrors client/src/components/shared/MiniSparkline.tsx) ──
+
+# Canonical crypto base symbols. Must match the frontend's CRYPTO_SYMBOLS set.
+CRYPTO_SYMBOLS = frozenset({
+    "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "MATIC", "DOT",
+    "LINK", "UNI", "AAVE", "LTC", "BCH", "ATOM", "FIL", "NEAR", "APT", "ARB",
+    "OP", "SUI", "SEI", "TIA", "INJ", "PEPE", "WIF", "BONK", "JUP", "PYTH",
+    "LDO", "RPL", "FXS", "CRV", "CVX", "BAL", "SUSHI", "COMP", "MKR", "SNX",
+    "YFI", "DYDX", "GMX", "SHIB", "FLOKI", "ELON", "HOGE", "VOLT",
+})
+
+# Forex major pairs + common crosses (for display-name prettification).
+_FOREX_PAIR_RE = re.compile(r"^[A-Z]{6}$")
+
+
+def normalise_symbol(raw: str) -> tuple[str, str]:
+    """Normalise a user-provided symbol for EODHD and return (eodhd_code, clean_display).
+
+    Examples:
+        "aapl"        → ("AAPL.US",       "AAPL")
+        "$TSLA"       → ("TSLA.US",       "TSLA")
+        "EURUSD"      → ("EURUSD.FOREX",  "EURUSD")
+        "EUR/USD"     → ("EURUSD.FOREX",  "EURUSD")
+        "BTC"         → ("BTC-USD.CC",    "BTC-USD")
+        "BTC-USD"     → ("BTC-USD.CC",    "BTC-USD")
+        "AAPL.US"     → ("AAPL.US",       "AAPL")
+        "BTC-USD.CC"  → ("BTC-USD.CC",    "BTC-USD")
+    """
+    s = (raw or "").upper().replace("$", "").replace("/", "").strip()
+    if not s:
+        return ("", "")
+
+    # Already suffixed — pass through, strip suffix for display
+    if "." in s:
+        base = s.split(".", 1)[0]
+        return (s, base)
+
+    # Crypto: base symbol → BTC-USD.CC form
+    if s in CRYPTO_SYMBOLS:
+        return (f"{s}-USD.CC", f"{s}-USD")
+    if "-" in s:
+        # Already "BTC-USD" style — just add .CC
+        return (f"{s}.CC", s)
+
+    # Forex: 6-char alpha pair
+    if _FOREX_PAIR_RE.match(s):
+        return (f"{s}.FOREX", s)
+
+    # Default: US equity
+    return (f"{s}.US", s)
+
+
+def _display_symbol(eodhd_code: str) -> str:
+    """Strip EODHD suffix for display-friendly symbol."""
+    if "." in eodhd_code:
+        return eodhd_code.split(".", 1)[0]
+    return eodhd_code
+
+
+# ── Tracked tickers (cron-synced hourly) ───────────────────────────────────
+
+# US equities — indices + mega caps + sector plays
+TRACKED_STOCKS = [
+    "SPY", "QQQ", "DIA", "IWM",  # Major index ETFs
     "NVDA", "AAPL", "MSFT", "GOOGL", "META", "AMZN", "TSLA",  # Mega caps
-    "AMD", "SMCI", "AVGO",  # AI/Semis
+    "AMD", "SMCI", "AVGO",  # AI/semis
     "CCJ", "NNE", "SMR", "CEG", "VST",  # Nuclear
     "KKR", "ARCC", "BX", "APO",  # Private credit
-    "TLT", "GLD", "BTC-USD",  # Macro
+    "TLT", "GLD",  # Macro proxies
 ]
+
+# Cryptocurrencies (EODHD .CC endpoint)
+TRACKED_CRYPTO = [
+    "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD",
+    "AVAX-USD", "DOGE-USD",
+]
+
+# Forex major pairs (EODHD .FOREX endpoint)
+TRACKED_FOREX = [
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
+]
+
+TRACKED_TICKERS = TRACKED_STOCKS + TRACKED_CRYPTO + TRACKED_FOREX
 
 
 async def fetch_bulk_quotes(symbols: list[str] | None = None) -> dict[str, dict]:
-    """Fetch real-time quotes from EODHD. Returns {symbol: quote_data}."""
+    """Fetch real-time quotes from EODHD across all asset classes.
+
+    Returns {display_symbol: quote_data} where display_symbol is the
+    suffix-stripped form ("AAPL", "BTC-USD", "EURUSD") — safe to use as
+    a dict key on the frontend without worrying about exchange suffixes.
+
+    Handles stocks / crypto / forex / indices automatically via
+    normalise_symbol(). Caches the default (no-arg) call for 30 seconds.
+    """
     now = time.time()
     if _quote_cache["data"] and now < _quote_cache["expires"] and not symbols:
         return _quote_cache["data"]
@@ -35,8 +142,22 @@ async def fetch_bulk_quotes(symbols: list[str] | None = None) -> dict[str, dict]
         return {}
 
     tickers = symbols or TRACKED_TICKERS
-    # EODHD: first symbol in path, rest as s= parameter
-    suffixed = [f"{t}.US" if not any(c in t for c in ["-", "."]) else t for t in tickers]
+
+    # Normalise every input into its EODHD form and build a reverse map so we
+    # can attribute responses back to the original display symbol.
+    suffixed: list[str] = []
+    code_to_display: dict[str, str] = {}
+    for t in tickers:
+        eodhd_code, display = normalise_symbol(t)
+        if not eodhd_code:
+            continue
+        suffixed.append(eodhd_code)
+        code_to_display[eodhd_code.upper()] = display
+
+    if not suffixed:
+        return {}
+
+    # EODHD real-time convention: first symbol in path, remaining as s= param.
     first = suffixed[0]
     rest = ",".join(suffixed[1:]) if len(suffixed) > 1 else ""
 
@@ -51,34 +172,37 @@ async def fetch_bulk_quotes(symbols: list[str] | None = None) -> dict[str, dict]
                 timeout=10,
             )
             if resp.status_code != 200:
-                log.warning("EODHD returned %d", resp.status_code)
+                log.warning("EODHD returned %d (first=%s)", resp.status_code, first)
                 return _quote_cache.get("data", {})
 
             raw = resp.json()
-            # Handle single vs multiple results
             if isinstance(raw, dict):
                 raw = [raw]
 
-            quotes = {}
+            quotes: dict[str, dict] = {}
             for q in raw:
-                code = q.get("code", "").replace(".US", "")
+                code = (q.get("code") or "").upper()
                 if not code:
                     continue
+                # Attribute back to the original display symbol, falling back
+                # to stripping the suffix if this row wasn't one we sent.
+                display = code_to_display.get(code) or _display_symbol(code)
                 try:
-                    quotes[code] = {
-                        "symbol": code,
+                    quotes[display] = {
+                        "symbol": display,
                         "price": float(q.get("close") or 0),
                         "open": float(q.get("open") or 0),
                         "high": float(q.get("high") or 0),
                         "low": float(q.get("low") or 0),
                         "close": float(q.get("close") or 0),
                         "prev_close": float(q.get("previousClose") or 0),
-                        "change": round(float(q.get("change") or 0), 2),
-                        "change_pct": round(float(q.get("change_p") or 0), 2),
+                        "change": round(float(q.get("change") or 0), 4),
+                        "change_pct": round(float(q.get("change_p") or 0), 4),
                         "volume": int(q.get("volume") or 0),
                         "timestamp": int(q.get("timestamp") or 0),
                     }
-                except (ValueError, TypeError):
+                except (ValueError, TypeError) as e:
+                    log.warning("EODHD parse error for %s: %s", code, e)
                     continue
 
             if not symbols:
@@ -197,9 +321,11 @@ async def fetch_price_history(symbol: str, days: int = 30) -> list[dict]:
         log.warning("EODHD key missing — cannot fetch price history for %s", symbol)
         return []
 
-    # EODHD uses .US suffix for US equities; crypto/forex already have suffix
-    suffix = "" if any(c in symbol for c in ["-", "."]) else ".US"
-    ticker_code = f"{symbol}{suffix}"
+    # Use the shared normaliser so the same symbol works across stocks,
+    # forex, crypto, and pre-suffixed inputs.
+    ticker_code, _display = normalise_symbol(symbol)
+    if not ticker_code:
+        return []
 
     from datetime import timedelta
     end_dt = datetime.now(timezone.utc)
