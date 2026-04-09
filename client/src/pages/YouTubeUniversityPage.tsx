@@ -165,18 +165,24 @@ export default function YouTubeUniversityPage() {
     ? (assetSelected[0] === "crypto" ? "crypto" : assetSelected[0] === "forex" ? "forex" : undefined)
     : undefined;
 
+  // Map asset class to the new server-side asset_class column instead of
+  // hijacking the topic filter (which only worked for crypto/forex topics).
+  const assetClassParam: string | undefined =
+    !assetIsAll && assetSelected.length === 1 ? assetSelected[0] : undefined;
+
   useEffect(() => {
     setLoading(true);
     fetchContent({
-      topic: activeTopic || assetTopicFilter || undefined,
+      topic: activeTopic || undefined,
       skill_level: activeLevel || undefined,
+      asset_class: assetClassParam,
       sort: "relevance",
       page: 1,
     })
       .then(data => setAllCards(data))
       .catch(() => setAllCards([]))
       .finally(() => setLoading(false));
-  }, [activeTopic, activeLevel, assetTopicFilter]);
+  }, [activeTopic, activeLevel, assetClassParam]);
 
   // Client-side search filter
   const filtered = search

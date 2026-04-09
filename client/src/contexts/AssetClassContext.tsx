@@ -24,16 +24,34 @@ const FUTURES_PATTERNS = /^\/|^ES$|^NQ$|^YM$|^RTY$|^CL$|^GC$|^SI$|^NG$|^ZB$|^ZN$
 // NOT matching 3-letter stock tickers that start with currency codes (e.g. EUR≠EURONEXT stock)
 const FOREX_PATTERNS   = /^[A-Z]{3}\/[A-Z]{3}$|^[A-Z]{6}$|^DXY$|^USDX$/i;
 const CRYPTO_PATTERNS  = /^BTC$|^ETH$|^SOL$|^XRP$|^ADA$|^DOGE$|^AVAX$|^DOT$|^MATIC$|^LINK$|^UNI$|^LTC$|^BCH$|^ATOM$|^FIL$|^NEAR$|^ALGO$|^VET$|^ICP$|^HBAR$|^BNB$|^SHIB$|^TRX$|^TON$|^PEPE$/i;
+// Crypto pair shape: TEER-USD, GRIFFAIN-USDT, SOL-BTC, etc. EODHD often emits
+// these and they leak into radar payloads tagged as "stocks" if we don't catch them.
+const CRYPTO_QUOTE_SUFFIX = /-(USD|USDT|USDC|EUR|BTC|ETH)$/i;
+
+// NASDAQ "fifth letter" identifier convention:
+//   F → foreign ordinary share (typically OTC pink sheet, e.g. CJEWF, IMIAF)
+//   Y → unsponsored ADR (typically OTC, e.g. JPPHY, YKLTY, CMTOY)
+// Real NYSE/NASDAQ tickers are 1-4 letters or 5 letters not ending in F/Y.
+const OTC_PINK_SHEET_PATTERN = /^[A-Z]{4}[FY]$/;
+
+/** True for foreign issuers / OTC pink sheets that should not appear under "Stocks". */
+export function isOtcOrForeign(symbol: string): boolean {
+  const s = symbol.toUpperCase().replace(/^[$]/, "");
+  return OTC_PINK_SHEET_PATTERN.test(s);
+}
 
 export function classifyTicker(symbol: string): AssetClass {
   const s = symbol.toUpperCase().replace(/^[$]/, "");
-  if (FUTURES_PATTERNS.test(s)) return "futures";
-  if (FOREX_PATTERNS.test(s))   return "forex";
-  if (CRYPTO_PATTERNS.test(s))  return "crypto";
+  if (FUTURES_PATTERNS.test(s))     return "futures";
+  if (FOREX_PATTERNS.test(s))       return "forex";
+  if (CRYPTO_PATTERNS.test(s))      return "crypto";
+  if (CRYPTO_QUOTE_SUFFIX.test(s))  return "crypto";
   return "stocks";
 }
 
 export function tickerMatchesFilter(symbol: string, selected: AssetClass[]): boolean {
+  // OTC pink sheets / foreign issuers are dropped everywhere — never NYSE/NASDAQ.
+  if (isOtcOrForeign(symbol)) return false;
   if (selected.length === 0) return true; // "All" — no filter
   return selected.includes(classifyTicker(symbol));
 }

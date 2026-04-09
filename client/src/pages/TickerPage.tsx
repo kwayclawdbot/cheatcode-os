@@ -14,11 +14,15 @@ import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
-import { trpc } from "@/lib/trpc";
+import { fetchContentByTicker } from "@/lib/api";
 import {
   fetchTicker, fetchFeed,
+  fetchTickerSentiment, fetchTickerVotes, castTickerVote, fetchTickerAbout,
   likePost, repostPost, bookmarkPost, createComment, fetchComments,
+  type TickerSentiment, type TickerVotes,
 } from "@/lib/api";
+import { CheatCodeChart } from "@/components/CheatCodeChart";
+import { useAuth } from "@/hooks/useAuth";
 
 // ─── XP Level System ─────────────────────────────────────────────────────────
 const XP_LEVELS = [
@@ -245,41 +249,61 @@ export default function TickerPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = (params.symbol || "").toUpperCase();
 
-  const [activeTab, setActiveTab] = useState<TickerTab>("feed");
+  const { isAuthenticated } = useAuth();
+  // Default tab is the chart/signal view — feed is empty until users post.
+  const [activeTab, setActiveTab] = useState<TickerTab>("signal");
   const [tickerData, setTickerData] = useState<any>(null);
   const [tickerLoading, setTickerLoading] = useState(true);
   const [posts, setPosts] = useState<any[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
-  const [bullVotes, setBullVotes] = useState(62);
-  const [bearVotes, setBearVotes] = useState(38);
-  const [voted, setVoted] = useState<"bull" | "bear" | null>(null);
 
-  // Stabilize input to avoid infinite re-fetches
-  const videoQueryInput = useMemo(() => ({ symbol, limit: 12 }), [symbol]);
+  // Real bullish/bearish votes from /intelligence/ticker/{sym}/votes
+  const [voteData, setVoteData] = useState<TickerVotes | null>(null);
+  const [sentiment, setSentiment] = useState<TickerSentiment | null>(null);
+  const [voting, setVoting] = useState(false);
 
-  // tRPC query for videos mentioning this ticker
-  const { data: videosData, isLoading: videosLoading } = trpc.ingest.getVideosByTicker.useQuery(
-    videoQueryInput,
-    { enabled: activeTab === "videos" && !!symbol, staleTime: 5 * 60 * 1000 }
-  );
-  const videos = videosData?.videos ?? [];
+  // Company profile (lazy from /intelligence/ticker/{sym}/about)
+  const [profile, setProfile] = useState<any>(null);
+
+  // Videos mentioning this ticker — backend /content/by-ticker/{symbol}.
+  const [videos, setVideos] = useState<any[]>([]);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [videosSource, setVideosSource] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (activeTab !== "videos" || !symbol) return;
+    let cancelled = false;
+    setVideosLoading(true);
+    fetchContentByTicker(symbol)
+      .then(rows => {
+        if (cancelled) return;
+        setVideos(Array.isArray(rows) ? rows.slice(0, 12) : []);
+        setVideosSource("curated");
+      })
+      .catch(() => { if (!cancelled) setVideos([]); })
+      .finally(() => { if (!cancelled) setVideosLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, symbol]);
+  const videosData = { source: videosSource };
 
   useEffect(() => {
     if (!symbol) return;
     setTickerLoading(true);
     setPostsLoading(true);
 
-    // Fetch ticker intelligence
+    // Ticker intelligence (graceful: backend now stub-fills unknown symbols)
     fetchTicker(symbol).then(setTickerData).catch(() => {}).finally(() => setTickerLoading(false));
 
-    // Fetch community posts about this ticker
-    fetchFeed("discover").then((data: any[]) => {
-      const filtered = data.filter((p: any) =>
-        p.ticker?.toUpperCase() === symbol ||
-        p.body?.toUpperCase().includes(`$${symbol}`) ||
-        p.text?.toUpperCase().includes(`$${symbol}`)
-      );
-      const mapped = filtered.map((p: any) => ({
+    // Unified sentiment + per-user vote state
+    fetchTickerSentiment(symbol).then(setSentiment).catch(() => {});
+    fetchTickerVotes(symbol).then(setVoteData).catch(() => {});
+
+    // Company profile — backend lazy-fetches from EODHD fundamentals on
+    // first hit, free thereafter.
+    fetchTickerAbout(symbol).then(setProfile).catch(() => {});
+
+    // Community posts filtered server-side by ticker symbol
+    fetchFeed("discover", 1, { ticker: symbol }).then((data: any[]) => {
+      const mapped = (data || []).map((p: any) => ({
         id: p.id || String(Math.random()),
         type: (p.post_type || p.type || "market_take") as PostType,
         user: {
@@ -308,21 +332,41 @@ export default function TickerPage() {
     }).catch(() => {}).finally(() => setPostsLoading(false));
   }, [symbol]);
 
-  const isBull = tickerData?.direction?.toLowerCase() === "bullish";
-  const isBear = tickerData?.direction?.toLowerCase() === "bearish";
+  // Prefer the unified sentiment label when we have it; fall back to the
+  // raw convergence direction so the page never goes blank.
+  const displayLabel = sentiment?.label ?? (tickerData?.direction?.toLowerCase() || "neutral");
+  const isBull = displayLabel === "bullish";
+  const isBear = displayLabel === "bearish";
   const scoreColor = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
   const dirLabel = isBull ? "Bullish" : isBear ? "Bearish" : "Neutral";
 
+  const bullVotes = voteData?.bullish ?? 0;
+  const bearVotes = voteData?.bearish ?? 0;
   const total = bullVotes + bearVotes;
-  const bullPct = Math.round((bullVotes / total) * 100);
-  const bearPct = 100 - bullPct;
+  const bullPct = total > 0 ? Math.round((bullVotes / total) * 100) : 50;
+  const bearPct = total > 0 ? 100 - bullPct : 50;
+  const voted: "bull" | "bear" | null =
+    voteData?.my_vote === "bullish" ? "bull" :
+    voteData?.my_vote === "bearish" ? "bear" : null;
 
-  const handleVote = (dir: "bull" | "bear") => {
-    if (voted) return;
-    setVoted(dir);
-    if (dir === "bull") setBullVotes(v => v + 1);
-    else setBearVotes(v => v + 1);
-    toast.success(`Voted ${dir === "bull" ? "Bullish" : "Bearish"} on $${symbol}! +10 XP`);
+  const handleVote = async (dir: "bull" | "bear") => {
+    if (!isAuthenticated) {
+      toast.error("Sign in to vote");
+      return;
+    }
+    if (voting) return;
+    setVoting(true);
+    try {
+      const next = await castTickerVote(symbol, dir === "bull" ? "bullish" : "bearish");
+      setVoteData(next);
+      // Re-fetch sentiment so the unified label updates immediately.
+      fetchTickerSentiment(symbol).then(setSentiment).catch(() => {});
+      toast.success(`Voted ${dir === "bull" ? "Bullish" : "Bearish"} on $${symbol}! +10 XP`);
+    } catch (e: any) {
+      toast.error(e?.message || "Vote failed");
+    } finally {
+      setVoting(false);
+    }
   };
 
   const TABS: { id: TickerTab; label: string; icon: React.ReactNode }[] = [
@@ -477,19 +521,34 @@ export default function TickerPage() {
           {/* KAI'S SIGNAL */}
           {activeTab === "signal" && (
             <motion.div key="signal" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              {tickerLoading ? (
-                <div className="text-center py-12">
-                  <div className="w-8 h-8 rounded-full border-2 border-[#4DC820] border-t-transparent animate-spin mx-auto mb-3" />
-                  <p className="text-muted-foreground text-sm">Loading signal data…</p>
-                </div>
-              ) : tickerData ? (
                 <div className="space-y-4">
-                  {/* Score cards */}
+                  {/* Score cards — always render with graceful "—" placeholders */}
                   <div className="grid grid-cols-3 gap-3">
                     {[
-                      { label: "Convergence Score", value: Math.round(tickerData.convergence_score || 0), color: scoreColor, large: true },
-                      { label: "Direction", value: tickerData.direction || dirLabel, color: scoreColor, large: false },
-                      { label: "Timeframe", value: tickerData.timeframe || "Swing", color: "var(--foreground)", large: false },
+                      {
+                        label: "Convergence Score",
+                        value: tickerData?.convergence_score
+                          ? Math.round(tickerData.convergence_score)
+                          : "—",
+                        color: tickerData?.convergence_score ? scoreColor : "var(--muted-foreground)",
+                        large: true,
+                      },
+                      {
+                        label: "Direction",
+                        value: tickerData?.direction
+                          ? tickerData.direction[0].toUpperCase() + tickerData.direction.slice(1)
+                          : (sentiment?.label && sentiment.label !== "neutral"
+                              ? sentiment.label[0].toUpperCase() + sentiment.label.slice(1)
+                              : "—"),
+                        color: scoreColor,
+                        large: false,
+                      },
+                      {
+                        label: "Timeframe",
+                        value: tickerData?.timeframe || "—",
+                        color: "var(--foreground)",
+                        large: false,
+                      },
                     ].map(item => (
                       <div key={item.label} className="bg-card rounded-xl border border-border p-4 text-center">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">{item.label}</p>
@@ -500,8 +559,85 @@ export default function TickerPage() {
                     ))}
                   </div>
 
+                  {/* About the company — sits ABOVE the chart so the user
+                      gets context on what they're looking at first. */}
+                  {(profile?.description || profile?.sector || profile?.industry || profile?.market_cap) && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">
+                        About {profile?.name || symbol}
+                      </p>
+                      {/* Quick facts row */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                        {profile?.sector && (
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Sector</p>
+                            <p className="text-xs font-bold text-foreground truncate">{profile.sector}</p>
+                          </div>
+                        )}
+                        {profile?.industry && (
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Industry</p>
+                            <p className="text-xs font-bold text-foreground truncate">{profile.industry}</p>
+                          </div>
+                        )}
+                        {profile?.market_cap && (
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Market Cap</p>
+                            <p className="text-xs font-bold text-foreground">
+                              ${profile.market_cap >= 1e12 ? (profile.market_cap / 1e12).toFixed(2) + "T"
+                                : profile.market_cap >= 1e9 ? (profile.market_cap / 1e9).toFixed(2) + "B"
+                                : profile.market_cap >= 1e6 ? (profile.market_cap / 1e6).toFixed(0) + "M"
+                                : profile.market_cap.toLocaleString()}
+                            </p>
+                          </div>
+                        )}
+                        {profile?.country && (
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Country</p>
+                            <p className="text-xs font-bold text-foreground">{profile.country}</p>
+                          </div>
+                        )}
+                      </div>
+                      {profile?.description && (
+                        <p className="text-sm text-foreground leading-relaxed line-clamp-6">
+                          {profile.description}
+                        </p>
+                      )}
+                      {profile?.website && (
+                        <a href={profile.website} target="_blank" rel="noopener noreferrer"
+                           className="inline-flex items-center gap-1 text-xs font-bold text-[#4DC820] hover:underline mt-3">
+                          Visit website <ArrowUpRight size={11} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CheatCode ALGO chart */}
+                  <div className="bg-card rounded-xl border border-border p-3 overflow-hidden">
+                    <CheatCodeChart symbol={symbol} height={420} />
+                  </div>
+
+                  {/* Key levels */}
+                  <div className="bg-card rounded-xl border border-border p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Key Levels</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: "Support",      value: tickerData?.key_levels?.support,      color: "#4DC820" },
+                        { label: "Resistance",   value: tickerData?.key_levels?.resistance,   color: "#E8193C" },
+                        { label: "Invalidation", value: tickerData?.key_levels?.invalidation, color: "#F79009" },
+                      ].map(k => (
+                        <div key={k.label} className="bg-muted rounded-xl p-3 text-center">
+                          <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: k.color }}>{k.label}</p>
+                          <p className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                            {k.value ?? "—"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Kai's take */}
-                  {tickerData.analysis && (
+                  {tickerData?.analysis && (
                     <div className="bg-card rounded-xl border border-border p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
@@ -513,36 +649,15 @@ export default function TickerPage() {
                   )}
 
                   {/* Catalyst */}
-                  {tickerData.catalyst && (
+                  {tickerData?.catalyst && (
                     <div className="bg-card rounded-xl border border-border p-4">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Catalyst</p>
                       <p className="text-sm text-foreground leading-relaxed">{tickerData.catalyst}</p>
                     </div>
                   )}
 
-                  {/* Key levels */}
-                  {tickerData.key_levels && (
-                    <div className="bg-card rounded-xl border border-border p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Key Levels</p>
-                      <div className="grid grid-cols-3 gap-3">
-                        {[
-                          { label: "Support",      value: tickerData.key_levels.support,      color: "#4DC820" },
-                          { label: "Resistance",   value: tickerData.key_levels.resistance,   color: "#E8193C" },
-                          { label: "Invalidation", value: tickerData.key_levels.invalidation, color: "#F79009" },
-                        ].map(k => (
-                          <div key={k.label} className="bg-muted rounded-xl p-3 text-center">
-                            <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: k.color }}>{k.label}</p>
-                            <p className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                              {k.value || "—"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Evidence chain */}
-                  {tickerData.evidence_chain && tickerData.evidence_chain.length > 0 && (
+                  {tickerData?.evidence_chain && tickerData.evidence_chain.length > 0 && (
                     <div className="bg-card rounded-xl border border-border p-4">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Evidence Chain</p>
                       <div className="space-y-2">
@@ -569,17 +684,10 @@ export default function TickerPage() {
 
                   <Link href={`/intelligence?ticker=${symbol}`}>
                     <button className="w-full text-xs font-bold py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors flex items-center justify-center gap-1">
-                      View full analysis with charts <ArrowUpRight size={11} />
+                      View full Kai analysis <ArrowUpRight size={11} />
                     </button>
                   </Link>
                 </div>
-              ) : (
-                <div className="text-center py-16">
-                  <Zap size={32} className="text-muted-foreground mx-auto mb-3" />
-                  <p className="font-bold text-foreground mb-1">No signal data for ${symbol}</p>
-                  <p className="text-sm text-muted-foreground">Kai hasn't analyzed this ticker yet</p>
-                </div>
-              )}
             </motion.div>
           )}
 

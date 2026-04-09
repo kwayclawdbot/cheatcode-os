@@ -514,7 +514,7 @@ export default function SwipeFeedPage() {
             </div>
           ) : (
             <>
-              <div className="relative" style={{ height: 520 }}>
+              <div className="relative w-full" style={{ height: "min(520px, calc(100vh - 280px))", minHeight: 360 }}>
                 <AnimatePresence>
                   {thirdCard && (
                     <SwipeCardView key={thirdCard.id + "-3"} card={thirdCard} onSwipeRight={() => {}} onSwipeLeft={() => {}} isTop={false} stackIndex={2} isDark={isDark} />

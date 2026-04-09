@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useAssetClass } from "@/contexts/AssetClassContext";
+import { useAssetClass, isOtcOrForeign } from "@/contexts/AssetClassContext";
 import { useWatchlist } from "@/contexts/WatchlistContext";
 import { MediaUploader } from "@/components/shared/MediaUploader";
 import { KaiChat } from "@/components/kai/KaiChat";
@@ -851,6 +851,56 @@ function TickerHub({ ticker, radarTickers, onClose }: {
   );
 }
 
+// ─── Followable user row in CommunityPage sidebar ────────────────────────────
+function CommunityFollowRow({ user }: { user: { id: string | null; handle: string; style: string; level: string; color: string } }) {
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const handleClick = async () => {
+    if (!user.id) { toast.error("Demo user — real follow coming when more traders join"); return; }
+    if (busy) return;
+    setBusy(true);
+    const next = !following;
+    setFollowing(next);
+    try {
+      const { followUser, unfollowUser } = await import("@/lib/api");
+      if (next) await followUser(user.id);
+      else await unfollowUser(user.id);
+    } catch {
+      setFollowing(!next);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+           style={{ background: user.color }}>
+        {user.handle.slice(0, 2).toUpperCase()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <Link href={`/traders/${user.handle}`}>
+          <p className="text-xs font-bold text-foreground truncate hover:underline cursor-pointer" style={{ fontFamily: "var(--font-mono)" }}>
+            @{user.handle}
+          </p>
+        </Link>
+        <p className="text-[9px] text-muted-foreground">{user.style} · {user.level}</p>
+      </div>
+      <button
+        onClick={handleClick}
+        disabled={busy}
+        className="text-[9px] font-bold px-2 py-0.5 rounded-md border transition-colors flex-shrink-0 disabled:opacity-50"
+        style={{
+          borderColor: following ? "var(--border)" : "#4DC820",
+          color: following ? "var(--muted-foreground)" : "#4DC820",
+        }}
+      >
+        {following ? "Following" : "Follow"}
+      </button>
+    </div>
+  );
+}
+
+
 // ─── Trending Ticker Strip ────────────────────────────────────────────────────
 
 function TrendingTickerStrip({ radarTickers, activeAsset, activeTicker, onTickerClick }: {
@@ -1013,7 +1063,11 @@ export default function CommunityPage() {
   useEffect(() => {
     fetchRadar().then(r => {
       const all = [...(r.critical || []), ...(r.high_conviction || []), ...(r.watch || [])];
-      setRadarTickers(all);
+      // Defence-in-depth: drop OTC pink sheets / foreign issuers that may have
+      // leaked into a cached radar snapshot from before the backend filter
+      // shipped. The new radar generator already excludes these going forward.
+      const clean = all.filter(t => !isOtcOrForeign(t.symbol || ""));
+      setRadarTickers(clean);
     }).catch(() => {});
   }, []);
 
@@ -1167,18 +1221,22 @@ export default function CommunityPage() {
             </Link>
           </div>
         </div>
-        {/* Scrollable StockTwits-style ticker cards */}
+        {/* Scrollable StockTwits-style ticker cards — wrapped in the same
+            max-w-6xl container as the header so the leftmost card aligns
+            with the "Trending" label above it (was offset edge-to-edge). */}
+        <div className="max-w-6xl mx-auto">
         <TrendingTickerStrip
           radarTickers={radarTickers}
           activeAsset={activeAsset}
           activeTicker={activeTicker}
           onTickerClick={handleTickerClick}
         />
+        </div>
       </div>
 
       {/* ── Main Layout ── */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-5">
 
           {/* Left: Ticker Hub or Feed */}
           <div>
@@ -1249,31 +1307,31 @@ export default function CommunityPage() {
 
           {/* Right sidebar */}
           <div className="hidden lg:block space-y-4">
-            {/* Trending tickers list */}
+            {/* Hot Tickers — derived from the same radar feed (top by score),
+                so it stays in sync with what the curated trending universe
+                surfaces. No more hardcoded mock symbols. */}
             <div className="bg-card rounded-xl border border-border p-4">
               <h3 className="font-bold text-foreground text-sm mb-3 flex items-center gap-2">
                 <Flame size={13} className="text-[#E8193C]" /> Hot Tickers
               </h3>
               <div className="space-y-1">
-                {[
-                  { tag: "PLTR", posts: 284, dir: "bullish" },
-                  { tag: "NVDA", posts: 219, dir: "bullish" },
-                  { tag: "BTC",  posts: 198, dir: "bullish" },
-                  { tag: "TSLA", posts: 176, dir: "neutral" },
-                  { tag: "SPY",  posts: 142, dir: "bearish" },
-                  { tag: "ES",   posts: 98,  dir: "bearish" },
-                ].map((t, i) => {
-                  const color = t.dir === "bullish" ? "#4DC820" : t.dir === "bearish" ? "#E8193C" : "#F79009";
+                {(radarTickers.length > 0
+                  ? radarTickers.slice(0, 6)
+                  : [{ symbol: "—", direction: "neutral", score: 0 }]
+                ).map((t: any, i: number) => {
+                  const isBull = t.direction?.toLowerCase() === "bullish";
+                  const isBear = t.direction?.toLowerCase() === "bearish";
+                  const color = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
                   return (
-                    <button key={t.tag} onClick={() => handleTickerClick(t.tag)}
+                    <button key={t.symbol + i} onClick={() => handleTickerClick(t.symbol)}
                             className="w-full flex items-center justify-between py-1.5 hover:bg-muted rounded-lg px-2 -mx-2 transition-colors">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold text-muted-foreground w-4">#{i + 1}</span>
-                        <span className="ticker-mono text-sm font-bold text-foreground">${t.tag}</span>
+                        <span className="ticker-mono text-sm font-bold text-foreground">${t.symbol}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground">{t.posts}</span>
-                        <span className="text-xs font-bold" style={{ color }}>{t.dir === "bullish" ? "↑" : t.dir === "bearish" ? "↓" : "→"}</span>
+                        <span className="text-[10px] text-muted-foreground">{Math.round(t.score ?? 0)}</span>
+                        <span className="text-xs font-bold" style={{ color }}>{isBull ? "↑" : isBear ? "↓" : "→"}</span>
                       </div>
                     </button>
                   );
@@ -1322,26 +1380,11 @@ export default function CommunityPage() {
               </h3>
               <div className="space-y-2.5">
                 {[
-                  { name: "Jordan Davis",  handle: "@jdtrader",    style: "Swing", level: "Expert",  color: "#4DC820" },
-                  { name: "Alex Kim",      handle: "@alphatrader", style: "Day",   level: "Veteran", color: "#00AEEF" },
-                  { name: "Sam Rivera",    handle: "@macrotrader", style: "Macro", level: "Elite",   color: "#7B2FBE" },
+                  { id: null, handle: "jdtrader",    style: "Swing", level: "Expert",  color: "#4DC820" },
+                  { id: null, handle: "alphatrader", style: "Day",   level: "Veteran", color: "#00AEEF" },
+                  { id: null, handle: "macrotrader", style: "Macro", level: "Elite",   color: "#7B2FBE" },
                 ].map(u => (
-                  <div key={u.handle} className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                         style={{ background: u.color }}>
-                      {u.name.split(" ").map((w: string) => w[0]).join("")}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">{u.name}</p>
-                      <p className="text-[9px] text-muted-foreground">{u.style} · {u.level}</p>
-                    </div>
-                    <button
-                      onClick={() => toast.success(`Following ${u.name}! +5 XP`)}
-                      className="text-[9px] font-bold px-2 py-0.5 rounded-md border border-[#4DC820] text-[#4DC820] hover:bg-[rgba(77,200,32,0.08)] transition-colors flex-shrink-0"
-                    >
-                      Follow
-                    </button>
-                  </div>
+                  <CommunityFollowRow key={u.handle} user={u} />
                 ))}
               </div>
             </div>

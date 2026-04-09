@@ -43,22 +43,18 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   { type: "link", href: "/topics",      label: "Watch",         emoji: "▶️" },
-  { type: "link", href: "/terminal",    label: "Terminal",      emoji: "📊" },
+  { type: "link", href: "/terminal",    label: "War Room",      emoji: "📊" },
   {
     type: "dropdown",
     label: "Learn",
     emoji: "📚",
     children: [
-      {
-        href: "/learn",
-        label: "Courses",
-        description: "Structured learning paths & skill tracks",
-        icon: <BookOpen size={16} />,
-      },
+      // Courses hidden until we ship our first one — keep YT University +
+      // Coaches Corner only.
       {
         href: "/learn/university",
         label: "YouTube University",
-        description: "Top trading videos organized by topic & skill level",
+        description: "Top trading education videos organized by topic & skill level",
         icon: <Trophy size={16} />,
       },
       {
@@ -69,20 +65,9 @@ const NAV_ITEMS: NavItem[] = [
       },
     ],
   },
-  {
-    type: "dropdown",
-    label: "Intelligence",
-    emoji: "🧠",
-    children: [
-      {
-        href: "/intelligence",
-        label: "Kai Analysis",
-        description: "AI-powered ticker analysis, radar & market signals",
-        icon: <Sparkles size={16} />,
-      },
-    ],
-  },
-  { type: "link", href: "/journal",    label: "Journal",       emoji: "📓" },
+  // Promoted from Intelligence sub-menu — Kai is the headline product.
+  { type: "link", href: "/intelligence", label: "Analyze",       emoji: "🧠" },
+  { type: "link", href: "/journal",      label: "Connect",       emoji: "🤝" },
 ];
 
 // Mobile drawer sections — with collapsible groups
@@ -114,28 +99,20 @@ const MOBILE_ENTRIES: MobileEntry[] = [
       { href: "/leaderboard", label: "Leaderboard", emoji: "🏅" },
     ],
   },
-  { type: "link", href: "/topics",    label: "Watch",     emoji: "▶️" },
-  { type: "link", href: "/terminal",  label: "Terminal",  emoji: "📊" },
+  { type: "link", href: "/topics",    label: "Watch",      emoji: "▶️" },
+  { type: "link", href: "/terminal",  label: "War Room",   emoji: "📊" },
   {
     type: "group",
     label: "Learn",
     emoji: "📚",
     children: [
-      { href: "/learn",             label: "Courses",           emoji: "📖" },
       { href: "/learn/university",  label: "YouTube University", emoji: "🎬" },
-      { href: "/coaches-corner",    label: "Coaches",           emoji: "🏆" },
+      { href: "/coaches-corner",    label: "Coaches",            emoji: "🏆" },
     ],
   },
-  {
-    type: "group",
-    label: "Intelligence",
-    emoji: "🧠",
-    children: [
-      { href: "/intelligence", label: "Kai Analysis", emoji: "🧠" },
-    ],
-  },
-  { type: "link", href: "/journal",  label: "Journal",   emoji: "📓" },
-  { type: "link", href: "/pricing",  label: "Pricing",   emoji: "⚡" },
+  { type: "link", href: "/intelligence", label: "Analyze", emoji: "🧠" },
+  { type: "link", href: "/journal",      label: "Connect", emoji: "🤝" },
+  { type: "link", href: "/pricing",      label: "Pricing", emoji: "⚡" },
 ];
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────

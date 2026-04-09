@@ -27,14 +27,14 @@ import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   fetchFeed, fetchRadar, fetchLeaderboard, fetchQuotes, fetchContent,
-  fetchTrendingTickers,
+  fetchWatchlist, addToWatchlist as apiAddToWatchlist,
+  fetchAssetClassQuotes, fetchTrendingTickers,
   likePost, repostPost, bookmarkPost, createPost, createComment, fetchComments, normalizeContentCard,
 } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { MiniSparkline } from "@/components/shared/MiniSparkline";
-import { useAssetClass, ASSET_CLASSES } from "@/contexts/AssetClassContext";
-import { trpc } from "@/lib/trpc";
+import { useAssetClass, ASSET_CLASSES, isOtcOrForeign } from "@/contexts/AssetClassContext";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
 const XP_LEVELS = [
@@ -68,7 +68,7 @@ interface TickerSocialCard {
   top_traders: { name: string; initials: string; color: string }[];
 }
 
-// Live trending tickers fetched from /market/trending (updated every 15 min).
+// Live trending tickers are fetched from /market/trending (updated every 15 min).
 // No more hardcoded fallback — the rail shows a loading skeleton until data arrives.
 
 // ─── Gradient Sentiment Bar ───────────────────────────────────────────────────
@@ -316,9 +316,10 @@ function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (t
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap mb-1">
             <Link href={`/traders/${post.user.handle.replace("@", "")}`}>
-              <span className="font-bold text-foreground text-sm hover:underline cursor-pointer">{post.user.name}</span>
+              <span className="font-bold text-foreground text-sm hover:underline cursor-pointer" style={{ fontFamily: "var(--font-mono)" }}>
+                {post.user.handle}
+              </span>
             </Link>
-            <span className="text-[10px] text-muted-foreground">{post.user.handle}</span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: post.user.levelColor }}>
               {post.user.level}
             </span>
@@ -361,7 +362,7 @@ function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (t
 
       {/* Body text */}
       {displayText && (
-        <p className="text-sm text-foreground leading-relaxed mb-3">
+        <p className="text-sm text-foreground leading-relaxed mb-3 break-words">
           {isLong && !expanded ? displayText.slice(0, 200) + "…" : displayText}
           {isLong && (
             <button onClick={() => setExpanded(!expanded)} className="text-[#4DC820] font-bold ml-1 hover:underline text-xs">
@@ -448,13 +449,13 @@ function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (t
             <div className="border-t border-border pt-3 mt-1 space-y-2">
               {comments.length > 0 ? (
                 comments.slice(0, 3).map((c: any) => (
-                  <div key={c.id} className="flex gap-2">
+                  <div key={c.id} className="flex gap-2 min-w-0">
                     <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground flex-shrink-0">
                       {(c.user?.name || "?")[0].toUpperCase()}
                     </div>
-                    <div className="flex-1 bg-muted rounded-lg px-2.5 py-1.5">
-                      <p className="text-[10px] font-bold text-foreground">{c.user?.name || "Trader"}</p>
-                      <p className="text-xs text-foreground/80">{c.body}</p>
+                    <div className="flex-1 min-w-0 bg-muted rounded-lg px-2.5 py-1.5">
+                      <p className="text-[10px] font-bold text-foreground truncate">{c.user?.name || "Trader"}</p>
+                      <p className="text-xs text-foreground/80 break-words">{c.body}</p>
                     </div>
                   </div>
                 ))
@@ -665,29 +666,71 @@ function MixedVideoShelf({ mode, tickers }: { mode: "trending" | "for_you"; tick
     let cancelled = false;
     setLoading(true);
 
-    // Fetch general trending/discover content — mix of topics
+    // Pull videos that ACTUALLY mention one of the trending tickers via the
+    // server-side ticker filter. We round-robin through the top 5 trending
+    // symbols and merge results, so the shelf reflects what's hot today
+    // instead of "all Minority Mindset" with random badge assignments.
     const sort = mode === "trending" ? "trending" : "relevant";
-    fetchContent({ sort, page: 1 })
-      .then((data: any[]) => {
-        if (!cancelled) {
-          // Assign ticker badges from topics or title matching
-          const enriched = data.slice(0, 8).map((v: any) => {
-            const n = normalizeContentCard(v);
-            // Try to extract ticker from topics or title
-            const tickerMatch = (n.topics || []).find((t: string) =>
-              /^[A-Z]{1,5}$/.test(t) || tickers.includes(t.toUpperCase())
-            ) || tickers[Math.floor(Math.random() * Math.min(tickers.length, 3))];
-            return { ...n, badgeTicker: tickerMatch || null };
-          });
-          setVideos(enriched);
-          setLoading(false);
-        }
-      })
-      .catch(() => { if (!cancelled) setLoading(false); });
+    const topSymbols = tickers.slice(0, 5);
 
+    const loadByTicker = async () => {
+      try {
+        if (topSymbols.length === 0) {
+          // Cold start fallback — no trending tickers yet, just show top relevant.
+          const data = await fetchContent({ sort, page: 1 });
+          if (cancelled) return;
+          setVideos(data.slice(0, 8).map((v: any) => normalizeContentCard(v)));
+          return;
+        }
+
+        // Parallel fetch per top trending symbol, then dedupe.
+        const perSymbol = await Promise.all(
+          topSymbols.map(sym =>
+            fetchContent({ ticker: sym, sort, page: 1 })
+              .then(rows =>
+                rows.slice(0, 4).map((v: any) => ({
+                  ...normalizeContentCard(v),
+                  badgeTicker: sym,
+                }))
+              )
+              .catch(() => [])
+          )
+        );
+
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const merged: any[] = [];
+        for (const batch of perSymbol) {
+          for (const v of batch) {
+            if (seen.has(v.id)) continue;
+            seen.add(v.id);
+            merged.push(v);
+            if (merged.length >= 8) break;
+          }
+          if (merged.length >= 8) break;
+        }
+
+        // If nothing matched the trending tickers (possible during very thin
+        // catalogues) fall back to the generic relevance feed so the shelf
+        // never renders empty.
+        if (merged.length === 0) {
+          const data = await fetchContent({ sort, page: 1 });
+          if (cancelled) return;
+          setVideos(data.slice(0, 8).map((v: any) => normalizeContentCard(v)));
+          return;
+        }
+        setVideos(merged);
+      } catch {
+        if (!cancelled) setVideos([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadByTicker();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  }, [mode, tickers.join(",")]);
 
   if (!loading && videos.length === 0) return null;
 
@@ -761,6 +804,73 @@ function MixedVideoShelf({ mode, tickers }: { mode: "trending" | "for_you"; tick
   );
 }
 
+// ─── Followable trader row (used in Who-To-Follow lists) ──────────────────────
+function FollowableTraderRow({
+  trader,
+  colorIndex,
+}: { trader: any; colorIndex: number }) {
+  const { isAuthenticated } = useAuth();
+  const handle: string = (trader.handle || "trader").replace(/^@/, "");
+  const COLORS = ["#4DC820", "#00AEEF", "#7B2FBE", "#F79009", "#E8193C"];
+  const color = COLORS[colorIndex % COLORS.length];
+  const level = getLevel(trader.xp || 0);
+  const initials = handle.slice(0, 2).toUpperCase();
+  const [following, setFollowing] = useState<boolean>(!!trader.is_following);
+  const [busy, setBusy] = useState(false);
+
+  const handleClick = async () => {
+    if (!isAuthenticated) { toast.error("Sign in to follow"); return; }
+    if (!trader.id) { toast.error("Demo user — sign up to follow real traders"); return; }
+    if (busy) return;
+    setBusy(true);
+    const next = !following;
+    setFollowing(next);
+    try {
+      const { followUser, unfollowUser } = await import("@/lib/api");
+      if (next) await followUser(trader.id);
+      else await unfollowUser(trader.id);
+    } catch {
+      setFollowing(!next);
+      toast.error("Follow failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-0">
+      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: color }}>
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <Link href={`/traders/${handle}`}>
+            <p className="text-xs font-bold text-foreground truncate hover:underline cursor-pointer" style={{ fontFamily: "var(--font-mono)" }}>
+              @{handle}
+            </p>
+          </Link>
+          <span className="text-[8px] font-bold px-1 py-0.5 rounded-full text-white flex-shrink-0" style={{ background: level.color }}>
+            {level.name}
+          </span>
+        </div>
+        <p className="text-[10px] text-muted-foreground truncate">{trader.trading_style || "Trader"}</p>
+      </div>
+      <button
+        onClick={handleClick}
+        disabled={busy}
+        className="text-[10px] font-bold px-2 py-1 rounded-full border transition-colors flex-shrink-0 disabled:opacity-50"
+        style={{
+          borderColor: following ? "var(--border)" : "#4DC820",
+          color: following ? "var(--muted-foreground)" : "#4DC820",
+        }}
+      >
+        {following ? "Following" : "Follow"}
+      </button>
+    </div>
+  );
+}
+
+
 // ─── Discovery Sidebar ────────────────────────────────────────────────────────
 function DiscoverySidebar({ topTraders, radarTickers }: { topTraders: any[]; radarTickers: any[] }) {
   const TRENDING_TOPICS = [
@@ -793,34 +903,17 @@ function DiscoverySidebar({ topTraders, radarTickers }: { topTraders: any[]; rad
         </div>
         <div className="space-y-3">
           {(topTraders.length > 0 ? topTraders : [
-            { display_name: "Jordan Davis", trading_style: "Swing Trader", xp: 4200 },
-            { display_name: "Alex Kim", trading_style: "Day Trader", xp: 8900 },
-            { display_name: "Sam Rivera", trading_style: "Macro", xp: 12400 },
-            { display_name: "Maya Chen", trading_style: "Crypto", xp: 3100 },
-          ]).slice(0, 4).map((trader: any, i: number) => {
-            const COLORS = ["#4DC820", "#00AEEF", "#7B2FBE", "#F79009", "#E8193C"];
-            const color = COLORS[i % COLORS.length];
-            const level = getLevel(trader.xp || 0);
-            return (
-              <div key={trader.handle || i} className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: color }}>
-                  {(trader.display_name || trader.name || "T").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-foreground truncate">{trader.display_name || trader.name || "Trader"}</p>
-                    <span className="text-[8px] font-bold px-1 py-0.5 rounded-full text-white flex-shrink-0" style={{ background: level.color }}>
-                      {level.name}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground truncate">{trader.trading_style || "Trader"}</p>
-                </div>
-                <button className="text-[10px] font-bold px-2 py-1 rounded-full border border-[#4DC820] text-[#4DC820] hover:bg-[#4DC820] hover:text-white transition-colors flex-shrink-0">
-                  Follow
-                </button>
-              </div>
-            );
-          })}
+            { id: null, handle: "jdtrader",    trading_style: "Swing Trader", xp: 4200 },
+            { id: null, handle: "alphatrader", trading_style: "Day Trader",   xp: 8900 },
+            { id: null, handle: "macrotrader", trading_style: "Macro",        xp: 12400 },
+            { id: null, handle: "cryptomaya",  trading_style: "Crypto",       xp: 3100 },
+          ]).slice(0, 4).map((trader: any, i: number) => (
+            <FollowableTraderRow
+              key={trader.id || trader.handle || i}
+              trader={trader}
+              colorIndex={i}
+            />
+          ))}
         </div>
       </div>
 
@@ -946,19 +1039,33 @@ export default function Home() {
   const { data: radarData, loading: radarLoading } = useApi(fetchRadar, null);
   const { data: leaderboardData } = useApi(fetchLeaderboard, []);
 
-  // Watchlist — used for "For You" feed
-  const { data: watchlistData, refetch: refetchWatchlist } = trpc.watchlist.get.useQuery(undefined, { enabled: isAuthenticated });
-  const watchlist: string[] = watchlistData ?? [];
-  const addToWatchlist = trpc.watchlist.add.useMutation({ onSuccess: () => refetchWatchlist() });
-  const removeFromWatchlist = trpc.watchlist.remove.useMutation({ onSuccess: () => refetchWatchlist() });
+  // Watchlist — used for "For You" feed. Lives on profiles.watchlist.
+  const [watchlist, setWatchlist] = useState<string[]>([]);
+  useEffect(() => {
+    if (!isAuthenticated) { setWatchlist([]); return; }
+    let cancelled = false;
+    fetchWatchlist()
+      .then(w => { if (!cancelled) setWatchlist(w); })
+      .catch(() => { if (!cancelled) setWatchlist([]); });
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+  const addToWatchlist = {
+    mutate: ({ symbol }: { symbol: string }) => {
+      apiAddToWatchlist(symbol).then(setWatchlist).catch(() => {});
+    },
+  };
 
   const allRadarTickers = radarData
     ? [...(radarData.critical || []), ...(radarData.high_conviction || []), ...(radarData.watch || [])]
     : [];
 
-  const radarTickers = isAll
+  // OTC pink sheets / foreign ordinaries get dropped in every view, regardless
+  // of asset-class filter. Backend radar already excludes them but defend in
+  // depth for cached payloads.
+  const radarTickers = (isAll
     ? allRadarTickers
-    : allRadarTickers.filter(rt => matchesTicker(rt.symbol || ""));
+    : allRadarTickers.filter(rt => matchesTicker(rt.symbol || ""))
+  ).filter(rt => !isOtcOrForeign(rt.symbol || ""));
 
   const topTraders = Array.isArray(leaderboardData) ? leaderboardData.slice(0, 4) : [];
 
@@ -969,24 +1076,60 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allRadarTickers.length]
   );
-  const { data: eohdQuotes } = trpc.marketData.quotes.useQuery(
-    { symbols: radarSymbols },
-    { enabled: radarSymbols.length > 0, refetchInterval: 60_000, staleTime: 30_000 }
-  );
-  // Asset-class specific live data feeds
+  // Live quotes via /market/quotes (FastAPI bulk EODHD). Auto-refresh every 60s.
+  const [eohdQuotes, setEohdQuotes] = useState<any[] | null>(null);
+  useEffect(() => {
+    if (radarSymbols.length === 0) return;
+    let cancelled = false;
+    const load = () =>
+      fetchQuotes(radarSymbols.join(","))
+        .then(q => { if (!cancelled) setEohdQuotes(q); })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [radarSymbols]);
+
   const activeFilter = selected[0] ?? "all";
-  const { data: forexData } = trpc.marketData.forexQuotes.useQuery(
-    undefined,
-    { enabled: activeFilter === "forex", refetchInterval: 60_000, staleTime: 30_000 }
-  );
-  const { data: cryptoData } = trpc.marketData.cryptoQuotes.useQuery(
-    undefined,
-    { enabled: activeFilter === "crypto", refetchInterval: 60_000, staleTime: 30_000 }
-  );
-  const { data: indicesData } = trpc.marketData.indicesQuotes.useQuery(
-    undefined,
-    { enabled: activeFilter === "futures", refetchInterval: 60_000, staleTime: 30_000 }
-  );
+  const [forexData, setForexData] = useState<any[] | null>(null);
+  const [cryptoData, setCryptoData] = useState<any[] | null>(null);
+  const [indicesData, setIndicesData] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    if (activeFilter !== "forex") return;
+    let cancelled = false;
+    const load = () =>
+      fetchAssetClassQuotes("forex")
+        .then(q => { if (!cancelled) setForexData(q); })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [activeFilter]);
+
+  useEffect(() => {
+    if (activeFilter !== "crypto") return;
+    let cancelled = false;
+    const load = () =>
+      fetchAssetClassQuotes("crypto")
+        .then(q => { if (!cancelled) setCryptoData(q); })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [activeFilter]);
+
+  useEffect(() => {
+    if (activeFilter !== "futures") return;
+    let cancelled = false;
+    const load = () =>
+      fetchAssetClassQuotes("index")
+        .then(q => { if (!cancelled) setIndicesData(q); })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [activeFilter]);
   // Merge EODHD quotes into the quotes map whenever data arrives
   useEffect(() => {
     if (!eohdQuotes?.length) return;
@@ -1219,10 +1362,14 @@ export default function Home() {
         </div>
 
         {/* ── Main 2-col Layout ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        {/* `min-w-0` on both grid items is critical: CSS Grid items default to
+            min-width:auto which makes any wide child (a long comment, an
+            image without max-w, an embedded chart) blow the column past the
+            sidebar and off-screen. min-w-0 lets them shrink. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
 
           {/* Left: Community Feed */}
-          <div>
+          <div className="min-w-0">
             <div data-tour="compose-bar">
               <ComposeBar onPost={handleNewPost} />
             </div>

@@ -25,7 +25,7 @@ import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useWatchlist } from "@/contexts/WatchlistContext";
-import { trpc } from "@/lib/trpc";
+import { addToWatchlist as apiAddToWatchlist, removeFromWatchlist as apiRemoveFromWatchlist } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 // ─── XP Level System ──────────────────────────────────────────────────────────
@@ -266,27 +266,26 @@ export default function TraderProfilePage() {
   const { watchlist: localWatchlist, toggleWatch } = useWatchlist();
   const [watchlistInput, setWatchlistInput] = useState("");
 
-  const addMutation = trpc.watchlist.add.useMutation({
-    onSuccess: () => toast.success("Added to watchlist"),
-    onError: () => toast.error("Failed to add ticker"),
-  });
-  const removeMutation = trpc.watchlist.remove.useMutation({
-    onSuccess: () => toast.success("Removed from watchlist"),
-    onError: () => toast.error("Failed to remove ticker"),
-  });
-
   const handleAddTicker = () => {
     const sym = watchlistInput.trim().toUpperCase();
     if (!sym) return;
     if (localWatchlist.includes(sym)) { toast.info(`${sym} is already in your watchlist`); return; }
     toggleWatch(sym);
-    if (isAuthenticated) addMutation.mutate({ symbol: sym });
+    if (isAuthenticated) {
+      apiAddToWatchlist(sym)
+        .then(() => toast.success("Added to watchlist"))
+        .catch(() => toast.error("Failed to add ticker"));
+    }
     setWatchlistInput("");
   };
 
   const handleRemoveTicker = (sym: string) => {
     toggleWatch(sym);
-    if (isAuthenticated) removeMutation.mutate({ symbol: sym });
+    if (isAuthenticated) {
+      apiRemoveFromWatchlist(sym)
+        .then(() => toast.success("Removed from watchlist"))
+        .catch(() => toast.error("Failed to remove ticker"));
+    }
   };
 
   // ── Fetch profile ──────────────────────────────────────────────────────────

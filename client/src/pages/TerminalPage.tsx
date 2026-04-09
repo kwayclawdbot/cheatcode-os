@@ -19,7 +19,7 @@ import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { CheatCodeChart } from "@/components/CheatCodeChart";
 import { useChatChannel } from "@/hooks/useChatChannel";
 import { useAuth } from "@/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import { fetchQuotes } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MarketMode = "stocks" | "futures" | "forex" | "crypto";
@@ -424,15 +424,22 @@ function WatchlistPanel({ mode, onSelectSymbol, activeSymbol }: {
   // Extract raw symbol list for this mode
   const symbolList = config.watchlist.map(w => w.symbol);
 
-  // Fetch live prices via tRPC → EODHD (server-side, API key stays hidden)
-  const { data: quotesData, isLoading: quotesLoading } = trpc.marketData.quotes.useQuery(
-    { symbols: symbolList },
-    {
-      refetchInterval: 30_000, // refresh every 30s
-      staleTime: 25_000,
-      retry: 2,
-    }
-  );
+  // Fetch live prices via /market/quotes (FastAPI bulk EODHD).
+  const [quotesData, setQuotesData] = useState<any[] | null>(null);
+  const [quotesLoading, setQuotesLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      setQuotesLoading(true);
+      fetchQuotes(symbolList.join(","))
+        .then(q => { if (!cancelled) { setQuotesData(q); setQuotesLoading(false); } })
+        .catch(() => { if (!cancelled) setQuotesLoading(false); });
+    };
+    load();
+    const t = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolList.join(",")]);
 
   // Merge live quotes into watchlist items
   const liveWatchlist = (() => {

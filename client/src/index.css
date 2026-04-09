@@ -189,6 +189,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Belt-and-braces against any descendant accidentally overflowing the
+   * viewport horizontally (long ticker tables, fixed-width chart embeds,
+   * tickers with overlong names, etc.). `clip` is preferred over `hidden`
+   * because it doesn't create a scroll-container and so doesn't break
+   * `position: sticky` further up the tree. */
+  html, body {
+    overflow-x: clip;
+    max-width: 100%;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);

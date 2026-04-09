@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { trpc } from "@/lib/trpc";
 
 export type ChatMsg = {
   id?: number;
@@ -15,33 +14,24 @@ export type ChatMsg = {
 };
 
 /**
- * Real-time chat channel hook backed by:
- * 1. tRPC `chat.history` for initial load of last 50 messages
- * 2. Supabase Realtime Broadcast for instant delivery of new messages
- * 3. tRPC `chat.send` for persisting messages to the DB
+ * Real-time chat channel hook backed by Supabase Realtime broadcast.
+ *
+ * Persistence (load-history + save-on-send) is intentionally not wired up
+ * yet — the previous tRPC-based implementation pointed at a backend that
+ * was never deployed. Until /api/v1/chat endpoints exist, chat is ephemeral:
+ * messages broadcast in real time within an active session and disappear
+ * on refresh. The UI consumers don't need to change — `messages` just
+ * starts empty.
  */
 export function useChatChannel(channelId: string) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [connected, setConnected] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Load history via tRPC
-  const { data: history, isLoading } = trpc.chat.history.useQuery(
-    { channelId },
-    { enabled: !!channelId, staleTime: 0 }
-  );
-
-  useEffect(() => {
-    if (history) {
-      setMessages(history as ChatMsg[]);
-    }
-  }, [history]);
-
   // Subscribe to Supabase Realtime broadcast for this channel
   useEffect(() => {
     if (!channelId) return;
 
-    // Clean up previous subscription
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
@@ -54,7 +44,6 @@ export function useChatChannel(channelId: string) {
     ch.on("broadcast", { event: "message" }, (payload) => {
       const msg = payload.payload as ChatMsg;
       setMessages((prev) => {
-        // Deduplicate by body + username + approximate time
         const isDuplicate = prev.some(
           (m) =>
             m.body === msg.body &&
@@ -81,9 +70,6 @@ export function useChatChannel(channelId: string) {
     };
   }, [channelId]);
 
-  // Send mutation
-  const sendMutation = trpc.chat.send.useMutation();
-
   const sendMessage = useCallback(
     async (params: {
       body: string;
@@ -96,7 +82,7 @@ export function useChatChannel(channelId: string) {
 
       const msg: ChatMsg = {
         channelId,
-        userId: 0, // will be set server-side
+        userId: 0,
         username: params.username,
         avatarInitials: params.avatarInitials,
         avatarColor: params.avatarColor,
@@ -105,25 +91,14 @@ export function useChatChannel(channelId: string) {
         createdAt: new Date(),
       };
 
-      // Broadcast immediately for real-time delivery
       channelRef.current.send({
         type: "broadcast",
         event: "message",
         payload: msg,
       });
-
-      // Persist to DB (fire and forget)
-      sendMutation.mutate({
-        channelId,
-        body: params.body,
-        username: params.username,
-        avatarInitials: params.avatarInitials,
-        avatarColor: params.avatarColor,
-        badge: params.badge,
-      });
     },
-    [channelId, sendMutation]
+    [channelId]
   );
 
-  return { messages, connected, isLoading, sendMessage };
+  return { messages, connected, isLoading: false, sendMessage };
 }

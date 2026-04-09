@@ -164,7 +164,7 @@ function KaiBubble({
       left: "50%",
       transform: "translate(-50%, -50%)",
       maxWidth: 360,
-      width: "calc(100vw - 48px)",
+      width: "calc(100% - 48px)",
     };
   } else {
     const PAD = 16;

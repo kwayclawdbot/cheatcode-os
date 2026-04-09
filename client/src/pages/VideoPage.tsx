@@ -14,9 +14,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { ScoreRing } from "@/components/shared/ScoreRing";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
-import { fetchContentDetail, fetchContent, normalizeContentCard, trackEvent } from "@/lib/api";
+import { fetchContentDetail, fetchContent, normalizeContentCard, trackEvent, fetchContentByTicker } from "@/lib/api";
 import { getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
-import { trpc } from "@/lib/trpc";
 import { useVideoComments } from "@/hooks/useVideoComments";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { getLoginUrl } from "@/const";
@@ -307,13 +306,20 @@ function MoreOnTickerShelf({
   // Pick the primary ticker (or first ticker) to drive the shelf
   const primaryTicker = tickers.find(t => t.is_primary)?.ticker || tickers[0]?.ticker;
 
-  const { data: tickerVideos, isLoading } = trpc.ingest.getVideosByTicker.useQuery(
-    { symbol: primaryTicker ?? "" },
-    { enabled: !!primaryTicker, staleTime: 5 * 60 * 1000, retry: 1 }
-  );
+  const [tickerVideosRaw, setTickerVideosRaw] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  useEffect(() => {
+    if (!primaryTicker) return;
+    let cancelled = false;
+    setIsLoading(true);
+    fetchContentByTicker(primaryTicker)
+      .then(rows => { if (!cancelled) setTickerVideosRaw(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setTickerVideosRaw([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [primaryTicker]);
 
-  // Filter out the current video — response is { symbol, videos: [...], source }
-  const videos = (tickerVideos?.videos ?? []).filter((v: any) => v.id !== currentVideoId).slice(0, 6);
+  const videos = tickerVideosRaw.filter((v: any) => v.id !== currentVideoId).slice(0, 6);
 
   if (!primaryTicker) return null;
 
@@ -417,7 +423,9 @@ function MoreOnTickerShelf({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function VideoPage() {
+import ErrorBoundary from "@/components/ErrorBoundary";
+
+function VideoPageInner() {
   const { id } = useParams<{ id: string }>();
   const [playing, setPlaying] = useState(false);
   const [video, setVideo] = useState<any>(null);
@@ -435,13 +443,28 @@ export default function VideoPage() {
     trackEvent("video_view", { content_id: id });
     fetchContentDetail(id)
       .then((detail) => {
+      try {
         const n = normalizeContentCard(detail);
         const slug = n.creator_slug || "";
+        // Defensive coercion: any backend field may be null/undefined for
+        // older rows. Filter to strings and dicts so the React render tree
+        // never blows up on a typo or a missing column.
+        const safeTopics = (Array.isArray(n.topics) ? n.topics : [])
+          .filter((t): t is string => typeof t === "string" && t.length > 0);
+        const safeTickers = Array.isArray(detail.tickers)
+          ? detail.tickers.filter((t: any) => t && typeof t.ticker === "string")
+          : [];
+        const safeInsights = Array.isArray(detail.key_insights)
+          ? detail.key_insights.filter((k: any) => k && k.insight)
+          : [];
+        const safeTimestamps = Array.isArray(detail.timestamps)
+          ? detail.timestamps.filter((ts: any) => ts && (ts.label || ts.title))
+          : [];
         setVideo({
           id: n.id,
           type: n.content_type,
           youtubeId: n.youtubeId || "",
-          title: n.title,
+          title: n.title || "Untitled",
           creatorId: slug,
           creator: {
             name: n.creator_name || "Unknown",
@@ -452,19 +475,22 @@ export default function VideoPage() {
           thumbnail: n.thumbnailUrl || "",
           duration: n.durationLabel || "",
           quickTake: detail.quick_take || "",
-          tags: n.topics.map((t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
+          tags: safeTopics.map((t) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())),
           relevanceBadge: n.relevanceLabel || "Watch",
-          tickers: detail.tickers || [],
-          keyInsights: detail.key_insights || [],
-          timestamps: detail.timestamps || [],
+          tickers: safeTickers,
+          keyInsights: safeInsights,
+          timestamps: safeTimestamps,
           externalUrl: n.external_url,
           description: detail.description || "",
-          convergenceScore: Math.round(n.relevance_score * 100),
+          convergenceScore: Math.round((n.relevance_score || 0) * 100),
           publishedAt: n.publishedLabel || "",
           skillLevel: (detail as any).skill_level || "intermediate",
           contentType: (detail as any).content_type || "trading_education",
           pillBadges: (detail as any).pill_badges || [],
         });
+      } catch (err) {
+        console.error("[VideoPage] failed to normalise content detail", err);
+      }
         if (detail.related?.length) {
           setRelated(detail.related.map((r) => {
             const rn = normalizeContentCard(r);
@@ -521,17 +547,10 @@ export default function VideoPage() {
       .catch(() => {});
   }, [related.length, loading, id]);
 
-  // ── LLM enrichment via tRPC (on-demand if Railway data is sparse) ──────────
-  const { data: enrichment, isLoading: enrichLoading } = trpc.ingest.getVideoEnrichment.useQuery(
-    { contentId },
-    {
-      enabled: !!contentId,
-      staleTime: 5 * 60 * 1000,
-      retry: 1,
-    }
-  );
+  // LLM enrichment endpoint never shipped; use what /content/{id} already returns.
+  const enrichment: any = null;
+  const enrichLoading = false;
 
-  // Merge enrichment over Railway data (enrichment wins if present)
   const quickTake = enrichment?.quickTake || video?.quickTake || "";
   const keyInsights: Array<{ insight: string; category: string }> =
     enrichment?.keyInsights?.length ? enrichment.keyInsights : (video?.keyInsights || []);
@@ -1049,5 +1068,16 @@ export default function VideoPage() {
 
       <KaiChat />
     </div>
+  );
+}
+
+// Wrap VideoPage in an error boundary so any render crash surfaces a
+// graceful fallback instead of a white screen. Real error is logged to
+// console + visible in the browser devtools for diagnosis.
+export default function VideoPage() {
+  return (
+    <ErrorBoundary>
+      <VideoPageInner />
+    </ErrorBoundary>
   );
 }

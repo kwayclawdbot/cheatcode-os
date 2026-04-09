@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { trpc } from "@/lib/trpc";
 
 export type VideoCommentMsg = {
   id: number;
@@ -16,29 +15,18 @@ export type VideoCommentMsg = {
 };
 
 /**
- * Real-time video comments hook backed by:
- * 1. tRPC `videoComments.list` for initial load
- * 2. Supabase Realtime Broadcast for instant delivery of new comments
- * 3. tRPC `videoComments.post` for persisting to DB
+ * Real-time video-comments hook backed by Supabase Realtime broadcast.
+ *
+ * Persistence (load history + post/like/delete via DB) is not yet wired —
+ * the previous tRPC implementation pointed at a backend that was never
+ * deployed. Until /api/v1/videos/{id}/comments endpoints exist, comments
+ * are ephemeral within a session and disappear on refresh.
  */
 export function useVideoComments(videoId: string) {
   const [comments, setComments] = useState<VideoCommentMsg[]>([]);
   const [connected, setConnected] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Load history via tRPC
-  const { data: history, isLoading } = trpc.videoComments.list.useQuery(
-    { videoId },
-    { enabled: !!videoId, staleTime: 0 }
-  );
-
-  useEffect(() => {
-    if (history) {
-      setComments(history as VideoCommentMsg[]);
-    }
-  }, [history]);
-
-  // Subscribe to Supabase Realtime broadcast for this video's comments
   useEffect(() => {
     if (!videoId) return;
     if (channelRef.current) {
@@ -74,11 +62,6 @@ export function useVideoComments(videoId: string) {
     };
   }, [videoId]);
 
-  // Post mutation
-  const postMutation = trpc.videoComments.post.useMutation();
-  const likeMutation = trpc.videoComments.like.useMutation();
-  const deleteMutation = trpc.videoComments.delete.useMutation();
-
   const postComment = useCallback(
     async (params: {
       body: string;
@@ -89,7 +72,7 @@ export function useVideoComments(videoId: string) {
     }) => {
       if (!params.body.trim() || !channelRef.current) return;
       const optimistic: VideoCommentMsg = {
-        id: Date.now(), // temporary id
+        id: Date.now(),
         videoId,
         userId: 0,
         username: params.username,
@@ -100,49 +83,34 @@ export function useVideoComments(videoId: string) {
         likeCount: 0,
         createdAt: new Date(),
       };
-      // Broadcast immediately
       channelRef.current.send({
         type: "broadcast",
         event: "comment",
         payload: optimistic,
       });
-      // Persist to DB
-      postMutation.mutate({
-        videoId,
-        body: params.body,
-        replyToId: params.replyToId,
-      });
     },
-    [videoId, postMutation]
+    [videoId]
   );
 
-  const likeComment = useCallback(
-    (commentId: number) => {
-      setComments((prev) =>
-        prev.map((c) =>
-          c.id === commentId ? { ...c, likeCount: c.likeCount + 1 } : c
-        )
-      );
-      likeMutation.mutate({ commentId });
-    },
-    [likeMutation]
-  );
+  const likeComment = useCallback((commentId: number) => {
+    setComments((prev) =>
+      prev.map((c) =>
+        c.id === commentId ? { ...c, likeCount: c.likeCount + 1 } : c
+      )
+    );
+  }, []);
 
-  const deleteComment = useCallback(
-    (commentId: number) => {
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-      deleteMutation.mutate({ commentId });
-    },
-    [deleteMutation]
-  );
+  const deleteComment = useCallback((commentId: number) => {
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+  }, []);
 
   return {
     comments,
     connected,
-    isLoading,
+    isLoading: false,
     postComment,
     likeComment,
     deleteComment,
-    isPosting: postMutation.isPending,
+    isPosting: false,
   };
 }

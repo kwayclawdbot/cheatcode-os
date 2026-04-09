@@ -95,30 +95,46 @@ export interface ContentCard {
 /**
  * Normalizes a raw ContentCard from the API into a display-ready card.
  * Extracts YouTube ID, generates thumbnail URL, formats duration and date.
+ * Defends against missing array fields (`topics`, `themes`) and missing
+ * scalars so consumers can call `.map()` / arithmetic without null checks.
  * Always call this before rendering API content.
  */
 export function normalizeContentCard(card: ContentCard): ContentCard {
-  const youtubeId = extractYoutubeId(card.external_url);
-  const thumbnailUrl = getYoutubeThumbnail(youtubeId, card.thumbnail_url);
-  const durationLabel = card.duration_seconds
-    ? `${Math.floor(card.duration_seconds / 60)}:${String(card.duration_seconds % 60).padStart(2, "0")}`
+  const safeCard: ContentCard = {
+    ...card,
+    // Filter out null/undefined entries — some legacy content rows have
+    // nulls inside the topics/themes arrays which crash any downstream
+    // `.map(t => t.replace(...))` consumer.
+    topics: Array.isArray(card.topics)
+      ? card.topics.filter((t): t is string => typeof t === "string" && t.length > 0)
+      : [],
+    themes: Array.isArray(card.themes)
+      ? card.themes.filter((t): t is string => typeof t === "string" && t.length > 0)
+      : [],
+    relevance_score: typeof card.relevance_score === "number" ? card.relevance_score : 0,
+    skill_level: card.skill_level || "intermediate",
+  };
+  const youtubeId = extractYoutubeId(safeCard.external_url);
+  const thumbnailUrl = getYoutubeThumbnail(youtubeId, safeCard.thumbnail_url);
+  const durationLabel = safeCard.duration_seconds
+    ? `${Math.floor(safeCard.duration_seconds / 60)}:${String(safeCard.duration_seconds % 60).padStart(2, "0")}`
     : "";
-  const publishedLabel = card.published_at
+  const publishedLabel = safeCard.published_at
     ? (() => {
-        const diff = Date.now() - new Date(card.published_at).getTime();
+        const diff = Date.now() - new Date(safeCard.published_at).getTime();
         const h = Math.floor(diff / 3600000);
         const d = Math.floor(diff / 86400000);
         if (h < 1) return "Just now";
         if (h < 24) return `${h}h ago`;
         if (d === 1) return "Yesterday";
         if (d < 7) return `${d}d ago`;
-        return new Date(card.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return new Date(safeCard.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
       })()
     : "";
   const relevanceLabel =
-    card.relevance_score >= 0.8 ? "Critical" :
-    card.relevance_score >= 0.6 ? "High Relevance" : "Watch";
-  return { ...card, youtubeId, thumbnailUrl, durationLabel, publishedLabel, relevanceLabel };
+    safeCard.relevance_score >= 0.8 ? "Critical" :
+    safeCard.relevance_score >= 0.6 ? "High Relevance" : "Watch";
+  return { ...safeCard, youtubeId, thumbnailUrl, durationLabel, publishedLabel, relevanceLabel };
 }
 
 export interface ContentDetail extends ContentCard {
@@ -143,6 +159,8 @@ export async function fetchContent(params?: {
   theme?: string;
   skill_level?: string;
   creator_slug?: string;
+  asset_class?: string;
+  ticker?: string;
   sort?: string;
   page?: number;
 }): Promise<ContentCard[]> {
@@ -270,6 +288,70 @@ export async function fetchTheme(slug: string): Promise<any> {
   return apiFetch(`/intelligence/themes/${slug}`);
 }
 
+// ── Ticker sentiment + votes ────────────────────────────────────────────────
+
+export interface TickerSentiment {
+  symbol: string;
+  score: number;          // -1..1
+  label: "bullish" | "bearish" | "neutral";
+  confidence: "high" | "medium" | "low";
+  votes:   { bullish: number; bearish: number; total: number };
+  feed:    { bullish: number; bearish: number; neutral: number };
+  content: { bullish: number; bearish: number; neutral: number; mixed: number };
+  brain:   { direction: string | null; score: number | null };
+  sources_present: number;
+}
+
+export interface TickerVotes {
+  symbol: string;
+  bullish: number;
+  bearish: number;
+  total: number;
+  bullish_pct: number;
+  bearish_pct: number;
+  my_vote: "bullish" | "bearish" | null;
+}
+
+export interface TickerAbout {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  market_cap: number | null;
+  market_cap_tier: string | null;
+  asset_class: string;
+  description: string | null;
+  website: string | null;
+  country: string | null;
+  employees: number | null;
+}
+
+export async function fetchTickerAbout(symbol: string): Promise<TickerAbout> {
+  return apiFetch(`/intelligence/ticker/${symbol}/about`);
+}
+
+export async function fetchTickerSentiment(symbol: string): Promise<TickerSentiment> {
+  return apiFetch(`/intelligence/ticker/${symbol}/sentiment`);
+}
+
+export async function fetchTickerVotes(symbol: string): Promise<TickerVotes> {
+  return apiFetch(`/intelligence/ticker/${symbol}/votes`);
+}
+
+export async function castTickerVote(
+  symbol: string,
+  direction: "bullish" | "bearish",
+): Promise<TickerVotes> {
+  return apiFetch(`/intelligence/ticker/${symbol}/vote`, {
+    method: "POST",
+    body: JSON.stringify({ direction }),
+  });
+}
+
+export async function clearTickerVote(symbol: string): Promise<TickerVotes> {
+  return apiFetch(`/intelligence/ticker/${symbol}/vote`, { method: "DELETE" });
+}
+
 // ── Kai Chat ────────────────────────────────────────────────────────────────
 
 export interface KaiChatResponse {
@@ -353,9 +435,10 @@ if (typeof window !== "undefined") {
 export async function fetchFeed(
   tab = "discover",
   page = 1,
-  options?: { hideAgents?: boolean },
+  options?: { ticker?: string; hideAgents?: boolean },
 ): Promise<any[]> {
   const qs = new URLSearchParams({ tab, page: String(page) });
+  if (options?.ticker) qs.set("ticker", options.ticker);
   if (options?.hideAgents) qs.set("hide_agents", "true");
   return apiFetch(`/social/feed?${qs.toString()}`);
 }
@@ -484,7 +567,20 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
   return apiFetch(`/market/quote/${symbol}`);
 }
 
-// ── Trending Tickers ───────────────────────────────���───────────────────────
+// Top symbols per asset class for the home dashboard. Backend /market/quotes
+// uses bulk EODHD calls (~50/day total) so passing extra symbols is free.
+const ASSET_CLASS_SYMBOLS: Record<"forex" | "crypto" | "index", string[]> = {
+  forex:  ["EURUSD", "GBPUSD", "USDJPY", "USDCAD", "AUDUSD", "USDCHF", "NZDUSD"],
+  crypto: ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "LINK", "MATIC"],
+  index:  ["SPY", "QQQ", "DIA", "IWM", "VIX"],
+};
+
+export async function fetchAssetClassQuotes(
+  assetClass: "forex" | "crypto" | "index",
+): Promise<MarketQuote[]> {
+  const symbols = ASSET_CLASS_SYMBOLS[assetClass];
+  return fetchQuotes(symbols.join(","));
+}
 
 export async function fetchTrendingTickers(
   assetClass?: string,
@@ -494,6 +590,30 @@ export async function fetchTrendingTickers(
   if (assetClass) params.set("asset_class", assetClass);
   params.set("limit", String(limit));
   return apiFetch(`/market/trending?${params}`);
+}
+
+// ── Watchlist (lives on profiles.watchlist via /profile/me) ─────────────────
+
+export async function fetchWatchlist(): Promise<string[]> {
+  const profile = await fetchMyProfile();
+  return Array.isArray(profile?.watchlist) ? profile.watchlist : [];
+}
+
+export async function addToWatchlist(symbol: string): Promise<string[]> {
+  const current = await fetchWatchlist();
+  const upper = symbol.toUpperCase();
+  if (current.includes(upper)) return current;
+  const next = [...current, upper];
+  await updateMyProfile({ watchlist: next });
+  return next;
+}
+
+export async function removeFromWatchlist(symbol: string): Promise<string[]> {
+  const current = await fetchWatchlist();
+  const upper = symbol.toUpperCase();
+  const next = current.filter((s) => s !== upper);
+  await updateMyProfile({ watchlist: next });
+  return next;
 }
 
 // ── CheatCode Chart ─────────────────────────────────────────────────────────

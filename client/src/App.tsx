@@ -25,7 +25,8 @@ import { WatchlistProvider } from "./contexts/WatchlistContext";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
 import { useAuth } from "@/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import { fetchWatchlist } from "@/lib/api";
+import { useApi } from "@/hooks/useApi";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -60,7 +61,7 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
  * Redirect new authenticated users to onboarding if they haven't completed it.
  * Uses two signals:
  * 1. localStorage flag `cc-onboarding-complete` (set by OnboardingPage on finish)
- * 2. tRPC watchlist.get — if user has zero watchlist entries, they're likely new
+ * 2. /profile/me watchlist — if user has zero watchlist entries, they're likely new
  */
 function NewUserRedirect() {
   const { isAuthenticated, loading } = useAuth();
@@ -68,9 +69,10 @@ function NewUserRedirect() {
 
   // Only query watchlist if authenticated and not already on onboarding/auth
   const skip = !isAuthenticated || loading || location.startsWith("/auth") || location === "/onboarding";
-  const { data: watchlist, isLoading: watchlistLoading } = trpc.watchlist.get.useQuery(
-    undefined,
-    { enabled: !skip, retry: false }
+  const { data: watchlist, loading: watchlistLoading } = useApi<string[]>(
+    () => (skip ? Promise.resolve([] as string[]) : fetchWatchlist()),
+    [],
+    [skip],
   );
 
   useEffect(() => {
@@ -83,13 +85,11 @@ function NewUserRedirect() {
     if (done) return;
 
     // Secondary: if user has no watchlist entries, they haven't onboarded
-    if (watchlist !== undefined && watchlist.length === 0) {
-      navigate("/onboarding");
-    } else if (watchlist === undefined) {
-      // Fallback: no data yet, redirect to onboarding to be safe
+    if (skip) return;
+    if (Array.isArray(watchlist) && watchlist.length === 0) {
       navigate("/onboarding");
     }
-  }, [isAuthenticated, loading, location, navigate, watchlist, watchlistLoading]);
+  }, [isAuthenticated, loading, location, navigate, watchlist, watchlistLoading, skip]);
 
   return null;
 }

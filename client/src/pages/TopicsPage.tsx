@@ -11,6 +11,7 @@ import { KaiChat } from "@/components/kai/KaiChat";
 import { fetchCreators, fetchContent, normalizeContentCard, fetchThemes } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { syncCreatorRegistry, getCreatorAvatar, getCreatorColor } from "@/lib/creatorRegistry";
+import { useAssetClass } from "@/contexts/AssetClassContext";
 
 // ─── Static topic grid (browse categories) ────────────────────────────────────
 const TOPIC_GRID = [
@@ -18,11 +19,18 @@ const TOPIC_GRID = [
   { id: "options", label: "Options", icon: "⚡", color: "#EFF8FF" },
   { id: "swing-trading", label: "Swing Trading", icon: "🎯", color: "#FFFAEB" },
   { id: "day-trading", label: "Day Trading", icon: "⏱️", color: "#FEF3F2" },
+  { id: "scalping", label: "Scalping", icon: "⚡", color: "#FFF1F2" },
   { id: "macro", label: "Macro", icon: "🌍", color: "#F5F3FF" },
   { id: "sectors", label: "Sectors", icon: "🏭", color: "#FFF7ED" },
-  { id: "crypto", label: "Crypto", icon: "₿", color: "#ECFDF3" },
+  { id: "earnings", label: "Earnings", icon: "💼", color: "#ECFDF3" },
+  { id: "crypto", label: "Crypto", icon: "₿", color: "#FFF7ED" },
+  { id: "forex", label: "Forex", icon: "💱", color: "#F5F3FF" },
+  { id: "futures", label: "Futures", icon: "📊", color: "#FEF3F2" },
   { id: "fundamentals", label: "Fundamentals", icon: "📊", color: "#EFF8FF" },
+  { id: "value-investing", label: "Value Investing", icon: "💎", color: "#ECFDF3" },
+  { id: "growth-investing", label: "Growth", icon: "🚀", color: "#FFFAEB" },
   { id: "psychology", label: "Psychology", icon: "🧠", color: "#FFFAEB" },
+  { id: "risk-management", label: "Risk Management", icon: "🛡️", color: "#EFF8FF" },
 ];
 
 const TABS = [
@@ -52,7 +60,15 @@ const SKILL_LEVELS = [
 
 // ─── Topics Tab ────────────────────────────────────────────────────────────────
 function TopicsTab() {
-  const { data: rawContent } = useApi(() => fetchContent({ sort: "relevance", page: 1 }), []);
+  // Apply the global asset class filter so the Watch page respects the
+  // toggle in the nav. When "All" is selected we don't pass it through.
+  const { selected: assetSelected, isAll: assetIsAll } = useAssetClass();
+  const assetClassParam = !assetIsAll && assetSelected.length === 1 ? assetSelected[0] : undefined;
+  const { data: rawContent } = useApi(
+    () => fetchContent({ sort: "relevance", page: 1, asset_class: assetClassParam }),
+    [],
+    [assetClassParam],
+  );
 
   const content = (rawContent || []).map((c) => {
     const n = normalizeContentCard(c);
@@ -346,7 +362,9 @@ function SkillTab() {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function TopicsPage() {
-  const [activeTab, setActiveTab] = useState("creators");
+  // Watch defaults to "By Topic" — was "creators" but the user found that
+  // confusing because creators don't surface what the video is *about*.
+  const [activeTab, setActiveTab] = useState("topics");
 
   return (
     <div className="min-h-screen bg-background">

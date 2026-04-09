@@ -12,7 +12,20 @@
  */
 import { useState, useMemo } from "react";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
-import { trpc } from "@/lib/trpc";
+
+// The previous tRPC ingest router was never deployed. These stubs keep the
+// admin page rendering but every action surfaces a clear "not implemented"
+// message. Replace each one with a real /api/v1/admin/ingest/* call when
+// the backend ships those endpoints.
+const _notImplemented = (name: string) => async () => {
+  console.warn(`[AdminIngest] ${name} is not yet implemented in the FastAPI backend.`);
+  throw new Error(`${name} is not yet implemented`);
+};
+const _stubMutation = (name: string) => ({
+  mutate: () => { _notImplemented(name)().catch(() => {}); },
+  mutateAsync: _notImplemented(name) as (...args: any[]) => Promise<any>,
+  isPending: false,
+});
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -236,15 +249,14 @@ export default function AdminIngestPage() {
     maxResults: 20,
   }), [selectedNiche, customQuery]);
 
-  const { data: searchData, isLoading: searchLoading, refetch: refetchSearch } = trpc.ingest.searchByNiche.useQuery(
-    searchInput,
-    { enabled: searchEnabled, staleTime: 60_000 }
-  );
+  const searchData: any = undefined;
+  const searchLoading = false;
+  const refetchSearch = () => {};
 
-  const bulkAnalyseMutation = trpc.ingest.bulkAnalyse.useMutation();
-  const submitVideoMutation = trpc.ingest.submitVideo.useMutation();
-  const analyseVideoMutation = trpc.ingest.analyseVideo.useMutation();
-  const runAutoIngestMutation = trpc.ingest.runAutoIngest.useMutation();
+  const bulkAnalyseMutation = _stubMutation("bulkAnalyse");
+  const submitVideoMutation = _stubMutation("submitVideo");
+  const analyseVideoMutation = _stubMutation("analyseVideo");
+  const runAutoIngestMutation = _stubMutation("runAutoIngest");
   const [autoIngestResult, setAutoIngestResult] = useState<{ totalSubmitted: number; totalSearched: number; summaries: Array<{ niche: string; searched: number; submitted: number; skipped: number; errors: number }> } | null>(null);
 
   const handleRunAutoIngest = async () => {
