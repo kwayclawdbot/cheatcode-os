@@ -27,6 +27,7 @@ import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   fetchFeed, fetchRadar, fetchLeaderboard, fetchQuotes, fetchContent,
+  fetchTrendingTickers,
   likePost, repostPost, bookmarkPost, createPost, createComment, fetchComments, normalizeContentCard,
 } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
@@ -67,18 +68,8 @@ interface TickerSocialCard {
   top_traders: { name: string; initials: string; color: string }[];
 }
 
-const TRENDING_TICKERS: TickerSocialCard[] = [
-  { symbol: "NVDA", price: 875.40, change_pct: 2.34, bullish_pct: 78, post_count: 142, top_traders: [{ name: "Alex Kim", initials: "AK", color: "#00AEEF" }, { name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
-  { symbol: "TSLA", price: 172.80, change_pct: -1.82, bullish_pct: 41, post_count: 98, top_traders: [{ name: "Sam Rivera", initials: "SR", color: "#7B2FBE" }, { name: "Maya Chen", initials: "MC", color: "#F79009" }] },
-  { symbol: "SPY",  price: 520.15, change_pct: 0.47, bullish_pct: 62, post_count: 87, top_traders: [{ name: "Derek Walsh", initials: "DW", color: "#E8193C" }] },
-  { symbol: "AAPL", price: 189.30, change_pct: 0.91, bullish_pct: 71, post_count: 76, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
-  { symbol: "AMD",  price: 158.60, change_pct: 3.12, bullish_pct: 84, post_count: 64, top_traders: [{ name: "Maya Chen", initials: "MC", color: "#F79009" }] },
-  { symbol: "QQQ",  price: 444.20, change_pct: 0.60, bullish_pct: 67, post_count: 55, top_traders: [{ name: "Derek Walsh", initials: "DW", color: "#E8193C" }] },
-  { symbol: "META", price: 512.70, change_pct: 1.45, bullish_pct: 73, post_count: 48, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
-  { symbol: "BTC",  price: 68420,  change_pct: 2.18, bullish_pct: 81, post_count: 93, top_traders: [{ name: "Maya Chen", initials: "MC", color: "#F79009" }] },
-  { symbol: "PLTR", price: 24.50,  change_pct: 4.21, bullish_pct: 89, post_count: 41, top_traders: [{ name: "Jordan Davis", initials: "JD", color: "#4DC820" }] },
-  { symbol: "MSFT", price: 415.80, change_pct: 0.33, bullish_pct: 69, post_count: 38, top_traders: [{ name: "Sam Rivera", initials: "SR", color: "#7B2FBE" }] },
-];
+// Live trending tickers fetched from /market/trending (updated every 15 min).
+// No more hardcoded fallback — the rail shows a loading skeleton until data arrives.
 
 // ─── Gradient Sentiment Bar ───────────────────────────────────────────────────
 // Bullish: volt green → teal → cyan (energetic, electric)
@@ -929,6 +920,29 @@ export default function Home() {
   // Live quotes for ticker rail
   const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({})
 
+  // Live trending tickers from /market/trending — polls every 2 min
+  const [liveTrending, setLiveTrending] = useState<TickerSocialCard[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetchTrendingTickers(undefined, 15)
+        .then(res => {
+          if (cancelled || !res?.tickers?.length) return;
+          setLiveTrending(res.tickers.map((t: any) => ({
+            symbol: t.symbol,
+            price: t.last_price ?? 0,
+            change_pct: t.price_change_pct ?? 0,
+            bullish_pct: t.direction === "bullish" ? 70 : t.direction === "bearish" ? 30 : 50,
+            post_count: (t.social_mentions_24h ?? 0) + (t.social_comments_24h ?? 0),
+            top_traders: [],
+          })));
+        })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 120_000); // 2 min
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
   const { data: radarData, loading: radarLoading } = useApi(fetchRadar, null);
   const { data: leaderboardData } = useApi(fetchLeaderboard, []);
 
@@ -1084,7 +1098,7 @@ export default function Home() {
   ];
 
   // Ticker symbols for video shelf badge hints
-  const tickerSymbols = (radarTickers.length > 0 ? radarTickers : TRENDING_TICKERS)
+  const tickerSymbols = (radarTickers.length > 0 ? radarTickers : liveTrending)
     .slice(0, 8)
     .map((t: any) => t.symbol || t.ticker || "");
 
@@ -1121,12 +1135,6 @@ export default function Home() {
             className="flex gap-3 overflow-x-auto pb-2"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {/* Loading skeleton — only when stocks/all and radar not loaded yet */}
-            {isAll && !radarData && (
-              Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
-              ))
-            )}
             {/* Forex filter — live EODHD forex pairs */}
             {activeFilter === "forex" && (
               (forexData?.length
@@ -1172,33 +1180,39 @@ export default function Home() {
                   ))
               )
             )}
-            {/* Stocks filter or All Markets — radar tickers with live quotes */}
-            {(isAll || activeFilter === "stocks") && radarData && (
-              (radarTickers.length > 0
-                ? radarTickers.map((rt: any) => {
-                    const q = quotes[rt.symbol];
-                    return (
-                      <TickerSocialCardItem
-                        key={rt.symbol}
-                        ticker={{
-                          symbol: rt.symbol,
-                          price: q?.price ?? 0,
-                          change_pct: q?.change_pct ?? 0,
-                          bullish_pct: rt.direction === 'bullish' ? Math.round(60 + Math.random() * 25) : rt.direction === 'bearish' ? Math.round(15 + Math.random() * 30) : 50,
-                          post_count: Math.round((rt.score ?? 50) * 1.5),
-                          top_traders: [],
-                        }}
-                        onClick={() => handleTickerClick(rt.symbol)}
-                      />
-                    );
-                  })
-                : <div className="flex-shrink-0 flex items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-4 min-w-[260px]">
-                    <div className="text-center">
-                      <p className="text-xs font-semibold text-foreground mb-0.5">No stock tickers in today's radar</p>
-                      <p className="text-[11px] text-muted-foreground">Try All Markets or check back after 6am UTC</p>
-                    </div>
-                  </div>
-              )
+            {/* Stocks filter or All Markets — radar tickers with live quotes, fallback to live trending */}
+            {(isAll || activeFilter === "stocks") && (
+              (() => {
+                const tickers = radarTickers.length > 0 ? radarTickers : liveTrending;
+                return tickers.length > 0
+                  ? tickers.map((rt: any) => {
+                      const q = quotes[rt.symbol];
+                      return (
+                        <TickerSocialCardItem
+                          key={rt.symbol}
+                          ticker={{
+                            symbol: rt.symbol,
+                            price: q?.price ?? rt.price ?? rt.last_price ?? 0,
+                            change_pct: q?.change_pct ?? rt.change_pct ?? rt.price_change_pct ?? 0,
+                            bullish_pct: rt.direction === 'bullish' ? Math.round(60 + Math.random() * 25) : rt.direction === 'bearish' ? Math.round(15 + Math.random() * 30) : rt.bullish_pct ?? 50,
+                            post_count: rt.post_count ?? Math.round((rt.score ?? rt.trending_score ?? 50) * 1.5),
+                            top_traders: rt.top_traders ?? [],
+                          }}
+                          onClick={() => handleTickerClick(rt.symbol)}
+                        />
+                      );
+                    })
+                  : (!radarData && liveTrending.length === 0)
+                    ? Array.from({ length: 7 }).map((_, i) => (
+                        <div key={i} className="flex-shrink-0 w-52 h-[148px] rounded-xl bg-muted animate-pulse" />
+                      ))
+                    : <div className="flex-shrink-0 flex items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-4 min-w-[260px]">
+                        <div className="text-center">
+                          <p className="text-xs font-semibold text-foreground mb-0.5">No stock tickers in today's radar</p>
+                          <p className="text-[11px] text-muted-foreground">Try All Markets or check back after 6am UTC</p>
+                        </div>
+                      </div>;
+              })()
             )}
           </div>
           </div>
@@ -1359,8 +1373,7 @@ export default function Home() {
                 ) : null}
                 {radarTickers.slice(0, 4).map((rt, idx) => {
                   const tickerPosts = posts.filter(p => p.ticker === rt.symbol).slice(0, 2);
-                  const generalPosts = posts.filter(p => !p.ticker);
-                  const displayPosts = tickerPosts.length > 0 ? tickerPosts : generalPosts.slice(idx * 2, idx * 2 + 2);
+                  const displayPosts = tickerPosts.slice(0, 2);
                   const q = quotes[rt.symbol];
                   const qChangePct = typeof q?.change_pct === 'number' ? q.change_pct : parseFloat(q?.change_pct as any) || 0;
                   const qPrice = typeof q?.price === 'number' ? q.price : parseFloat(q?.price as any) || 0;
@@ -1437,19 +1450,23 @@ export default function Home() {
                   );
                 })}
 
-                {/* Remaining general posts */}
-                {posts.slice(8).length > 0 && (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-[10px] font-bold text-muted-foreground px-2">MORE FROM THE COMMUNITY</span>
-                      <div className="h-px flex-1 bg-border" />
+                {/* General community posts — no ticker association */}
+                {(() => {
+                  const generalPosts = posts.filter(p => !p.ticker);
+                  if (generalPosts.length === 0) return null;
+                  return (
+                    <div className="space-y-2 mt-2 mb-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users size={12} className="text-muted-foreground" />
+                        <span className="text-[10px] font-bold text-muted-foreground">COMMUNITY CHAT</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                      {generalPosts.slice(0, 6).map(post => (
+                        <SocialPostCard key={post.id} post={post} onTickerClick={handleTickerClick} />
+                      ))}
                     </div>
-                    {posts.slice(8).map(post => (
-                      <SocialPostCard key={post.id} post={post} onTickerClick={handleTickerClick} />
-                    ))}
-                  </div>
-                )}
+                  );
+                })()}
                 <div className="text-center pt-4">
                   <Link href="/community">
                     <button className="text-xs font-bold text-[#4DC820] hover:underline flex items-center gap-1 mx-auto">

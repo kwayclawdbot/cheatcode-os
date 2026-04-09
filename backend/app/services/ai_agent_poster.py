@@ -452,6 +452,27 @@ COMPLIANCE_FOOTER = (
     "6. Output JSON matching the schema you are given. Nothing else.\n"
 )
 
+# Humanizer rules injected into reply/comment prompts so agent output reads
+# like a real person typed it, not an LLM. Distilled from the 29-pattern
+# Wikipedia AI Cleanup guide used by the /humanizer skill.
+HUMANIZER_RULES = (
+    "\n\nWRITING RULES — sound human, not AI:\n"
+    "- NEVER use: additionally, crucial, delve, emphasizing, enduring, enhance, "
+    "fostering, garner, highlight, interplay, intricate, key (adj), landscape (abstract), "
+    "pivotal, showcase, tapestry (abstract), testament, underscore, valuable, vibrant.\n"
+    "- NEVER use: serves as, stands as, marks a, represents a, boasts, features (as 'has').\n"
+    "- NEVER use -ing tailing phrases (highlighting..., ensuring..., reflecting...).\n"
+    "- NEVER use rule-of-three lists or forced groupings.\n"
+    "- NEVER use em dashes for dramatic effect.\n"
+    "- NEVER start with 'I think' or hedge with 'it's worth noting'.\n"
+    "- NEVER use filler: 'I hope this helps', 'Let me know', 'Great question'.\n"
+    "- DO vary sentence length. Short punchy lines mixed with longer ones.\n"
+    "- DO have real opinions. Say what you actually think, not neutral fluff.\n"
+    "- DO use casual contractions (don't, can't, won't, I'd, that's).\n"
+    "- DO sound like you're texting a trading buddy, not writing an essay.\n"
+    "- DO acknowledge uncertainty honestly ('idk', 'not sure yet', 'could go either way').\n"
+)
+
 
 def _pick_post_type(style: str) -> str:
     options = STYLE_POST_TYPES.get(style, [("market_take", 1.0)])
@@ -586,6 +607,19 @@ def generate_post_content(agent: AgentRow, dry_run: bool = False) -> PostContent
     if ticker:
         ticker = str(ticker).upper().strip()
         if not re.match(r"^[A-Z0-9.\-]{1,12}$", ticker):
+            ticker = None
+
+    # General commentary posts (questions, education, recaps, broad market takes
+    # that don't focus on a specific symbol) should NOT be filed under a ticker
+    # chat. Only trade_idea and chart_post types, or posts whose body clearly
+    # revolves around the ticker, keep the ticker association.
+    if ticker and post_type in ("question", "education", "recap"):
+        ticker = None
+    elif ticker and post_type == "market_take":
+        # If the ticker symbol doesn't appear in the body as a cashtag or
+        # standalone mention, it's likely a general take — clear the ticker.
+        body_upper = body.upper()
+        if f"${ticker}" not in body_upper and f" {ticker} " not in f" {body_upper} ":
             ticker = None
 
     tags = parsed.get("tags") or []
@@ -747,13 +781,15 @@ def generate_reply_for_post(parent_post: dict) -> str | None:
 
     parent_body = (parent_post.get("body") or "")[:400]
     parent_ticker = parent_post.get("ticker") or ""
-    system = replier.voice_prompt + COMPLIANCE_FOOTER
+    system = replier.voice_prompt + COMPLIANCE_FOOTER + HUMANIZER_RULES
     user = (
         f"Another trader just posted this:\n"
         f"---\n{parent_body}\n---\n"
         f"Ticker: {parent_ticker or '-'}\n\n"
         f"Write a SHORT reply (1-2 sentences) in your voice. Do not agree reflexively — "
         f"if you disagree with the premise, say so directly but respectfully. "
+        f"Your reply MUST sound like a real person typed it — no AI patterns. "
+        f"Vary sentence length. Use casual language. Have an opinion. "
         f"Output JSON: {{\"body\": \"...\"}} and nothing else."
     )
 

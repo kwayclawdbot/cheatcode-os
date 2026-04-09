@@ -484,6 +484,18 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
   return apiFetch(`/market/quote/${symbol}`);
 }
 
+// ── Trending Tickers ───────────────────────────────���───────────────────────
+
+export async function fetchTrendingTickers(
+  assetClass?: string,
+  limit = 20,
+): Promise<{ asset_class: string; count: number; tickers: any[] }> {
+  const params = new URLSearchParams();
+  if (assetClass) params.set("asset_class", assetClass);
+  params.set("limit", String(limit));
+  return apiFetch(`/market/trending?${params}`);
+}
+
 // ── CheatCode Chart ─────────────────────────────────────────────────────────
 
 export async function fetchChartData(
