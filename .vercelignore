@@ -1,0 +1,6 @@
+backend/
+scripts/
+*.py
+*.plist
+uv.lock
+pyproject.toml
