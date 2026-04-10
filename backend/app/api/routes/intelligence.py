@@ -494,20 +494,31 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     chart_data = price_history if isinstance(price_history, list) else []
 
     # Derive sentiment from NEWS (not price action) — more accurate
+    # Derive direction: PRICE ACTION primary, news secondary.
+    # A stock up 5% is bullish regardless of fear-laden news headlines.
     safe_news = news if isinstance(news, list) else []
     news_pos = sum(1 for n in safe_news if isinstance(n.get("sentiment"), (int, float)) and n["sentiment"] > 0)
     news_neg = sum(1 for n in safe_news if isinstance(n.get("sentiment"), (int, float)) and n["sentiment"] < 0)
-    news_total = news_pos + news_neg
-    if news_total >= 2:
-        # Override direction with news consensus when we have enough data
-        if news_pos > news_neg * 1.5:
+
+    chg_val = float(live_quote.get("change_pct") or ticker_data.get("price_change_pct") or 0)
+    # Price action is the truth — big moves override everything
+    if chg_val >= 3:
+        derived_direction = "bullish"
+    elif chg_val <= -3:
+        derived_direction = "bearish"
+    elif chg_val >= 1:
+        derived_direction = "bullish"
+    elif chg_val <= -1:
+        derived_direction = "bearish"
+    else:
+        # Small move — defer to news if we have enough
+        news_total = news_pos + news_neg
+        if news_total >= 3 and news_pos > news_neg * 2:
             derived_direction = "bullish"
-        elif news_neg > news_pos * 1.5:
+        elif news_total >= 3 and news_neg > news_pos * 2:
             derived_direction = "bearish"
         else:
             derived_direction = "neutral"
-    else:
-        derived_direction = ticker_data.get("direction") or "neutral"
 
     news_sentiment = {
         "positive": news_pos,
@@ -589,7 +600,23 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
 
         # Intel connections (cross-ticker relationship graph)
         "intel_connections": intel_connections,
+
+        # Audio dossier URL (generated locally via Chatterbox, cached in storage)
+        "audio_url": _get_cached_audio_url(sym, db),
     }
+
+
+def _get_cached_audio_url(symbol: str, db) -> str | None:
+    """Check if we have a cached audio brief for this ticker in Supabase storage."""
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        res = db.storage.from_("dossier-audio").get_public_url(f"{symbol}_{today}.wav")
+        # Verify the file actually exists by checking the URL
+        if res:
+            return res
+    except Exception:
+        pass
+    return None
 
 
 @router.get("/radar", response_model=RadarSnapshot)

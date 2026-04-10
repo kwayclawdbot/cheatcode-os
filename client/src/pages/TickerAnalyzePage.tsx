@@ -611,6 +611,22 @@ export default function TickerAnalyzePage() {
               )}
             </div>
 
+            {/* ── Audio Dossier Brief ── */}
+            {data.audio_url && (
+              <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                     style={{ background: "#4DC82018" }}>
+                  <Play size={14} style={{ color: "#4DC820" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-foreground mb-1">Kai Audio Brief</p>
+                  <audio controls preload="none" className="w-full h-8" style={{ filter: "hue-rotate(90deg) saturate(1.5)" }}>
+                    <source src={data.audio_url} type="audio/wav" />
+                  </audio>
+                </div>
+              </div>
+            )}
+
             {/* ── TABS ── */}
             <div className="flex items-center gap-1 mb-4 border-b border-border">
               {TABS.map(t => (
