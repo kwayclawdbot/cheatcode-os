@@ -203,28 +203,271 @@ Return ONLY valid JSON array."""}],
         for e in evidence:
             e["timestamp"] = datetime.now(timezone.utc).isoformat()
             e["source"] = "news"
-        return evidence
     except (json.JSONDecodeError, IndexError):
-        return []
+        evidence = []
+
+    # ── Supplement with Kai's news intel vault ──────────────────────────────
+    try:
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        vault_row = maybe_one(
+            db.table("vault_store")
+            .select("value")
+            .eq("path", f"Kai/Intel/{today_str}.json")
+        )
+        if vault_row.data:
+            intel_data = vault_row.data.get("value")
+            if isinstance(intel_data, str):
+                intel_data = json.loads(intel_data)
+            connections = intel_data.get("connections", []) if isinstance(intel_data, dict) else []
+            for conn in connections:
+                tickers = conn.get("tickers", [])
+                description = conn.get("description", conn.get("summary", ""))
+                direction = conn.get("direction", "neutral")
+                strength = float(conn.get("strength", conn.get("score", 0.5)))
+                if strength > 1:
+                    strength = min(strength / 10, 1.0)  # normalize 0-10 scale
+                for ticker in tickers:
+                    evidence.append({
+                        "ticker": ticker,
+                        "signal": f"Kai intel connection: {description[:120]}",
+                        "direction": direction if direction in ("bullish", "bearish") else "neutral",
+                        "strength": strength,
+                        "source": "kai_news_intel",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+            log.info("Kai news intel: %d connections added", len(connections))
+    except Exception as exc:
+        log.warning("Kai news intel supplement failed: %s", exc)
+
+    return evidence
 
 
 async def run_flow_agent() -> list[dict]:
-    """Collect dark pool / unusual options signals."""
-    # TODO: Integrate Unusual Whales or Quiver Quant API
-    # For now, return empty — will be wired in Phase 5
-    return []
+    """Collect dark pool / unusual options signals from Kai's data."""
+    db = get_supabase()
+    evidence = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # ── 1. Recent alerts with flow_score > 0 ───────────────────────────────
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        flow_alerts = (
+            db.table("sent_alerts")
+            .select("ticker, flow_score, breakout_score, alert_type, detected_pattern, sector, sent_at")
+            .gt("flow_score", 0)
+            .gte("sent_at", cutoff)
+            .order("flow_score", desc=True)
+            .limit(50)
+            .execute()
+        )
+        for alert in (flow_alerts.data or []):
+            score = float(alert.get("flow_score", 0))
+            strength = min(score / 10, 1.0)  # flow_score is 0-10
+            pattern = alert.get("detected_pattern", "")
+            pattern_text = f" ({pattern})" if pattern else ""
+            evidence.append({
+                "ticker": alert["ticker"],
+                "signal": f"Heavy dark pool accumulation (flow score {score:.0f}/10){pattern_text}",
+                "direction": "bullish",
+                "strength": strength,
+                "source": "dark_pool",
+                "timestamp": alert.get("sent_at", now_iso),
+            })
+    except Exception as exc:
+        log.warning("Flow agent — sent_alerts query failed: %s", exc)
+
+    # ── 2. Dark pool scan cache from vault ──────────────────────────────────
+    try:
+        dp_cache = maybe_one(
+            db.table("vault_store")
+            .select("value")
+            .eq("path", "_cache/darkpool_insider_latest.json")
+        )
+        if dp_cache.data:
+            dp_data = dp_cache.data.get("value")
+            if isinstance(dp_data, str):
+                dp_data = json.loads(dp_data)
+            entries = dp_data if isinstance(dp_data, list) else dp_data.get("entries", dp_data.get("data", []))
+            for entry in (entries if isinstance(entries, list) else []):
+                ticker = entry.get("ticker") or entry.get("symbol")
+                if not ticker:
+                    continue
+                vol = entry.get("volume", entry.get("dp_volume", 0))
+                signal_text = f"Dark pool block trade detected (vol: {vol:,.0f})" if vol else "Dark pool activity detected"
+                evidence.append({
+                    "ticker": ticker,
+                    "signal": signal_text,
+                    "direction": entry.get("direction", "bullish"),
+                    "strength": float(entry.get("strength", entry.get("score", 0.6))),
+                    "source": "dark_pool",
+                    "timestamp": entry.get("timestamp", now_iso),
+                })
+    except Exception as exc:
+        log.warning("Flow agent — vault dark pool cache failed: %s", exc)
+
+    return evidence
 
 
 async def run_macro_agent() -> list[dict]:
-    """Collect macro signals from FRED."""
-    # TODO: FRED API integration for regime classification
-    return []
+    """Collect macro regime signals from Kai's market context."""
+    db = get_supabase()
+    evidence = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    try:
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        ctx_row = maybe_one(
+            db.table("kai_market_context")
+            .select("regime, analysis, raw_data, created_at")
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+        if not ctx_row.data:
+            return []
+
+        regime = (ctx_row.data.get("regime") or "neutral").lower()
+        analysis = ctx_row.data.get("analysis", "")
+        ts = ctx_row.data.get("created_at", now_iso)
+
+        # Map regime to direction and strength
+        regime_map = {
+            "strong_bullish": ("bullish", 0.9),
+            "bullish": ("bullish", 0.7),
+            "lean_bullish": ("bullish", 0.55),
+            "neutral": ("neutral", 0.4),
+            "lean_bearish": ("bearish", 0.55),
+            "bearish": ("bearish", 0.7),
+            "strong_bearish": ("bearish", 0.9),
+        }
+        direction, strength = regime_map.get(regime, ("neutral", 0.4))
+
+        # Broad market tickers always get regime signal
+        for etf in ["SPY", "QQQ", "IWM"]:
+            evidence.append({
+                "ticker": etf,
+                "signal": f"Market regime: {regime}",
+                "direction": direction,
+                "strength": strength,
+                "source": "macro_regime",
+                "timestamp": ts,
+            })
+
+        # If bullish, scan analysis text for hot sector mentions
+        if direction == "bullish" and analysis:
+            sector_etfs = {
+                "XLK": ["tech", "technology", "semiconductor", "AI", "software"],
+                "XLE": ["energy", "oil", "crude", "natural gas"],
+                "XLF": ["financial", "banking", "bank", "insurance"],
+                "XLV": ["health", "healthcare", "biotech", "pharma"],
+                "XLI": ["industrial", "manufacturing", "defense"],
+                "XLY": ["consumer", "retail", "discretionary"],
+                "XLP": ["staples", "consumer staples", "defensive"],
+                "XLU": ["utilities", "utility"],
+                "XLC": ["communication", "media", "telecom"],
+                "XLB": ["materials", "mining", "metals"],
+                "XLRE": ["real estate", "REIT", "housing"],
+                "SMH": ["semiconductor", "chip", "chips"],
+                "XBI": ["biotech", "biotechnology"],
+                "GDX": ["gold", "gold miners"],
+            }
+            analysis_lower = analysis.lower()
+            for etf, keywords in sector_etfs.items():
+                if any(kw.lower() in analysis_lower for kw in keywords):
+                    evidence.append({
+                        "ticker": etf,
+                        "signal": f"Sector hot in {regime} regime (Kai analysis)",
+                        "direction": "bullish",
+                        "strength": strength * 0.8,
+                        "source": "macro_regime",
+                        "timestamp": ts,
+                    })
+    except Exception as exc:
+        log.warning("Macro agent failed: %s", exc)
+
+    return evidence
 
 
 async def run_insider_agent() -> list[dict]:
-    """Collect insider trading + congressional trades."""
-    # TODO: SEC EDGAR + Capitol Trades
-    return []
+    """Collect insider trading signals from Kai's alerts + EODHD insider data."""
+    db = get_supabase()
+    s = get_settings()
+    evidence = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # ── 1. Kai alerts that mention insider activity ─────────────────────────
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        insider_alerts = (
+            db.table("sent_alerts")
+            .select("ticker, catalyst_type, catalyst_score, breakout_score, detected_pattern, sent_at")
+            .ilike("catalyst_type", "%insider%")
+            .gte("sent_at", cutoff)
+            .limit(30)
+            .execute()
+        )
+        for alert in (insider_alerts.data or []):
+            cat_score = float(alert.get("catalyst_score", 5))
+            strength = min(cat_score / 10, 1.0)
+            evidence.append({
+                "ticker": alert["ticker"],
+                "signal": f"Insider buying cluster detected (catalyst score {cat_score:.0f}/10)",
+                "direction": "bullish",
+                "strength": strength,
+                "source": "insider",
+                "timestamp": alert.get("sent_at", now_iso),
+            })
+    except Exception as exc:
+        log.warning("Insider agent — Kai alerts query failed: %s", exc)
+
+    # ── 2. Direct EODHD insider query for high-convergence tickers ──────────
+    try:
+        if s.eodhd_api_key:
+            # Get tickers with highest convergence for targeted insider lookup
+            top_tickers = (
+                db.table("tickers")
+                .select("symbol")
+                .gte("convergence_score", 60)
+                .order("convergence_score", desc=True)
+                .limit(10)
+                .execute()
+            )
+            symbols = [t["symbol"] for t in (top_tickers.data or [])]
+            async with httpx.AsyncClient() as client:
+                for symbol in symbols[:5]:  # limit API calls
+                    try:
+                        resp = await client.get(
+                            f"https://eodhistoricaldata.com/api/insider-transactions",
+                            params={
+                                "api_token": s.eodhd_api_key,
+                                "code": f"{symbol}.US",
+                                "fmt": "json",
+                                "from": (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d"),
+                            },
+                            timeout=10,
+                        )
+                        if resp.status_code != 200:
+                            continue
+                        transactions = resp.json()
+                        if not isinstance(transactions, list):
+                            continue
+                        # Look for buy clusters
+                        buys = [t for t in transactions if (t.get("transactionType") or "").lower() in ("buy", "p-purchase", "purchase")]
+                        if len(buys) >= 2:
+                            total_value = sum(float(t.get("value") or 0) for t in buys)
+                            evidence.append({
+                                "ticker": symbol,
+                                "signal": f"Insider buying cluster: {len(buys)} buys totaling ${total_value:,.0f} in 30d",
+                                "direction": "bullish",
+                                "strength": min(0.5 + len(buys) * 0.1, 1.0),
+                                "source": "insider",
+                                "timestamp": now_iso,
+                            })
+                    except Exception:
+                        continue  # individual ticker failure is fine
+    except Exception as exc:
+        log.warning("Insider agent — EODHD query failed: %s", exc)
+
+    return evidence
 
 
 async def run_earnings_agent() -> list[dict]:
@@ -268,6 +511,72 @@ async def run_earnings_agent() -> list[dict]:
                         })
             except (ValueError, TypeError):
                 pass
+
+    # ── Supplement with Kai's earnings vault ──────────────────────────────────
+    try:
+        db = get_supabase()
+        earnings_vault = maybe_one(
+            db.table("vault_store")
+            .select("value")
+            .eq("path", "12 - Earnings Intel/dashboard.md")
+        )
+        if earnings_vault.data:
+            vault_val = earnings_vault.data.get("value")
+            if isinstance(vault_val, str):
+                # Parse markdown-style dashboard for BUY/SELL signals
+                for line in vault_val.split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # Look for lines like "AAPL | BUY | sentiment: 0.8" or similar patterns
+                    parts = [p.strip() for p in line.split("|")]
+                    if len(parts) >= 2:
+                        ticker_candidate = parts[0].strip("# -*").strip()
+                        if not ticker_candidate or len(ticker_candidate) > 5 or not ticker_candidate.isalpha():
+                            continue
+                        signal_text = parts[1].strip().upper()
+                        if signal_text in ("BUY", "SELL", "STRONG BUY", "STRONG SELL"):
+                            direction = "bullish" if "BUY" in signal_text else "bearish"
+                            # Try to extract sentiment score from remaining parts
+                            sent_score = 0.6
+                            for p in parts[2:]:
+                                if "sentiment" in p.lower() or "score" in p.lower():
+                                    try:
+                                        sent_score = float(p.split(":")[-1].strip())
+                                        if sent_score > 1:
+                                            sent_score = min(sent_score / 10, 1.0)
+                                    except (ValueError, IndexError):
+                                        pass
+                            strength = sent_score if "STRONG" in signal_text else sent_score * 0.8
+                            evidence.append({
+                                "ticker": ticker_candidate.upper(),
+                                "signal": f"Kai earnings vault: {signal_text}",
+                                "direction": direction,
+                                "strength": min(strength, 1.0),
+                                "source": "kai_earnings",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            })
+            elif isinstance(vault_val, dict):
+                # JSON-format dashboard
+                for ticker, data in vault_val.items():
+                    if not isinstance(data, dict):
+                        continue
+                    signal = (data.get("signal") or data.get("action", "")).upper()
+                    if signal in ("BUY", "SELL", "STRONG BUY", "STRONG SELL"):
+                        direction = "bullish" if "BUY" in signal else "bearish"
+                        sent_score = float(data.get("sentiment_score", data.get("score", 0.6)))
+                        if sent_score > 1:
+                            sent_score = min(sent_score / 10, 1.0)
+                        evidence.append({
+                            "ticker": ticker.upper(),
+                            "signal": f"Kai earnings vault: {signal}",
+                            "direction": direction,
+                            "strength": min(sent_score, 1.0),
+                            "source": "kai_earnings",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+    except Exception as exc:
+        log.warning("Earnings agent — Kai vault supplement failed: %s", exc)
 
     return evidence
 
