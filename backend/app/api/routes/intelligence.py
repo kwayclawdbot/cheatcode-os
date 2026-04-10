@@ -210,6 +210,57 @@ def _build_earnings(symbol: str, db) -> dict | None:
         return None
 
 
+def _fill_from_raw_data(data: dict) -> None:
+    """Fill direction, convergence_score, timeframe, and key_levels from raw
+    EODHD data when the brain hasn't scored this ticker. Mutates in-place.
+
+    Every ticker in the 33K universe gets a populated page — zero AI.
+    """
+    price = float(data.get("last_price") or 0)
+    chg = float(data.get("price_change_pct") or 0)
+    vol = float(data.get("last_volume") or 0)
+    avg_vol = float(data.get("volume_avg_20d") or 1) or 1
+    vol_ratio = vol / avg_vol
+
+    # Direction — derive from price action if brain hasn't set it
+    if not data.get("direction"):
+        if chg >= 3:
+            data["direction"] = "bullish"
+        elif chg <= -3:
+            data["direction"] = "bearish"
+        elif chg >= 1:
+            data["direction"] = "bullish"
+        elif chg <= -1:
+            data["direction"] = "bearish"
+        else:
+            data["direction"] = "neutral"
+
+    # Convergence score — derive from trending_score + price/volume if 0
+    if not data.get("convergence_score"):
+        ts = float(data.get("trending_score") or 0)
+        # Simple composite: trending weight + volume spike + momentum
+        raw = ts * 0.4 + min(30, abs(chg) * 3) + min(30, max(0, (vol_ratio - 1) * 15))
+        data["convergence_score"] = min(100, round(raw))
+
+    # Timeframe — infer from move magnitude
+    if not data.get("timeframe"):
+        if abs(chg) >= 5:
+            data["timeframe"] = "day_trade"
+        elif abs(chg) >= 2:
+            data["timeframe"] = "swing"
+        else:
+            data["timeframe"] = "position"
+
+    # Key levels — compute from price if empty
+    if not data.get("key_levels") or data["key_levels"] == {}:
+        if price > 0:
+            data["key_levels"] = {
+                "support": round(price * 0.97, 2),
+                "resistance": round(price * 1.03, 2),
+                "invalidation": round(price * 0.93, 2),
+            }
+
+
 @router.get("/ticker/{symbol}", response_model=TickerDetail)
 async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_user)):
     """Ticker intelligence lookup. Returns full detail for all users during testing."""
@@ -227,6 +278,11 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
     if live:
         data["last_price"] = live["price"]
         data["price_change_pct"] = live["change_pct"]
+
+    # Fill direction/convergence/timeframe/key_levels from raw data when
+    # the brain hasn't scored this ticker. Every ticker gets a populated
+    # page — zero AI required.
+    _fill_from_raw_data(data)
     # TODO: Re-gate evidence_chain + related_content behind pro tier once
     # testing is complete. For now, return full TickerDetail for everyone.
     # is_pro = user and user.get("tier") in ("pro", "elite", "admin")

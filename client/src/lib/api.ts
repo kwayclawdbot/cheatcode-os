@@ -218,6 +218,16 @@ export interface TickerData {
   confidence: string | null;
   last_price: number | null;
   price_change_pct: number | null;
+  // Data fields (always populated from EODHD)
+  daily_analysis?: string;
+  analysis_date?: string;
+  key_levels?: { support?: number | number[]; resistance?: number | number[]; invalidation?: string | number };
+  catalysts?: string[];
+  risks?: string[];
+  score_breakdown?: Record<string, number>;
+  drivers?: { icon: string; text: string; type: string }[];
+  track_record?: { alerts: { date: string; price: number; score: number; pattern?: string }[]; total_alerts: number; setup_win_rate: number | null; best_gain_pct: number | null };
+  earnings?: { next_date?: string; timing?: string; last_signal?: string; tone?: string; tone_score?: number; flags?: { type: string; text: string }[] };
   // Pro fields
   evidence_chain?: { source: string; signal: string; direction: string; strength: number; timestamp: string }[];
   source_count?: number;
