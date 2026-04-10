@@ -550,6 +550,17 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
                 if len(intel_connections) >= 6:
                     break
 
+    # Build spoken brief script — frontend handles TTS via browser speech synthesis
+    audio_script = _build_brief_script({
+        "symbol": sym,
+        "name": ticker_data.get("name") or (fundamentals or {}).get("name"),
+        "last_price": live_quote.get("price") or ticker_data.get("last_price"),
+        "price_change_pct": live_quote.get("change_pct") or ticker_data.get("price_change_pct"),
+        "direction": derived_direction,
+        "convergence_score": ticker_data.get("convergence_score"),
+        "kai_analysis": kai_analysis,
+    })
+
     # 4. Build response — comprehensive structured JSON
     return {
         # Header
@@ -601,22 +612,59 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
         # Intel connections (cross-ticker relationship graph)
         "intel_connections": intel_connections,
 
-        # Audio dossier URL (generated locally via Chatterbox, cached in storage)
-        "audio_url": _get_cached_audio_url(sym, db),
+        # Audio brief script (frontend handles TTS)
+        "audio_script": audio_script,
     }
 
 
-def _get_cached_audio_url(symbol: str, db) -> str | None:
-    """Check if we have a cached audio brief for this ticker in Supabase storage."""
-    try:
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        res = db.storage.from_("dossier-audio").get_public_url(f"{symbol}_{today}.wav")
-        # Verify the file actually exists by checking the URL
-        if res:
-            return res
-    except Exception:
-        pass
-    return None
+def _build_brief_script(dossier_data: dict) -> str:
+    """Build spoken brief text from dossier data. ~30s at normal pace."""
+    symbol = dossier_data.get("symbol") or "this stock"
+    name = dossier_data.get("name") or symbol
+    price = dossier_data.get("last_price") or 0
+    chg = dossier_data.get("price_change_pct") or 0
+    direction = dossier_data.get("direction") or "neutral"
+    score = dossier_data.get("convergence_score") or 0
+    kai = dossier_data.get("kai_analysis") or {}
+
+    parts = []
+    chg_word = "up" if chg >= 0 else "down"
+    parts.append(f"{name} is trading at {price:.2f} dollars, {chg_word} {abs(chg):.1f} percent.")
+    parts.append(f"Signal is {direction}, convergence score {score} out of 100.")
+
+    if kai.get("tldr"):
+        parts.append(kai["tldr"])
+
+    catalysts = kai.get("catalysts") or []
+    if catalysts:
+        parts.append(f"Key catalyst: {catalysts[0]}")
+
+    risks = kai.get("risks") or []
+    if risks:
+        parts.append(f"Main risk to watch: {risks[0]}")
+
+    levels = kai.get("key_levels") or {}
+    sup = levels.get("support")
+    res_l = levels.get("resistance")
+    if sup:
+        sv = sup[0] if isinstance(sup, list) else sup
+        if isinstance(sv, (int, float)):
+            parts.append(f"Support at {sv:.0f}.")
+    if res_l:
+        rv = res_l[0] if isinstance(res_l, list) else res_l
+        if isinstance(rv, (int, float)):
+            parts.append(f"Resistance at {rv:.0f}.")
+
+    script = " ".join(p for p in parts if p)
+    words = script.split()
+    if len(words) > 100:
+        script = " ".join(words[:100]) + "."
+    return script
+
+
+    # Edge TTS / Chatterbox audio generation can be added later as a
+    # separate service. For now, the frontend uses browser speech synthesis
+    # with the audio_script text returned by the dossier endpoint.
 
 
 @router.get("/radar", response_model=RadarSnapshot)

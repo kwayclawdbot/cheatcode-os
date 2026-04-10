@@ -1,7 +1,7 @@
 // CheatCode OS — Ticker Dossier (/tickers/:symbol/analyze)
 // Visual intelligence dashboard — gauges, charts, graphs. Zero paragraphs.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useParams } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -18,6 +18,76 @@ import { triggerTickerAnalysis } from "@/lib/api";
 // ═══════════════════════════════════════════════════════════════════════════
 // VISUAL COMPONENTS — all pure SVG, matching CC design system
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ── Audio Brief (browser speech synthesis) ───────────────────────────────
+
+function AudioBrief({ script }: { script: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const intervalRef = useRef<number | null>(null);
+
+  const handlePlay = () => {
+    if (playing) {
+      window.speechSynthesis.cancel();
+      setPlaying(false);
+      setProgress(0);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(script);
+    utter.rate = 1.05;
+    utter.pitch = 0.95;
+    // Try to find a good voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.name.includes("Google") && v.lang === "en-US")
+      || voices.find(v => v.name.includes("Daniel") || v.name.includes("Alex"))
+      || voices.find(v => v.lang.startsWith("en"));
+    if (preferred) utter.voice = preferred;
+
+    utter.onend = () => { setPlaying(false); setProgress(100); if (intervalRef.current) clearInterval(intervalRef.current); };
+    utterRef.current = utter;
+    setPlaying(true);
+    setProgress(0);
+
+    // Estimate duration (~150 words/min)
+    const words = script.split(" ").length;
+    const estMs = (words / 150) * 60 * 1000;
+    const startTime = Date.now();
+    intervalRef.current = window.setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      setProgress(Math.min(99, (elapsed / estMs) * 100));
+    }, 200);
+
+    window.speechSynthesis.speak(utter);
+  };
+
+  useEffect(() => () => { window.speechSynthesis.cancel(); if (intervalRef.current) clearInterval(intervalRef.current); }, []);
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+      <button onClick={handlePlay}
+              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:scale-105"
+              style={{ background: playing ? "#E8193C" : "#4DC820" }}>
+        {playing ? (
+          <div className="w-3 h-3 rounded-sm bg-white" />
+        ) : (
+          <Play size={16} className="text-white ml-0.5" />
+        )}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] font-bold text-foreground">Kai Audio Brief</p>
+          <span className="text-[9px] text-muted-foreground">{playing ? "Playing..." : "Tap to listen"}</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <motion.div className="h-full rounded-full" style={{ background: "#4DC820" }}
+                      animate={{ width: `${progress}%` }} transition={{ duration: 0.2 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Radial Score Gauge (speedometer) ─────────────────────────────────────
 
@@ -611,20 +681,9 @@ export default function TickerAnalyzePage() {
               )}
             </div>
 
-            {/* ── Audio Dossier Brief ── */}
-            {data.audio_url && (
-              <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                     style={{ background: "#4DC82018" }}>
-                  <Play size={14} style={{ color: "#4DC820" }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold text-foreground mb-1">Kai Audio Brief</p>
-                  <audio controls preload="none" className="w-full h-8" style={{ filter: "hue-rotate(90deg) saturate(1.5)" }}>
-                    <source src={data.audio_url} type="audio/wav" />
-                  </audio>
-                </div>
-              </div>
+            {/* ── Audio Dossier Brief (browser TTS) ── */}
+            {data.audio_script && (
+              <AudioBrief script={data.audio_script} />
             )}
 
             {/* ── TABS ── */}
