@@ -114,3 +114,5 @@ client/public/__manus__/version.json
 clips/
 backend/uv.lock
 backend/pyproject.toml
+app/
+models/
