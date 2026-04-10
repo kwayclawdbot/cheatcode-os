@@ -263,6 +263,10 @@ export async function fetchTicker(symbol: string): Promise<TickerData> {
   return apiFetch(`/intelligence/ticker/${symbol}`);
 }
 
+export async function triggerTickerAnalysis(symbol: string): Promise<any> {
+  return apiFetch(`/intelligence/ticker/${symbol}/analyze`, { method: "POST" });
+}
+
 export async function fetchRadar(date?: string): Promise<RadarData> {
   // If a specific date is requested, use it directly
   if (date) return apiFetch(`/intelligence/radar?date=${date}`);

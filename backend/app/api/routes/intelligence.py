@@ -342,6 +342,26 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
     )
 
 
+@router.post("/ticker/{symbol}/analyze")
+async def trigger_analysis(symbol: str, user: dict | None = Depends(get_current_user)):
+    """On-demand Kai analysis for a ticker. Generates via Claude, caches to
+    tickers table. Returns the analysis fields. ~2s latency, ~$0.02 cost."""
+    from app.services.ticker_analysis import analyze_ticker
+
+    result = await analyze_ticker(symbol.upper())
+    if not result:
+        raise HTTPException(404, f"Could not analyze {symbol.upper()}")
+
+    return {
+        "symbol": symbol.upper(),
+        "daily_analysis": result.get("daily_analysis"),
+        "key_levels": result.get("key_levels"),
+        "catalysts": result.get("catalysts"),
+        "risks": result.get("risks"),
+        "catalyst": result.get("catalyst"),
+    }
+
+
 @router.get("/radar", response_model=RadarSnapshot)
 async def get_radar(date: str | None = None):
     """Get radar snapshot with live prices. Defaults to today."""
