@@ -355,20 +355,68 @@ async def trigger_analysis(symbol: str, user: dict | None = Depends(get_current_
         raise HTTPException(500, f"Analysis failed: {str(e)[:200]}")
 
     if not result:
-        # Might be unknown symbol or Claude call failed — check if ticker exists
-        db = get_supabase()
-        t = maybe_one(db.table("tickers").select("symbol").eq("symbol", symbol.upper()))
+        db2 = get_supabase()
+        t = maybe_one(db2.table("tickers").select("symbol").eq("symbol", symbol.upper()))
         if not t.data:
             raise HTTPException(404, f"Unknown ticker {symbol.upper()}")
         raise HTTPException(502, f"Kai analysis generation failed for {symbol.upper()} — check API key and logs")
 
+    # Enrich with context data for the full analysis page
+    db2 = get_supabase()
+
+    # Related videos
+    videos = []
+    try:
+        mentions = db2.table("content_tickers").select("content_id").eq("ticker", symbol.upper()).limit(6).execute()
+        cids = [m["content_id"] for m in (mentions.data or [])]
+        if cids:
+            vrows = db2.table("content").select(
+                "id, title, thumbnail_url, duration_seconds, quick_take, published_at, "
+                "creators:creator_id(name, slug)"
+            ).in_("id", cids).eq("is_published", True).order("published_at", desc=True).limit(6).execute()
+            for v in (vrows.data or []):
+                cr = v.pop("creators", None) or {}
+                videos.append({
+                    "id": v["id"], "title": v["title"],
+                    "thumbnail_url": v.get("thumbnail_url"),
+                    "duration_seconds": v.get("duration_seconds"),
+                    "quick_take": v.get("quick_take"),
+                    "creator_name": cr.get("name"),
+                    "published_at": v.get("published_at"),
+                })
+    except Exception:
+        pass
+
+    # Track record
+    track_record = _build_track_record(symbol.upper(), db2)
+
+    # Earnings
+    earnings = _build_earnings(symbol.upper(), db2)
+
+    # Ticker base data for header
+    base = maybe_one(db2.table("tickers").select(
+        "symbol, name, last_price, price_change_pct, sector, market_cap, trending_score, convergence_score, direction, themes"
+    ).eq("symbol", symbol.upper()))
+    ticker_info = base.data or {}
+    _fill_from_raw_data(ticker_info)
+
     return {
         "symbol": symbol.upper(),
+        "name": ticker_info.get("name"),
+        "last_price": ticker_info.get("last_price"),
+        "price_change_pct": ticker_info.get("price_change_pct"),
+        "sector": ticker_info.get("sector"),
+        "convergence_score": ticker_info.get("convergence_score"),
+        "direction": ticker_info.get("direction"),
         "daily_analysis": result.get("analysis") or result.get("daily_analysis"),
         "key_levels": result.get("key_levels"),
         "catalysts": result.get("catalysts"),
         "risks": result.get("risks"),
         "catalyst": result.get("tldr") or result.get("catalyst"),
+        "videos": videos,
+        "track_record": track_record,
+        "earnings": earnings,
+        "themes": ticker_info.get("themes", []),
     }
 
 

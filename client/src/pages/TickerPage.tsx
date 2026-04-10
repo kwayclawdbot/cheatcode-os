@@ -16,7 +16,7 @@ import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { fetchContentByTicker } from "@/lib/api";
 import {
-  fetchTicker, fetchFeed, triggerTickerAnalysis,
+  fetchTicker, fetchFeed,
   fetchTickerSentiment, fetchTickerVotes, castTickerVote, fetchTickerAbout,
   likePost, repostPost, bookmarkPost, createComment, fetchComments,
   type TickerSentiment, type TickerVotes,
@@ -811,45 +811,14 @@ export default function TickerPage() {
                       )}
                     </>
                   ) : (
-                    /* No analysis yet — trigger on-demand, show inline */
-                    <button
-                      onClick={async () => {
-                        if (tickerData?._kaiLoading) return;
-                        setTickerData((prev: any) => ({ ...prev, _kaiLoading: true }));
-                        try {
-                          const result = await triggerTickerAnalysis(symbol);
-                          setTickerData((prev: any) => ({
-                            ...prev,
-                            analysis: result.daily_analysis || prev.daily_analysis,
-                            daily_analysis: result.daily_analysis || prev.daily_analysis,
-                            catalyst: result.catalyst || prev.catalyst,
-                            key_levels: result.key_levels || prev.key_levels,
-                            catalysts: result.catalysts || prev.catalysts,
-                            risks: result.risks || prev.risks,
-                            _kaiLoading: false,
-                          }));
-                          toast.success("Kai analysis ready");
-                        } catch {
-                          setTickerData((prev: any) => ({ ...prev, _kaiLoading: false }));
-                          toast.error("Analysis unavailable right now");
-                        }
-                      }}
-                      disabled={tickerData?._kaiLoading}
-                      className="w-full text-sm font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.01] disabled:opacity-60"
-                      style={{ background: "linear-gradient(135deg, #4DC820 0%, #C8D400 100%)", color: "#101828" }}
-                    >
-                      {tickerData?._kaiLoading ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-[#101828]/30 border-t-[#101828] rounded-full animate-spin" />
-                          Kai is analyzing ${symbol}...
-                        </>
-                      ) : (
-                        <>
-                          <Brain size={16} />
-                          Ask Kai to analyze ${symbol}
-                        </>
-                      )}
-                    </button>
+                    /* No analysis yet — link to full analysis page */
+                    <Link href={`/tickers/${symbol}/analyze`}>
+                      <button className="w-full text-sm font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
+                              style={{ background: "linear-gradient(135deg, #4DC820 0%, #C8D400 100%)", color: "#101828" }}>
+                        <Brain size={16} />
+                        Ask Kai to analyze ${symbol}
+                      </button>
+                    </Link>
                   )}
                 </div>
             </motion.div>

@@ -1,0 +1,13 @@
+{
+  "publishes": {
+    "silken-mirage-2wmk": {
+      "siteUrl": "https://silken-mirage-2wmk.here.now/"
+    },
+    "oaken-laurel-v588": {
+      "siteUrl": "https://oaken-laurel-v588.here.now/",
+      "claimToken": "c71a03cffec301077c9d32a7e77dd98c53d6bf5ed9bf4da22a5628667b9dbfb6",
+      "claimUrl": "https://here.now/claim?slug=oaken-laurel-v588&token=c71a03cffec301077c9d32a7e77dd98c53d6bf5ed9bf4da22a5628667b9dbfb6",
+      "expiresAt": "2026-04-08T06:33:41.741Z"
+    }
+  }
+}

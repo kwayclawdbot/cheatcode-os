@@ -56,6 +56,7 @@ import KaiAssistPage from "./pages/KaiAssistPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 import TickerPage from "./pages/TickerPage";
+import TickerAnalyzePage from "./pages/TickerAnalyzePage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 /**
  * Redirect new authenticated users to onboarding if they haven't completed it.
@@ -142,6 +143,7 @@ function Router() {
       <Route path="/assist" component={KaiAssistPage} />
       <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/learn/university" component={YouTubeUniversityPage} />
+      <Route path="/tickers/:symbol/analyze" component={TickerAnalyzePage} />
       <Route path="/tickers/:symbol" component={TickerPage} />
 
       {/* ── Auth ── */}

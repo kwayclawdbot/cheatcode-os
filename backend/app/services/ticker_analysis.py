@@ -169,6 +169,17 @@ async def analyze_ticker(symbol: str) -> dict | None:
 
     t = ticker.data
 
+    # Return cached analysis if less than 24h old
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if t.get("analysis_date") == today and t.get("daily_analysis"):
+        return {
+            "analysis": t["daily_analysis"],
+            "key_levels": t.get("key_levels", {}),
+            "catalysts": t.get("catalysts", []),
+            "risks": t.get("risks", []),
+            "tldr": t.get("catalyst", ""),
+        }
+
     # Get live quote
     quotes = await fetch_bulk_quotes([symbol])
     quote = quotes.get(symbol, {})
