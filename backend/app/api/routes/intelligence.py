@@ -15,70 +15,121 @@ router = APIRouter(prefix="/intelligence", tags=["intelligence"])
 
 # ── Ticker page enrichment helpers ─────────────────────────────────────────
 
-def _build_score_breakdown(evidence_chain: list[dict]) -> dict:
-    """Derive a visual score breakdown from evidence sources.
+def _build_score_breakdown(data: dict, evidence_chain: list[dict]) -> dict:
+    """Build visual score breakdown from RAW TICKER DATA first (zero AI),
+    then layer on evidence_chain signals if available.
 
-    Each source type in the evidence chain contributes to a category.
-    Max per category = 25 points (capped).
+    Every ticker in the 33K universe gets a populated breakdown from the
+    EODHD-synced fields already in the tickers table.
     """
-    category_map = {
-        "news": "momentum",
-        "earnings": "catalyst",
-        "content": "content",
-        "flow": "flow",
-        "macro": "macro",
-        "insider": "flow",
-    }
-    scores: dict[str, float] = {
-        "technical": 0, "momentum": 0, "volume": 0,
-        "catalyst": 0, "content": 0, "flow": 0,
-    }
+    # ── Tier 1: pure data, every ticker, $0 ──
+    chg = abs(float(data.get("price_change_pct") or 0))
+    # Price momentum: 1% = 5pts, 3% = 10, 5% = 15, 10%+ = 25
+    momentum = min(25, round(chg * 2.5))
+
+    # Volume anomaly: ratio of today vs 20d avg
+    vol = float(data.get("last_volume") or 0)
+    avg_vol = float(data.get("volume_avg_20d") or 1) or 1
+    vol_ratio = vol / avg_vol
+    # 1x = 0, 1.5x = 8, 2x = 15, 3x+ = 25
+    volume = min(25, round(max(0, (vol_ratio - 1.0)) * 16))
+
+    # 52-week proximity (how close to 52W high)
+    high_52w = float(data.get("high_52w") or 0)
+    price = float(data.get("last_price") or 0)
+    if high_52w > 0 and price > 0:
+        proximity = price / high_52w  # 1.0 = at high, 0.5 = 50% off
+        technical = min(25, round(proximity * 25))
+    else:
+        technical = 0
+
+    # Sector presence (has sector data = some points)
+    sector_score = 10 if data.get("sector") else 0
+
+    # Trending score contribution
+    ts = float(data.get("trending_score") or 0)
+    # trending_score 0-100 → 0-15 pts
+    content = min(15, round(ts * 0.15))
+
+    # ── Tier 3: evidence chain enrichment (AI-scored tickers only) ──
+    catalyst = 0
+    flow = 0
     for ev in (evidence_chain or []):
         src = ev.get("source", "").lower()
-        cat = category_map.get(src, "momentum")
         strength = float(ev.get("strength", 0.6))
-        scores[cat] = min(25, scores[cat] + strength * 15)
+        if src in ("earnings", "news"):
+            catalyst = min(25, catalyst + round(strength * 12))
+        elif src in ("flow", "insider"):
+            flow = min(25, flow + round(strength * 12))
+        elif src == "content":
+            content = min(25, content + round(strength * 5))
 
-    # Round to ints
-    return {k: round(v) for k, v in scores.items()}
-
-
-def _build_drivers(evidence_chain: list[dict], themes: list[str], catalyst: str | None) -> list[dict]:
-    """Build driver pills from evidence + themes + catalyst text."""
-    drivers: list[dict] = []
-    icon_map = {
-        "news": "newspaper", "earnings": "dollar-sign", "content": "play",
-        "flow": "activity", "macro": "globe", "insider": "eye",
+    return {
+        "technical": technical,
+        "momentum": momentum,
+        "volume": volume,
+        "sector": sector_score,
+        "catalyst": catalyst,
+        "content": content,
+        "flow": flow,
     }
-    seen: set[str] = set()
 
-    # From themes
-    for theme in (themes or [])[:2]:
-        key = f"theme:{theme}"
-        if key not in seen:
-            drivers.append({"icon": "flame", "text": theme, "type": "theme"})
-            seen.add(key)
 
-    # From evidence chain (deduplicate by signal text)
-    for ev in (evidence_chain or [])[:8]:
-        signal = (ev.get("signal") or "")[:80]
-        if not signal or signal in seen:
-            continue
-        src = ev.get("source", "news").lower()
+def _build_drivers(data: dict) -> list[dict]:
+    """Build driver pills from RAW ticker data. Every ticker gets drivers.
+
+    Sources (all zero AI, all from tickers table):
+    - Price move magnitude + direction
+    - Volume anomaly ratio
+    - 52W high proximity
+    - Sector
+    - Themes (if tagged)
+    - Trending score context
+    """
+    drivers: list[dict] = []
+    chg = float(data.get("price_change_pct") or 0)
+    vol = float(data.get("last_volume") or 0)
+    avg_vol = float(data.get("volume_avg_20d") or 1) or 1
+    vol_ratio = vol / avg_vol
+    high_52w = float(data.get("high_52w") or 0)
+    price = float(data.get("last_price") or 0)
+    sector = data.get("sector")
+    themes = data.get("themes") or []
+
+    # Price move
+    if abs(chg) >= 1:
+        direction = "up" if chg > 0 else "down"
         drivers.append({
-            "icon": icon_map.get(src, "zap"),
-            "text": signal,
-            "type": src,
+            "icon": "trending-up" if chg > 0 else "trending-down",
+            "text": f"{'+' if chg > 0 else ''}{chg:.1f}% {'rally' if chg > 0 else 'selloff'} today",
+            "type": "momentum",
         })
-        seen.add(signal)
-        if len(drivers) >= 6:
-            break
 
-    # From catalyst
-    if catalyst and catalyst not in seen and len(drivers) < 6:
-        drivers.append({"icon": "zap", "text": catalyst[:80], "type": "catalyst"})
+    # Volume spike
+    if vol_ratio >= 1.5:
+        drivers.append({
+            "icon": "bar-chart",
+            "text": f"Volume {vol_ratio:.1f}x average ({vol/1e6:.1f}M vs {avg_vol/1e6:.1f}M avg)",
+            "type": "volume",
+        })
 
-    return drivers
+    # Near 52W high
+    if high_52w > 0 and price > 0:
+        pct_from_high = ((high_52w - price) / high_52w) * 100
+        if pct_from_high <= 5:
+            drivers.append({"icon": "arrow-up", "text": f"Within {pct_from_high:.1f}% of 52-week high", "type": "technical"})
+        elif pct_from_high >= 30:
+            drivers.append({"icon": "arrow-down", "text": f"{pct_from_high:.0f}% below 52-week high", "type": "technical"})
+
+    # Sector
+    if sector:
+        drivers.append({"icon": "layers", "text": f"Sector: {sector}", "type": "sector"})
+
+    # Themes
+    for theme in themes[:2]:
+        drivers.append({"icon": "flame", "text": theme, "type": "theme"})
+
+    return drivers[:6]
 
 
 def _build_track_record(symbol: str, db) -> dict | None:
@@ -159,9 +210,9 @@ def _build_earnings(symbol: str, db) -> dict | None:
         return None
 
 
-@router.get("/ticker/{symbol}", response_model=TickerLookup | TickerDetail)
+@router.get("/ticker/{symbol}", response_model=TickerDetail)
 async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_user)):
-    """Ticker intelligence lookup. Free: score + direction. Pro: full breakdown."""
+    """Ticker intelligence lookup. Returns full detail for all users during testing."""
     db = get_supabase()
     t = maybe_one(db.table("tickers").select("*").eq("symbol", symbol.upper()))
     if not t.data:
@@ -176,76 +227,63 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
     if live:
         data["last_price"] = live["price"]
         data["price_change_pct"] = live["change_pct"]
-    is_pro = user and user.get("tier") in ("pro", "elite", "admin")
+    # TODO: Re-gate evidence_chain + related_content behind pro tier once
+    # testing is complete. For now, return full TickerDetail for everyone.
+    # is_pro = user and user.get("tier") in ("pro", "elite", "admin")
 
-    if is_pro:
-        # Get related content
-        mentions = db.table("content_tickers").select("content_id").eq("ticker", symbol.upper()).limit(5).execute()
-        content_ids = [m["content_id"] for m in (mentions.data or [])]
-        related_content = None
-        if content_ids:
-            rows = db.table("content").select(
-                "id, title, content_type, external_url, thumbnail_url, duration_seconds, "
-                "quick_take, relevance_score, topics, themes, skill_level, published_at, curated_at, "
-                "creators:creator_id(name, slug)"
-            ).in_("id", content_ids).eq("is_published", True).execute()
-            related_content = []
-            for r in (rows.data or []):
-                creator = r.pop("creators", None) or {}
-                related_content.append(ContentCard(
-                    id=r["id"], title=r["title"], content_type=r["content_type"],
-                    external_url=r["external_url"], thumbnail_url=r.get("thumbnail_url"),
-                    duration_seconds=r.get("duration_seconds"),
-                    creator_name=creator.get("name"), creator_slug=creator.get("slug"),
-                    quick_take=r.get("quick_take"), relevance_score=r.get("relevance_score", 0),
-                    topics=r.get("topics", []), themes=r.get("themes", []),
-                    skill_level=r.get("skill_level", "intermediate"),
-                    published_at=r.get("published_at"), curated_at=r["curated_at"],
-                ))
+    # Related content
+    mentions = db.table("content_tickers").select("content_id").eq("ticker", symbol.upper()).limit(5).execute()
+    content_ids = [m["content_id"] for m in (mentions.data or [])]
+    related_content = None
+    if content_ids:
+        rows = db.table("content").select(
+            "id, title, content_type, external_url, thumbnail_url, duration_seconds, "
+            "quick_take, relevance_score, topics, themes, skill_level, published_at, curated_at, "
+            "creators:creator_id(name, slug)"
+        ).in_("id", content_ids).eq("is_published", True).execute()
+        related_content = []
+        for r in (rows.data or []):
+            creator = r.pop("creators", None) or {}
+            related_content.append(ContentCard(
+                id=r["id"], title=r["title"], content_type=r["content_type"],
+                external_url=r["external_url"], thumbnail_url=r.get("thumbnail_url"),
+                duration_seconds=r.get("duration_seconds"),
+                creator_name=creator.get("name"), creator_slug=creator.get("slug"),
+                quick_take=r.get("quick_take"), relevance_score=r.get("relevance_score", 0),
+                topics=r.get("topics", []), themes=r.get("themes", []),
+                skill_level=r.get("skill_level", "intermediate"),
+                published_at=r.get("published_at"), curated_at=r["curated_at"],
+            ))
 
-        # V2 enrichments — visual components for ticker page
-        ev_chain = data.get("evidence_chain", [])
-        score_breakdown = _build_score_breakdown(ev_chain)
-        drivers = _build_drivers(ev_chain, data.get("themes", []), data.get("catalyst"))
-        track_record = _build_track_record(symbol.upper(), db)
-        earnings = _build_earnings(symbol.upper(), db)
+    # V2 enrichments — visual components for ticker page
+    ev_chain = data.get("evidence_chain", [])
+    score_breakdown = _build_score_breakdown(data, ev_chain)
+    drivers = _build_drivers(data)
+    track_record = _build_track_record(symbol.upper(), db)
+    earnings = _build_earnings(symbol.upper(), db)
 
-        return TickerDetail(
-            symbol=data["symbol"], name=data.get("name"),
-            convergence_score=data["convergence_score"],
-            direction=data.get("direction"), timeframe=data.get("timeframe"),
-            confidence=data.get("confidence"),
-            last_price=data.get("last_price"), price_change_pct=data.get("price_change_pct"),
-            evidence_chain=ev_chain,
-            source_count=data.get("source_count", 0),
-            catalyst=data.get("catalyst"), invalidation=data.get("invalidation"),
-            themes=data.get("themes", []),
-            related_content=related_content,
-            related_tickers=None,
-            daily_analysis=data.get("daily_analysis"),
-            analysis_date=data.get("analysis_date"),
-            key_levels=data.get("key_levels"),
-            catalysts=data.get("catalysts"),
-            risks=data.get("risks"),
-            score_breakdown=score_breakdown,
-            drivers=drivers,
-            track_record=track_record,
-            earnings=earnings,
-        )
-    else:
-        # Free: score + direction + analysis (evidence chain is pro-gated)
-        return TickerLookup(
-            symbol=data["symbol"], name=data.get("name"),
-            convergence_score=data["convergence_score"],
-            direction=data.get("direction"), timeframe=data.get("timeframe"),
-            confidence=data.get("confidence"),
-            last_price=data.get("last_price"), price_change_pct=data.get("price_change_pct"),
-            daily_analysis=data.get("daily_analysis"),
-            analysis_date=data.get("analysis_date"),
-            key_levels=data.get("key_levels"),
-            catalysts=data.get("catalysts"),
-            risks=data.get("risks"),
-        )
+    return TickerDetail(
+        symbol=data["symbol"], name=data.get("name"),
+        convergence_score=data["convergence_score"],
+        direction=data.get("direction"), timeframe=data.get("timeframe"),
+        confidence=data.get("confidence"),
+        last_price=data.get("last_price"), price_change_pct=data.get("price_change_pct"),
+        evidence_chain=ev_chain,
+        source_count=data.get("source_count", 0),
+        catalyst=data.get("catalyst"), invalidation=data.get("invalidation"),
+        themes=data.get("themes", []),
+        related_content=related_content,
+        related_tickers=None,
+        daily_analysis=data.get("daily_analysis"),
+        analysis_date=data.get("analysis_date"),
+        key_levels=data.get("key_levels"),
+        catalysts=data.get("catalysts"),
+        risks=data.get("risks"),
+        score_breakdown=score_breakdown,
+        drivers=drivers,
+        track_record=track_record,
+        earnings=earnings,
+    )
 
 
 @router.get("/radar", response_model=RadarSnapshot)

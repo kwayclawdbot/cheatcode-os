@@ -767,57 +767,59 @@ export default function TickerPage() {
                     </div>
                   )}
 
-                  {/* Kai's take */}
-                  {tickerData?.analysis && (
-                    <div className="bg-card rounded-xl border border-border p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                             style={{ background: "#4DC820" }}>K</div>
-                        <p className="text-xs font-bold text-foreground">Kai's Take</p>
+                  {/* Ask Kai — on-demand AI analysis (behind button, not pre-loaded) */}
+                  {tickerData?.analysis ? (
+                    /* Already has cached analysis — show it */
+                    <>
+                      <div className="bg-card rounded-xl border border-border p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                               style={{ background: "#4DC820" }}>K</div>
+                          <p className="text-xs font-bold text-foreground">Kai's Take</p>
+                        </div>
+                        <p className="text-sm text-foreground leading-relaxed">{tickerData.analysis}</p>
                       </div>
-                      <p className="text-sm text-foreground leading-relaxed">{tickerData.analysis}</p>
-                    </div>
-                  )}
-
-                  {/* Catalyst */}
-                  {tickerData?.catalyst && (
-                    <div className="bg-card rounded-xl border border-border p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Catalyst</p>
-                      <p className="text-sm text-foreground leading-relaxed">{tickerData.catalyst}</p>
-                    </div>
-                  )}
-
-                  {/* Evidence chain */}
-                  {tickerData?.evidence_chain && tickerData.evidence_chain.length > 0 && (
-                    <div className="bg-card rounded-xl border border-border p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Evidence Chain</p>
-                      <div className="space-y-2">
-                        {tickerData.evidence_chain.slice(0, 5).map((e: any, i: number) => (
-                          <div key={i} className="flex items-start gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
-                                 style={{ background: e.direction === "bullish" ? "#4DC820" : e.direction === "bearish" ? "#E8193C" : "#F79009" }} />
-                            <div className="flex-1 min-w-0">
-                              <span className="text-xs font-bold text-foreground">{e.source}: </span>
-                              <span className="text-xs text-muted-foreground">{e.signal}</span>
-                            </div>
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
-                                  style={{
-                                    background: e.direction === "bullish" ? "#4DC82018" : e.direction === "bearish" ? "#E8193C18" : "#F7900918",
-                                    color: e.direction === "bullish" ? "#4DC820" : e.direction === "bearish" ? "#E8193C" : "#F79009",
-                                  }}>
-                              {e.direction}
-                            </span>
+                      {tickerData?.catalyst && (
+                        <div className="bg-card rounded-xl border border-border p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Catalyst</p>
+                          <p className="text-sm text-foreground leading-relaxed">{tickerData.catalyst}</p>
+                        </div>
+                      )}
+                      {tickerData?.evidence_chain && tickerData.evidence_chain.length > 0 && (
+                        <div className="bg-card rounded-xl border border-border p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Evidence Chain</p>
+                          <div className="space-y-2">
+                            {tickerData.evidence_chain.slice(0, 5).map((e: any, i: number) => (
+                              <div key={i} className="flex items-start gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
+                                     style={{ background: e.direction === "bullish" ? "#4DC820" : e.direction === "bearish" ? "#E8193C" : "#F79009" }} />
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-bold text-foreground">{e.source}: </span>
+                                  <span className="text-xs text-muted-foreground">{e.signal}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                      style={{
+                                        background: e.direction === "bullish" ? "#4DC82018" : e.direction === "bearish" ? "#E8193C18" : "#F7900918",
+                                        color: e.direction === "bullish" ? "#4DC820" : e.direction === "bearish" ? "#E8193C" : "#F79009",
+                                      }}>
+                                  {e.direction}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* No analysis yet — show Ask Kai button */
+                    <Link href={`/intelligence?ticker=${symbol}`}>
+                      <button className="w-full text-sm font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
+                              style={{ background: "linear-gradient(135deg, #4DC820 0%, #C8D400 100%)", color: "#101828" }}>
+                        <Brain size={16} />
+                        Ask Kai to analyze ${symbol}
+                      </button>
+                    </Link>
                   )}
-
-                  <Link href={`/intelligence?ticker=${symbol}`}>
-                    <button className="w-full text-xs font-bold py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors flex items-center justify-center gap-1">
-                      View full Kai analysis <ArrowUpRight size={11} />
-                    </button>
-                  </Link>
                 </div>
             </motion.div>
           )}
