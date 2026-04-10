@@ -61,18 +61,21 @@ function ScoreGauge({ score, direction }: { score: number; direction: string }) 
 // ── Momentum Gauge (needle style) ────────────────────────────────────────
 
 function MomentumGauge({ changePct, volRatio }: { changePct: number; volRatio: number }) {
-  // Normalize: -20% to +20% maps to 0-180 degrees (wider range for big moves)
-  const angle = Math.min(180, Math.max(0, ((changePct + 20) / 40) * 180));
-  const radians = (angle - 90) * (Math.PI / 180);
-  const nx = 60 + 40 * Math.cos(radians);
-  const ny = 60 + 40 * Math.sin(radians);
+  // Arc goes from left (bearish) to right (bullish)
+  // -20% → 0° (far left), 0% → 90° (center), +20% → 180° (far right)
+  const normalized = Math.min(1, Math.max(0, (changePct + 20) / 40));
+  // SVG semicircle: 0° = 9 o'clock (left), 180° = 3 o'clock (right)
+  // Needle rotates from 180° (bear/left) through 90° (top/neutral) to 0° (bull/right)
+  const needleAngle = Math.PI * (1 - normalized); // 1.0=left, 0.5=top, 0.0=right
+  const nx = 60 + 42 * Math.cos(needleAngle);
+  const ny = 65 - 42 * Math.sin(needleAngle);
   const color = changePct >= 2 ? "#4DC820" : changePct <= -2 ? "#E8193C" : "#F79009";
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
       <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Momentum</p>
       <svg width="120" height="70" viewBox="0 0 120 70" className="mx-auto">
-        {/* Arc zones */}
+        {/* Arc zones: left=bear, center=neutral, right=bull */}
         <path d="M 10 65 A 50 50 0 0 1 40 18" fill="none" stroke="#E8193C" strokeWidth={4} strokeLinecap="round" opacity={0.3} />
         <path d="M 40 18 A 50 50 0 0 1 80 18" fill="none" stroke="#F79009" strokeWidth={4} strokeLinecap="round" opacity={0.3} />
         <path d="M 80 18 A 50 50 0 0 1 110 65" fill="none" stroke="#4DC820" strokeWidth={4} strokeLinecap="round" opacity={0.3} />
@@ -243,7 +246,7 @@ function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
 }) {
   if (!priceHistory?.length && !levels) return null;
 
-  const W = 600, H = 260, PAD = { top: 12, right: 65, bottom: 20, left: 10 };
+  const W = 650, H = 280, PAD = { top: 16, right: 80, bottom: 24, left: 12 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
@@ -274,14 +277,16 @@ function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
 
   if (allPrices.length === 0) return null;
 
-  const minP = Math.min(...allPrices) * 0.99;
-  const maxP = Math.max(...allPrices) * 1.01;
+  const minP = Math.min(...allPrices) * 0.97;
+  const maxP = Math.max(...allPrices) * 1.03;
   const rangeP = maxP - minP || 1;
 
   const priceToY = (p: number) => PAD.top + chartH - ((p - minP) / rangeP) * chartH;
 
   // Build candlestick path
-  const barWidth = bars.length > 0 ? Math.max(3, (chartW / bars.length) * 0.7) : 5;
+  // Candles occupy ~65% of chart width — leaves margin on right for S/R labels
+  const candleAreaW = chartW * 0.65;
+  const barWidth = bars.length > 0 ? Math.max(3, (candleAreaW / bars.length) * 0.75) : 5;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
@@ -293,9 +298,9 @@ function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
           return <line key={pct} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="var(--border)" strokeWidth={0.5} />;
         })}
 
-        {/* Candlesticks */}
+        {/* Candlesticks — positioned in left 65% of chart */}
         {bars.map((bar, i) => {
-          const x = PAD.left + (i / Math.max(1, bars.length - 1)) * chartW;
+          const x = PAD.left + (i / Math.max(1, bars.length - 1)) * candleAreaW;
           const open = bar.open ?? bar.close;
           const isGreen = bar.close >= open;
           const color = isGreen ? "#4DC820" : "#E8193C";
@@ -353,33 +358,33 @@ function ConnectionGraph({ symbol, connections, communityPosts, videos, news }: 
   videos?: any[];
   news?: any[];
 }) {
-  // Build nodes from ALL available data sources
-  const graphNodes: { label: string; type: string; color: string; sublabel?: string }[] = [];
+  // Build nodes from ALL available data sources — each gets a clickable link
+  const graphNodes: { label: string; type: string; color: string; sublabel?: string; link?: string; external?: boolean }[] = [];
 
-  // Intel connections (highest priority)
+  // Intel connections (highest priority) — link to related ticker
   for (const c of (connections || []).slice(0, 4)) {
     const t = (c.other_tickers || [])[0];
-    if (t) graphNodes.push({ label: `$${t}`, type: "intel", color: c.direction === "bullish" ? "#4DC820" : c.direction === "bearish" ? "#E8193C" : "#667085", sublabel: (c.headline || "").slice(0, 18) });
+    if (t) graphNodes.push({ label: `$${t}`, type: "intel", color: c.direction === "bullish" ? "#4DC820" : c.direction === "bearish" ? "#E8193C" : "#667085", sublabel: (c.headline || "").slice(0, 18), link: `/tickers/${t}/analyze` });
   }
 
-  // News sources
+  // News sources — link to article
   for (const n of (news || []).slice(0, 3)) {
     if (graphNodes.length >= 8) break;
     const sentiment = typeof n.sentiment === "number" ? (n.sentiment > 0 ? "#4DC820" : n.sentiment < 0 ? "#E8193C" : "#667085") : "#667085";
-    graphNodes.push({ label: "News", type: "news", color: sentiment, sublabel: (n.title || "").slice(0, 18) });
+    graphNodes.push({ label: "News", type: "news", color: sentiment, sublabel: (n.title || "").slice(0, 18), link: n.link, external: true });
   }
 
-  // Videos / creators
+  // Videos / creators — link to video page
   for (const v of (videos || []).slice(0, 2)) {
     if (graphNodes.length >= 8) break;
-    graphNodes.push({ label: v.creator_name?.split(" ")[0] || "Video", type: "video", color: "#E8193C", sublabel: (v.title || "").slice(0, 18) });
+    graphNodes.push({ label: v.creator_name?.split(" ")[0] || "Video", type: "video", color: "#E8193C", sublabel: (v.title || "").slice(0, 18), link: `/video/${v.id}` });
   }
 
-  // Community voices
+  // Community voices — link to ticker feed
   for (const p of (communityPosts || []).slice(0, 2)) {
     if (graphNodes.length >= 8) break;
     const sc = p.sentiment === "bullish" ? "#4DC820" : p.sentiment === "bearish" ? "#E8193C" : "#667085";
-    graphNodes.push({ label: (p.author || "Trader").split(" ")[0], type: "community", color: sc, sublabel: p.is_agent ? "AI" : "Trader" });
+    graphNodes.push({ label: (p.author || "Trader").split(" ")[0], type: "community", color: sc, sublabel: p.is_agent ? "AI" : "Trader", link: `/tickers/${symbol}` });
   }
 
   if (graphNodes.length === 0) return null;
@@ -418,18 +423,25 @@ function ConnectionGraph({ symbol, connections, communityPosts, videos, news }: 
         <text x={centerX} y={centerY + 4} textAnchor="middle" fontSize="11" fontWeight="900" fill="#4DC820"
               style={{ fontFamily: "var(--font-mono)" }}>${symbol}</text>
 
-        {/* Outer nodes */}
+        {/* Outer nodes — clickable */}
         {graphNodes.map((n, i) => {
           const angle = (i / graphNodes.length) * 2 * Math.PI - Math.PI / 2;
           const nx = centerX + radius * Math.cos(angle);
           const ny = centerY + radius * Math.sin(angle);
+          const handleClick = () => {
+            if (!n.link) return;
+            if (n.external) {
+              window.open(n.link, "_blank", "noopener");
+            } else {
+              window.location.href = n.link;
+            }
+          };
           return (
-            <g key={`n${i}`}>
-              <circle cx={nx} cy={ny} r={14} fill={n.color} opacity={0.1} />
-              <circle cx={nx} cy={ny} r={10} fill={n.color} opacity={0.25} />
+            <g key={`n${i}`} onClick={handleClick} style={{ cursor: n.link ? "pointer" : "default" }} className="group">
+              <circle cx={nx} cy={ny} r={16} fill={n.color} opacity={0.05} className="group-hover:opacity-20 transition-opacity" />
+              <circle cx={nx} cy={ny} r={10} fill={n.color} opacity={0.25} className="group-hover:opacity-50 transition-opacity" />
               <text x={nx} y={ny - 1} textAnchor="middle" fontSize="6">{typeIcon[n.type] || "●"}</text>
               <text x={nx} y={ny + 8} textAnchor="middle" fontSize="7" fontWeight="700" fill={n.color}>{n.label}</text>
-              {/* Sublabel along edge */}
               {n.sublabel && (
                 <text x={(centerX + nx) / 2} y={(centerY + ny) / 2 - 5} textAnchor="middle"
                       fontSize="5.5" fill="var(--muted-foreground)" opacity={0.7}>
