@@ -348,17 +348,27 @@ async def trigger_analysis(symbol: str, user: dict | None = Depends(get_current_
     tickers table. Returns the analysis fields. ~2s latency, ~$0.02 cost."""
     from app.services.ticker_analysis import analyze_ticker
 
-    result = await analyze_ticker(symbol.upper())
+    try:
+        result = await analyze_ticker(symbol.upper())
+    except Exception as e:
+        log.error("analyze_ticker crashed for %s: %s", symbol, e, exc_info=True)
+        raise HTTPException(500, f"Analysis failed: {str(e)[:200]}")
+
     if not result:
-        raise HTTPException(404, f"Could not analyze {symbol.upper()}")
+        # Might be unknown symbol or Claude call failed — check if ticker exists
+        db = get_supabase()
+        t = maybe_one(db.table("tickers").select("symbol").eq("symbol", symbol.upper()))
+        if not t.data:
+            raise HTTPException(404, f"Unknown ticker {symbol.upper()}")
+        raise HTTPException(502, f"Kai analysis generation failed for {symbol.upper()} — check API key and logs")
 
     return {
         "symbol": symbol.upper(),
-        "daily_analysis": result.get("daily_analysis"),
+        "daily_analysis": result.get("analysis") or result.get("daily_analysis"),
         "key_levels": result.get("key_levels"),
         "catalysts": result.get("catalysts"),
         "risks": result.get("risks"),
-        "catalyst": result.get("catalyst"),
+        "catalyst": result.get("tldr") or result.get("catalyst"),
     }
 
 

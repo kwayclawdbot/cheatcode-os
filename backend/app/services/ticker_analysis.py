@@ -242,7 +242,7 @@ Return ONLY valid JSON."""
 
     try:
         resp = client.messages.create(
-            model="claude-haiku-4-5-20250514",
+            model=s.kai_haiku_model,
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )
