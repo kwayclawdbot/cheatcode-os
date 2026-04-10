@@ -1,21 +1,346 @@
-// CheatCode OS — Ticker Dossier Page (/tickers/:symbol/analyze)
-// Comprehensive mini-dashboard: news, fundamentals, earnings, videos, alerts,
-// intel connections, community — all visualized, zero paragraphs.
+// CheatCode OS — Ticker Dossier (/tickers/:symbol/analyze)
+// Visual intelligence dashboard — gauges, charts, graphs. Zero paragraphs.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useParams } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, TrendingUp, TrendingDown, Zap, Shield, AlertTriangle,
   Play, Calendar, Brain, Flame, BarChart2, Activity, Target,
-  DollarSign, Newspaper, Users, GitBranch, ArrowUpRight, ExternalLink,
+  DollarSign, Newspaper, Users, GitBranch, ExternalLink, Layers,
 } from "lucide-react";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { triggerTickerAnalysis } from "@/lib/api";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// VISUAL COMPONENTS — all pure SVG, matching CC design system
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Radial Score Gauge (speedometer) ─────────────────────────────────────
+
+function ScoreGauge({ score, direction }: { score: number; direction: string }) {
+  const pct = Math.min(100, Math.max(0, score));
+  const color = direction === "bullish" ? "#4DC820" : direction === "bearish" ? "#E8193C" : "#F79009";
+  const radius = 54;
+  const stroke = 8;
+  const circumference = Math.PI * radius; // semicircle
+  const filled = (pct / 100) * circumference;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width="140" height="80" viewBox="0 0 140 80">
+        {/* Track */}
+        <path
+          d="M 14 70 A 54 54 0 0 1 126 70"
+          fill="none" stroke="var(--muted)" strokeWidth={stroke} strokeLinecap="round"
+        />
+        {/* Filled arc */}
+        <path
+          d="M 14 70 A 54 54 0 0 1 126 70"
+          fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={`${filled} ${circumference}`}
+          style={{ transition: "stroke-dasharray 0.8s ease" }}
+        />
+        {/* Score text */}
+        <text x="70" y="62" textAnchor="middle" fontSize="28" fontWeight="900" fill="var(--foreground)"
+              style={{ fontFamily: "var(--font-mono)" }}>
+          {score}
+        </text>
+        <text x="70" y="76" textAnchor="middle" fontSize="9" fontWeight="700" fill={color}
+              style={{ textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {direction || "NEUTRAL"}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// ── Momentum Gauge (needle style) ────────────────────────────────────────
+
+function MomentumGauge({ changePct, volRatio }: { changePct: number; volRatio: number }) {
+  // Normalize: -10% to +10% maps to 0-180 degrees
+  const angle = Math.min(180, Math.max(0, ((changePct + 10) / 20) * 180));
+  const radians = (angle - 90) * (Math.PI / 180);
+  const nx = 60 + 40 * Math.cos(radians);
+  const ny = 60 + 40 * Math.sin(radians);
+  const color = changePct >= 2 ? "#4DC820" : changePct <= -2 ? "#E8193C" : "#F79009";
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Momentum</p>
+      <svg width="120" height="70" viewBox="0 0 120 70" className="mx-auto">
+        {/* Arc zones */}
+        <path d="M 10 65 A 50 50 0 0 1 40 18" fill="none" stroke="#E8193C" strokeWidth={4} strokeLinecap="round" opacity={0.3} />
+        <path d="M 40 18 A 50 50 0 0 1 80 18" fill="none" stroke="#F79009" strokeWidth={4} strokeLinecap="round" opacity={0.3} />
+        <path d="M 80 18 A 50 50 0 0 1 110 65" fill="none" stroke="#4DC820" strokeWidth={4} strokeLinecap="round" opacity={0.3} />
+        {/* Needle */}
+        <line x1="60" y1="65" x2={nx} y2={ny} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
+        <circle cx="60" cy="65" r="4" fill={color} />
+      </svg>
+      <div className="flex justify-between mt-1">
+        <span className="text-[9px] font-bold" style={{ color: "#E8193C" }}>Bear</span>
+        <span className="text-xs font-black" style={{ color, fontFamily: "var(--font-mono)" }}>
+          {changePct >= 0 ? "+" : ""}{changePct.toFixed(1)}%
+        </span>
+        <span className="text-[9px] font-bold" style={{ color: "#4DC820" }}>Bull</span>
+      </div>
+      <p className="text-[9px] text-muted-foreground text-center mt-1">Vol {volRatio.toFixed(1)}x avg</p>
+    </div>
+  );
+}
+
+// ── 52-Week Range Slider ─────────────────────────────────────────────────
+
+function RangeSlider({ price, high, low, ma50, ma200 }: {
+  price: number; high: number; low: number; ma50?: number; ma200?: number;
+}) {
+  if (!high || !low || high <= low) return null;
+  const range = high - low;
+  const pricePct = ((price - low) / range) * 100;
+  const ma50Pct = ma50 ? ((ma50 - low) / range) * 100 : null;
+  const ma200Pct = ma200 ? ((ma200 - low) / range) * 100 : null;
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">52-Week Range</p>
+      <div className="relative h-8 mb-2">
+        {/* Track */}
+        <div className="absolute top-3 left-0 right-0 h-2 rounded-full overflow-hidden" style={{ background: "linear-gradient(90deg, #E8193C33, #F7900933, #4DC82033)" }} />
+        {/* MA markers */}
+        {ma200Pct != null && ma200Pct >= 0 && ma200Pct <= 100 && (
+          <div className="absolute top-1 h-6 w-px" style={{ left: `${ma200Pct}%`, background: "#7B2FBE", opacity: 0.5 }}>
+            <span className="absolute -top-3 -translate-x-1/2 text-[7px] font-bold" style={{ color: "#7B2FBE" }}>200d</span>
+          </div>
+        )}
+        {ma50Pct != null && ma50Pct >= 0 && ma50Pct <= 100 && (
+          <div className="absolute top-1 h-6 w-px" style={{ left: `${ma50Pct}%`, background: "#00AEEF", opacity: 0.5 }}>
+            <span className="absolute -top-3 -translate-x-1/2 text-[7px] font-bold" style={{ color: "#00AEEF" }}>50d</span>
+          </div>
+        )}
+        {/* Current price dot */}
+        <div className="absolute top-2 w-4 h-4 rounded-full border-2 border-white -translate-x-1/2"
+             style={{ left: `${Math.min(100, Math.max(0, pricePct))}%`, background: pricePct > 70 ? "#4DC820" : pricePct < 30 ? "#E8193C" : "#F79009", boxShadow: "0 0 8px rgba(0,0,0,0.3)" }} />
+      </div>
+      <div className="flex justify-between text-[9px]">
+        <span className="font-black text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>${low.toFixed(0)}</span>
+        <span className="font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${price.toFixed(2)}</span>
+        <span className="font-black text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>${high.toFixed(0)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Volume Profile Bar ───────────────────────────────────────────────────
+
+function VolumeBar({ volume, avgVolume }: { volume: number; avgVolume: number }) {
+  if (!avgVolume) return null;
+  const ratio = volume / avgVolume;
+  const maxH = 60;
+  const todayH = Math.min(maxH, (ratio / 3) * maxH);
+  const avgH = maxH / 3;
+  const color = ratio >= 2 ? "#7B2FBE" : ratio >= 1.5 ? "#4DC820" : "#667085";
+  const fmt = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1e3).toFixed(0)}K`;
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Volume</p>
+      <div className="flex items-end justify-center gap-4 h-16">
+        <div className="flex flex-col items-center">
+          <motion.div initial={{ height: 0 }} animate={{ height: todayH }} transition={{ duration: 0.6 }}
+                      className="w-8 rounded-t-md" style={{ background: color }} />
+          <span className="text-[8px] font-bold mt-1 text-foreground">Today</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="w-8 rounded-t-md border-2 border-dashed" style={{ height: avgH, borderColor: "#667085" }} />
+          <span className="text-[8px] font-bold mt-1 text-muted-foreground">20d Avg</span>
+        </div>
+      </div>
+      <p className="text-center mt-2">
+        <span className="text-sm font-black" style={{ color, fontFamily: "var(--font-mono)" }}>{ratio.toFixed(1)}x</span>
+        <span className="text-[9px] text-muted-foreground ml-1">({fmt(volume)} vs {fmt(avgVolume)})</span>
+      </p>
+    </div>
+  );
+}
+
+// ── Sentiment Compass ────────────────────────────────────────────────────
+
+function SentimentCompass({ communityBullPct, newsPositive, newsNegative, direction }: {
+  communityBullPct: number; newsPositive: number; newsNegative: number; direction: string;
+}) {
+  const kaiAngle = direction === "bullish" ? -45 : direction === "bearish" ? 45 : 0;
+  const communityAngle = ((communityBullPct - 50) / 50) * -60;
+  const newsTotal = newsPositive + newsNegative;
+  const newsAngle = newsTotal > 0 ? (((newsPositive / newsTotal) - 0.5) * -90) : 0;
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Sentiment</p>
+      <svg width="100" height="100" viewBox="0 0 100 100" className="mx-auto">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="var(--border)" strokeWidth={1} />
+        <circle cx="50" cy="50" r="25" fill="none" stroke="var(--border)" strokeWidth={0.5} strokeDasharray="3 3" />
+        {/* Quadrant labels */}
+        <text x="50" y="12" textAnchor="middle" fontSize="7" fill="#4DC820" fontWeight="700">BULL</text>
+        <text x="50" y="95" textAnchor="middle" fontSize="7" fill="#E8193C" fontWeight="700">BEAR</text>
+        {/* Kai vector */}
+        <line x1="50" y1="50" x2={50 + 30 * Math.sin(kaiAngle * Math.PI / 180)} y2={50 - 30 * Math.cos(kaiAngle * Math.PI / 180)}
+              stroke="#4DC820" strokeWidth={2} strokeLinecap="round" />
+        <circle cx={50 + 30 * Math.sin(kaiAngle * Math.PI / 180)} cy={50 - 30 * Math.cos(kaiAngle * Math.PI / 180)} r="3" fill="#4DC820" />
+        {/* Community vector */}
+        <line x1="50" y1="50" x2={50 + 22 * Math.sin(communityAngle * Math.PI / 180)} y2={50 - 22 * Math.cos(communityAngle * Math.PI / 180)}
+              stroke="#00AEEF" strokeWidth={1.5} strokeLinecap="round" opacity={0.7} />
+        {/* News vector */}
+        <line x1="50" y1="50" x2={50 + 18 * Math.sin(newsAngle * Math.PI / 180)} y2={50 - 18 * Math.cos(newsAngle * Math.PI / 180)}
+              stroke="#F79009" strokeWidth={1.5} strokeLinecap="round" opacity={0.7} />
+        <circle cx="50" cy="50" r="3" fill="var(--foreground)" />
+      </svg>
+      <div className="flex justify-center gap-3 mt-1">
+        <span className="text-[8px] font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#4DC820" }} />Kai</span>
+        <span className="text-[8px] font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#00AEEF" }} />Community</span>
+        <span className="text-[8px] font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#F79009" }} />News</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Earnings Countdown ───────────────────────────────────────────────────
+
+function EarningsCountdown({ earnings }: { earnings: any }) {
+  if (!earnings?.next_date) return null;
+  const next = new Date(earnings.next_date);
+  const now = new Date();
+  const daysUntil = Math.max(0, Math.ceil((next.getTime() - now.getTime()) / 86400000));
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Earnings</p>
+      <div className="text-center">
+        <p className="text-3xl font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+          {daysUntil}
+        </p>
+        <p className="text-[9px] font-bold text-muted-foreground uppercase">days until</p>
+        <p className="text-xs font-bold text-foreground mt-1">{earnings.next_date}</p>
+        {earnings.last_signal && (
+          <span className="inline-block mt-2 text-[9px] font-bold px-2 py-0.5 rounded-full text-white"
+                style={{ background: earnings.last_signal === "BUY" ? "#4DC820" : "#E8193C" }}>
+            Last: {earnings.last_signal}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Key Levels Price Ladder ──────────────────────────────────────────────
+
+function KeyLevelsLadder({ levels, currentPrice }: { levels: any; currentPrice: number }) {
+  if (!levels) return null;
+  const allPrices: { price: number; label: string; color: string }[] = [];
+  const res = levels.resistance;
+  const sup = levels.support;
+  const inv = levels.invalidation;
+  (Array.isArray(res) ? res : res != null ? [res] : []).forEach((v: number, i: number) =>
+    allPrices.push({ price: v, label: i === 0 ? "Resistance" : `R${i+1}`, color: "#E8193C" })
+  );
+  if (currentPrice > 0) allPrices.push({ price: currentPrice, label: "Current", color: "#00AEEF" });
+  (Array.isArray(sup) ? sup : sup != null ? [sup] : []).forEach((v: number, i: number) =>
+    allPrices.push({ price: v, label: i === 0 ? "Support" : `S${i+1}`, color: "#4DC820" })
+  );
+  if (inv) {
+    const invPrice = typeof inv === "number" ? inv : parseFloat(String(inv).replace(/[^0-9.]/g, ""));
+    if (invPrice > 0) allPrices.push({ price: invPrice, label: "Invalidation", color: "#F79009" });
+  }
+  allPrices.sort((a, b) => b.price - a.price);
+  if (allPrices.length === 0) return null;
+  const min = allPrices[allPrices.length - 1].price * 0.98;
+  const max = allPrices[0].price * 1.02;
+  const range = max - min || 1;
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Key Levels</p>
+      <div className="relative" style={{ height: allPrices.length * 36 + 8 }}>
+        {/* Vertical track */}
+        <div className="absolute left-24 top-0 bottom-0 w-px bg-border" />
+        {allPrices.map((p, i) => {
+          const top = ((max - p.price) / range) * (allPrices.length * 36);
+          const isCurrent = p.label === "Current";
+          return (
+            <div key={i} className="absolute flex items-center gap-2" style={{ top, left: 0, right: 0 }}>
+              <span className="text-[9px] font-bold uppercase tracking-wide w-20 text-right" style={{ color: p.color }}>{p.label}</span>
+              <div className="w-3 h-3 rounded-full flex-shrink-0 border-2" style={{ borderColor: p.color, background: isCurrent ? p.color : "transparent" }} />
+              <div className="flex-1 h-px" style={{ background: p.color, opacity: isCurrent ? 1 : 0.3 }} />
+              <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                ${typeof p.price === "number" ? p.price.toFixed(2) : p.price}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Neural Connection Graph (simplified SVG) ─────────────────────────────
+
+function ConnectionGraph({ symbol, connections }: { symbol: string; connections: any[] }) {
+  if (!connections?.length) return null;
+  const centerX = 150, centerY = 100;
+  const radius = 70;
+  const nodes = connections.slice(0, 6).map((c, i) => {
+    const angle = (i / Math.min(connections.length, 6)) * 2 * Math.PI - Math.PI / 2;
+    return { ...c, x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) };
+  });
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <GitBranch size={14} style={{ color: "#7B2FBE" }} />
+        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Connections</p>
+      </div>
+      <svg width="300" height="200" viewBox="0 0 300 200" className="mx-auto">
+        {/* Edges */}
+        {nodes.map((n, i) => {
+          const edgeColor = n.direction === "bullish" ? "#4DC82080" : n.direction === "bearish" ? "#E8193C80" : "#66708580";
+          return <line key={i} x1={centerX} y1={centerY} x2={n.x} y2={n.y} stroke={edgeColor} strokeWidth={1.5} />;
+        })}
+        {/* Center node */}
+        <circle cx={centerX} cy={centerY} r={20} fill="#4DC820" opacity={0.15} />
+        <circle cx={centerX} cy={centerY} r={14} fill="#4DC820" opacity={0.3} />
+        <text x={centerX} y={centerY + 4} textAnchor="middle" fontSize="10" fontWeight="900" fill="#4DC820"
+              style={{ fontFamily: "var(--font-mono)" }}>{symbol}</text>
+        {/* Outer nodes */}
+        {nodes.map((n, i) => {
+          const tickers = n.other_tickers || [];
+          const label = tickers[0] || `T${i}`;
+          const dirColor = n.direction === "bullish" ? "#4DC820" : n.direction === "bearish" ? "#E8193C" : "#667085";
+          return (
+            <g key={i}>
+              <circle cx={n.x} cy={n.y} r={12} fill={dirColor} opacity={0.15} />
+              <circle cx={n.x} cy={n.y} r={8} fill={dirColor} opacity={0.4} />
+              <text x={n.x} y={n.y + 3} textAnchor="middle" fontSize="7" fontWeight="800" fill={dirColor}
+                    style={{ fontFamily: "var(--font-mono)" }}>{label}</text>
+              {/* Headline label on edge */}
+              <text x={(centerX + n.x) / 2} y={(centerY + n.y) / 2 - 4} textAnchor="middle" fontSize="6" fill="var(--muted-foreground)"
+                    style={{ pointerEvents: "none" }}>
+                {(n.headline || "").slice(0, 20)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+type DossierTab = "overview" | "deep" | "connections";
 
 function formatMoney(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -25,31 +350,14 @@ function formatMoney(n: number | null | undefined): string {
   return `$${n.toLocaleString()}`;
 }
 
-function pctStr(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return `${(n * 100).toFixed(1)}%`;
-}
-
-function sentimentColor(s: string | null | undefined): string {
-  if (!s) return "#F79009";
-  const lower = typeof s === "string" ? s.toLowerCase() : "";
-  if (lower === "bullish" || lower === "positive" || (typeof s === "number" && s > 0)) return "#4DC820";
-  if (lower === "bearish" || lower === "negative" || (typeof s === "number" && s < 0)) return "#E8193C";
-  return "#F79009";
-}
-
-// ─── Metric Card ─────────────────────────────────────────────────────────────
-
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="bg-muted rounded-xl p-3 text-center">
-      <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1">{label}</p>
-      <p className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)", color }}>{value}</p>
+    <div className="bg-muted rounded-xl p-2.5 text-center">
+      <p className="text-[8px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">{label}</p>
+      <p className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)", color }}>{value}</p>
     </div>
   );
 }
-
-// ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function TickerAnalyzePage() {
   const params = useParams<{ symbol: string }>();
@@ -57,6 +365,7 @@ export default function TickerAnalyzePage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<DossierTab>("overview");
 
   useEffect(() => {
     if (!symbol) return;
@@ -69,11 +378,39 @@ export default function TickerAnalyzePage() {
   }, [symbol]);
 
   const chg = data?.price_change_pct || 0;
-  const isBull = (data?.direction || "").toLowerCase() === "bullish";
-  const isBear = (data?.direction || "").toLowerCase() === "bearish";
-  const dirColor = isBull ? "#4DC820" : isBear ? "#E8193C" : "#F79009";
+  const dirColor = (data?.direction || "").toLowerCase() === "bullish" ? "#4DC820" : (data?.direction || "").toLowerCase() === "bearish" ? "#E8193C" : "#F79009";
   const fund = data?.fundamentals;
   const kai = data?.kai_analysis;
+
+  // Compute derived values
+  const volRatio = useMemo(() => {
+    const sb = data?.score_breakdown;
+    if (!sb) return 1;
+    return 1 + (sb.volume || 0) / 16; // reverse the formula
+  }, [data]);
+
+  // News sentiment counts
+  const newsPos = useMemo(() => (data?.news || []).filter((n: any) => n.sentiment > 0).length, [data]);
+  const newsNeg = useMemo(() => (data?.news || []).filter((n: any) => n.sentiment < 0).length, [data]);
+
+  // Radar chart data for fundamentals
+  const radarData = useMemo(() => {
+    if (!fund) return [];
+    return [
+      { axis: "Value", value: fund.pe_ratio ? Math.min(100, Math.max(0, 100 - fund.pe_ratio)) : 50 },
+      { axis: "Growth", value: fund.quarterly_revenue_growth ? Math.min(100, (fund.quarterly_revenue_growth + 0.5) * 100) : 50 },
+      { axis: "Margin", value: fund.profit_margin ? Math.min(100, (fund.profit_margin + 0.5) * 100) : 50 },
+      { axis: "Momentum", value: Math.min(100, Math.abs(chg) * 10) },
+      { axis: "Quality", value: fund.roe ? Math.min(100, (fund.roe + 0.5) * 100) : 50 },
+      { axis: "Stability", value: fund.beta ? Math.min(100, Math.max(0, (2 - fund.beta) * 50)) : 50 },
+    ];
+  }, [fund, chg]);
+
+  const TABS: { id: DossierTab; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "deep", label: "Deep Dive" },
+    { id: "connections", label: "Connections" },
+  ];
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
@@ -92,431 +429,354 @@ export default function TickerAnalyzePage() {
               <div className="w-8 h-8 border-3 border-[#4DC820]/30 border-t-[#4DC820] rounded-full animate-spin" />
               <div className="text-left">
                 <p className="text-sm font-bold text-foreground">Building dossier for ${symbol}</p>
-                <p className="text-xs text-muted-foreground">Pulling news, fundamentals, earnings, alerts, community data...</p>
+                <p className="text-xs text-muted-foreground">News, fundamentals, earnings, alerts, community...</p>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Error */}
         {error && !loading && (
           <div className="text-center py-20">
-            <div className="w-12 h-12 rounded-full bg-[#E8193C18] flex items-center justify-center mx-auto mb-3">
-              <AlertTriangle size={20} style={{ color: "#E8193C" }} />
-            </div>
-            <p className="font-bold text-foreground mb-1">Dossier unavailable</p>
-            <p className="text-sm text-muted-foreground">{error}</p>
+            <AlertTriangle size={24} style={{ color: "#E8193C" }} className="mx-auto mb-2" />
+            <p className="font-bold text-foreground">{error}</p>
           </div>
         )}
 
-        {/* Dossier */}
         {data && !loading && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
 
             {/* ── HERO ── */}
-            <div className="rounded-2xl border border-border p-5" style={{ background: dirColor + "06" }}>
-              <div className="flex items-start gap-4">
+            <div className="rounded-2xl border border-border p-5 mb-4" style={{ background: dirColor + "06" }}>
+              <div className="flex items-center gap-4">
                 <TickerLogo symbol={symbol} size={48} className="rounded-xl flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="text-2xl font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${symbol}</span>
                     {data.name && <span className="text-sm text-muted-foreground">{data.name}</span>}
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: dirColor }}>
-                      {data.direction || "Neutral"}
-                    </span>
-                    {data.sector && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{data.sector}</span>}
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: dirColor }}>{data.direction || "Neutral"}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                      ${(data.last_price || 0).toFixed(2)}
-                    </span>
+                    <span className="text-lg font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${(data.last_price || 0).toFixed(2)}</span>
                     <span className="text-sm font-bold flex items-center gap-0.5" style={{ color: chg >= 0 ? "#4DC820" : "#E8193C" }}>
                       {chg >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
                       {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
                     </span>
                   </div>
                 </div>
-                <div className="text-center flex-shrink-0">
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Score</p>
-                  <p className="text-3xl font-black" style={{ color: dirColor, fontFamily: "var(--font-mono)" }}>{data.convergence_score || 0}</p>
-                </div>
+                <ScoreGauge score={data.convergence_score || 0} direction={data.direction || "neutral"} />
               </div>
-            </div>
 
-            {/* ── KAI TLDR ── */}
-            {kai?.tldr && (
-              <div className="bg-card rounded-xl border border-border p-4 flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5" style={{ background: "#4DC820" }}>K</div>
-                <p className="text-sm font-bold text-foreground leading-relaxed">{kai.tldr}</p>
-              </div>
-            )}
-
-            {/* ── TWO COLUMN: Score Breakdown + Fundamentals ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-              {/* Score breakdown */}
-              {data.score_breakdown && Object.values(data.score_breakdown).some((v: any) => v > 0) && (
-                <div className="bg-card rounded-xl border border-border p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Score Breakdown</p>
-                  <div className="space-y-2">
-                    {[
-                      { key: "technical", label: "Technical", max: 25, color: "#00AEEF" },
-                      { key: "momentum", label: "Momentum", max: 25, color: "#4DC820" },
-                      { key: "volume", label: "Volume", max: 25, color: "#7B2FBE" },
-                      { key: "sector", label: "Sector", max: 10, color: "#F79009" },
-                      { key: "catalyst", label: "Catalyst", max: 25, color: "#E8193C" },
-                      { key: "content", label: "Content", max: 25, color: "#00AEEF" },
-                      { key: "flow", label: "Flow", max: 25, color: "#7B2FBE" },
-                    ].filter(b => (data.score_breakdown[b.key] || 0) > 0).map(b => {
-                      const val = data.score_breakdown[b.key] || 0;
-                      const pct = Math.min(100, (val / b.max) * 100);
-                      return (
-                        <div key={b.key} className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-muted-foreground w-16 text-right">{b.label}</span>
-                          <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: b.color }} />
-                          </div>
-                          <span className="text-[10px] font-black text-foreground w-10 text-right" style={{ fontFamily: "var(--font-mono)" }}>{val}/{b.max}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Fundamentals grid */}
-              {fund && (
-                <div className="bg-card rounded-xl border border-border p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <DollarSign size={14} style={{ color: "#00AEEF" }} />
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Fundamentals</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {fund.market_cap && <MetricCard label="Market Cap" value={formatMoney(fund.market_cap)} />}
-                    {fund.pe_ratio && <MetricCard label="P/E" value={fund.pe_ratio.toFixed(1)} />}
-                    {fund.eps && <MetricCard label="EPS" value={`$${fund.eps.toFixed(2)}`} />}
-                    {fund.analyst_target && <MetricCard label="Target" value={`$${fund.analyst_target.toFixed(0)}`} color="#4DC820" />}
-                    {fund.high_52w && <MetricCard label="52W High" value={`$${fund.high_52w.toFixed(0)}`} />}
-                    {fund.low_52w && <MetricCard label="52W Low" value={`$${fund.low_52w.toFixed(0)}`} />}
-                    {fund.beta && <MetricCard label="Beta" value={fund.beta.toFixed(2)} />}
-                    {fund.short_ratio && <MetricCard label="Short Ratio" value={fund.short_ratio.toFixed(1)} />}
-                    {fund.quarterly_revenue_growth != null && <MetricCard label="Rev Growth" value={pctStr(fund.quarterly_revenue_growth)} color={fund.quarterly_revenue_growth > 0 ? "#4DC820" : "#E8193C"} />}
-                    {fund.quarterly_earnings_growth != null && <MetricCard label="EPS Growth" value={pctStr(fund.quarterly_earnings_growth)} color={fund.quarterly_earnings_growth > 0 ? "#4DC820" : "#E8193C"} />}
-                    {fund.profit_margin != null && <MetricCard label="Margin" value={pctStr(fund.profit_margin)} />}
-                    {fund.roe != null && <MetricCard label="ROE" value={pctStr(fund.roe)} />}
-                  </div>
+              {/* Kai TLDR — terminal style */}
+              {kai?.tldr && (
+                <div className="mt-3 px-3 py-2 rounded-lg" style={{ background: "#0a0f1a" }}>
+                  <p className="text-xs leading-relaxed" style={{ fontFamily: "var(--font-mono)", color: "#4DC820" }}>
+                    <span className="opacity-50">kai@dossier ~ </span>{kai.tldr}
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* ── DRIVERS ── */}
-            {data.drivers?.length > 0 && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">What's Driving This</p>
-                <div className="space-y-1.5">
-                  {data.drivers.map((d: any, i: number) => {
-                    const iconColor = d.type === "momentum" ? "#4DC820" : d.type === "volume" ? "#7B2FBE" : d.type === "sector" ? "#F79009" : d.type === "theme" ? "#E8193C" : "#00AEEF";
-                    return (
-                      <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted">
-                        <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: iconColor + "18", color: iconColor }}>
-                          {d.type === "momentum" ? (d.icon === "trending-down" ? <TrendingDown size={11} /> : <TrendingUp size={11} />) :
-                           d.type === "volume" ? <BarChart2 size={11} /> :
-                           d.type === "theme" ? <Flame size={11} /> :
-                           <Activity size={11} />}
+            {/* ── TABS ── */}
+            <div className="flex items-center gap-1 mb-4 border-b border-border">
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                        className="px-4 py-2.5 text-xs font-bold transition-colors relative"
+                        style={{ color: tab === t.id ? "#4DC820" : "var(--muted-foreground)" }}>
+                  {t.label}
+                  {tab === t.id && <motion.div layoutId="dossier-tab" className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "#4DC820" }} />}
+                </button>
+              ))}
+            </div>
+
+            <AnimatePresence mode="wait">
+
+              {/* ═══ OVERVIEW TAB ═══ */}
+              {tab === "overview" && (
+                <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                  {/* Visual grid */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <MomentumGauge changePct={chg} volRatio={volRatio} />
+                    <VolumeBar volume={parseFloat(data.score_breakdown?.volume || 0) * 1e6 / 16 + (fund?.market_cap ? 5e6 : 1e6)} avgVolume={fund?.market_cap ? 5e6 : 1e6} />
+                    <SentimentCompass communityBullPct={60} newsPositive={newsPos} newsNegative={newsNeg} direction={data.direction || "neutral"} />
+                    <EarningsCountdown earnings={data.earnings} />
+                  </div>
+
+                  {/* 52W Range */}
+                  {fund && (fund.high_52w || fund.low_52w) && (
+                    <RangeSlider price={data.last_price || 0} high={fund.high_52w || 0} low={fund.low_52w || 0} ma50={fund.ma_50d} ma200={fund.ma_200d} />
+                  )}
+
+                  {/* Fundamentals radar + metric grid side by side */}
+                  {fund && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {radarData.length > 0 && (
+                        <div className="bg-card rounded-xl border border-border p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Profile</p>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <RadarChart data={radarData}>
+                              <PolarGrid stroke="var(--border)" />
+                              <PolarAngleAxis dataKey="axis" tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} />
+                              <Radar dataKey="value" stroke="#4DC820" fill="#4DC820" fillOpacity={0.15} strokeWidth={1.5} />
+                            </RadarChart>
+                          </ResponsiveContainer>
                         </div>
-                        <span className="text-xs text-foreground">{d.text}</span>
+                      )}
+                      <div className="bg-card rounded-xl border border-border p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <DollarSign size={14} style={{ color: "#00AEEF" }} />
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Fundamentals</p>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {fund.market_cap && <MetricCard label="Mkt Cap" value={formatMoney(fund.market_cap)} />}
+                          {fund.pe_ratio && <MetricCard label="P/E" value={fund.pe_ratio.toFixed(1)} />}
+                          {fund.eps && <MetricCard label="EPS" value={`$${fund.eps.toFixed(2)}`} />}
+                          {fund.analyst_target && <MetricCard label="Target" value={`$${fund.analyst_target.toFixed(0)}`} color="#4DC820" />}
+                          {fund.beta && <MetricCard label="Beta" value={fund.beta.toFixed(2)} />}
+                          {fund.short_ratio && <MetricCard label="Short" value={fund.short_ratio.toFixed(1)} />}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                    </div>
+                  )}
 
-            {/* ── NEWS ── */}
-            {data.news?.length > 0 && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Newspaper size={14} style={{ color: "#00AEEF" }} />
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Recent News</p>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
-                  {data.news.map((n: any, i: number) => (
-                    <a key={i} href={n.link} target="_blank" rel="noopener noreferrer"
-                       className="flex-shrink-0 w-56 bg-muted rounded-xl p-3 border border-transparent hover:border-border transition-all cursor-pointer group">
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className="text-[9px] text-muted-foreground">{n.date}</span>
-                        {n.sentiment != null && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                                style={{ background: sentimentColor(n.sentiment > 0 ? "bullish" : n.sentiment < 0 ? "bearish" : "neutral") + "18",
-                                         color: sentimentColor(n.sentiment > 0 ? "bullish" : n.sentiment < 0 ? "bearish" : "neutral") }}>
-                            {n.sentiment > 0 ? "Bullish" : n.sentiment < 0 ? "Bearish" : "Neutral"}
+                  {/* News ribbon */}
+                  {data.news?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Newspaper size={14} style={{ color: "#00AEEF" }} />
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">News</p>
+                      </div>
+                      <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+                        {data.news.map((n: any, i: number) => {
+                          const sc = n.sentiment > 0 ? "#4DC820" : n.sentiment < 0 ? "#E8193C" : "#667085";
+                          return (
+                            <a key={i} href={n.link} target="_blank" rel="noopener noreferrer"
+                               className="flex-shrink-0 w-52 bg-muted rounded-xl p-3 hover:border-border border border-transparent transition-all cursor-pointer">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <div className="w-2 h-2 rounded-full" style={{ background: sc }} />
+                                <span className="text-[9px] text-muted-foreground">{n.date}</span>
+                              </div>
+                              <p className="text-[11px] font-bold text-foreground line-clamp-3 leading-tight">{n.title}</p>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Drivers */}
+                  {data.drivers?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">What's Driving This</p>
+                      <div className="flex flex-wrap gap-2">
+                        {data.drivers.map((d: any, i: number) => {
+                          const ic = d.type === "momentum" ? "#4DC820" : d.type === "volume" ? "#7B2FBE" : d.type === "sector" ? "#F79009" : "#00AEEF";
+                          return (
+                            <span key={i} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5"
+                                  style={{ background: ic + "12", color: ic }}>
+                              {d.type === "momentum" ? (chg >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />) :
+                               d.type === "volume" ? <BarChart2 size={11} /> : d.type === "sector" ? <Layers size={11} /> : <Activity size={11} />}
+                              {d.text}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* ═══ DEEP DIVE TAB ═══ */}
+              {tab === "deep" && (
+                <motion.div key="deep" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                  {/* Key levels visual */}
+                  {kai?.key_levels && <KeyLevelsLadder levels={kai.key_levels} currentPrice={data.last_price || 0} />}
+
+                  {/* Catalysts + Risks side by side */}
+                  {((kai?.catalysts?.length > 0) || (kai?.risks?.length > 0)) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {kai?.catalysts?.length > 0 && (
+                        <div className="bg-card rounded-xl border border-border p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Zap size={14} style={{ color: "#4DC820" }} />
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Catalysts</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {kai.catalysts.map((c: string, i: number) => (
+                              <div key={i} className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-muted">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "#4DC820" }} />
+                                <span className="text-xs text-foreground">{c}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {kai?.risks?.length > 0 && (
+                        <div className="bg-card rounded-xl border border-border p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Shield size={14} style={{ color: "#E8193C" }} />
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Risks</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {kai.risks.map((r: string, i: number) => (
+                              <div key={i} className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-muted">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "#E8193C" }} />
+                                <span className="text-xs text-foreground">{r}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Track record */}
+                  {data.track_record?.alerts?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Target size={14} style={{ color: "#00AEEF" }} />
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Alert Track Record</p>
+                        </div>
+                        {data.track_record.setup_win_rate != null && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                                style={{ background: data.track_record.setup_win_rate >= 60 ? "#4DC820" : "#F79009" }}>
+                            {data.track_record.setup_win_rate}% win rate
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] font-bold text-foreground line-clamp-3 leading-tight">{n.title}</p>
-                      <div className="flex items-center gap-1 mt-1.5 text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ExternalLink size={9} /> Read
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── KAI ANALYSIS: Key Levels + Catalysts/Risks ── */}
-            {kai && (
-              <>
-                {/* Key levels ladder */}
-                {kai.key_levels && (
-                  <div className="bg-card rounded-xl border border-border p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Key Levels</p>
-                    <div className="space-y-2">
-                      {(() => {
-                        const levels: { label: string; value: any; color: string }[] = [];
-                        const res = kai.key_levels.resistance;
-                        const sup = kai.key_levels.support;
-                        const inv = kai.key_levels.invalidation;
-                        (Array.isArray(res) ? res : res != null ? [res] : []).forEach((v: number, i: number) =>
-                          levels.push({ label: i === 0 ? "Resistance" : `R${i+1}`, value: v, color: "#E8193C" })
-                        );
-                        (Array.isArray(sup) ? sup : sup != null ? [sup] : []).forEach((v: number, i: number) =>
-                          levels.push({ label: i === 0 ? "Support" : `S${i+1}`, value: v, color: "#4DC820" })
-                        );
-                        if (inv) levels.push({ label: "Invalidation", value: inv, color: "#F79009" });
-                        return levels.map((l, i) => (
+                      <div className="space-y-1.5">
+                        {data.track_record.alerts.map((a: any, i: number) => (
                           <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted">
-                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color }} />
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground w-20">{l.label}</span>
-                            <span className="text-sm font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                              {typeof l.value === "number" ? `$${l.value.toFixed(2)}` : String(l.value)}
-                            </span>
+                            <span className="text-[10px] text-muted-foreground w-16 flex-shrink-0">{a.date}</span>
+                            <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${a.price?.toFixed(2)}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-card text-muted-foreground border border-border">Score {a.score}</span>
+                            {a.pattern && <span className="text-[9px] text-muted-foreground">{a.pattern}</span>}
                           </div>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-                )}
-
-                {/* Catalysts + Risks side by side */}
-                {((kai.catalysts?.length > 0) || (kai.risks?.length > 0)) && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {kai.catalysts?.length > 0 && (
-                      <div className="bg-card rounded-xl border border-border p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Zap size={14} style={{ color: "#4DC820" }} />
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Catalysts</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          {kai.catalysts.map((c: string, i: number) => (
-                            <div key={i} className="flex items-start gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "#4DC820" }} />
-                              <span className="text-xs text-foreground">{c}</span>
-                            </div>
-                          ))}
-                        </div>
+                        ))}
                       </div>
-                    )}
-                    {kai.risks?.length > 0 && (
-                      <div className="bg-card rounded-xl border border-border p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Shield size={14} style={{ color: "#E8193C" }} />
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Risks</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          {kai.risks.map((r: string, i: number) => (
-                            <div key={i} className="flex items-start gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "#E8193C" }} />
-                              <span className="text-xs text-foreground">{r}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ── TRACK RECORD ── */}
-            {data.track_record?.alerts?.length > 0 && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Target size={14} style={{ color: "#00AEEF" }} />
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Our Track Record</p>
-                  </div>
-                  {data.track_record.setup_win_rate != null && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                          style={{ background: data.track_record.setup_win_rate >= 60 ? "#4DC820" : "#F79009" }}>
-                      {data.track_record.setup_win_rate}% win rate
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  {data.track_record.alerts.map((a: any, i: number) => (
-                    <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted">
-                      <span className="text-[10px] text-muted-foreground w-16 flex-shrink-0">{a.date}</span>
-                      <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${a.price?.toFixed(2)}</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-card text-muted-foreground border border-border">Score {a.score}</span>
-                      {a.pattern && <span className="text-[9px] text-muted-foreground">{a.pattern}</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── EARNINGS ── */}
-            {data.earnings && (data.earnings.next_date || data.earnings.last_signal) && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Calendar size={14} style={{ color: "#7B2FBE" }} />
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Earnings</p>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap mb-2">
-                  {data.earnings.next_date && (
-                    <div className="bg-muted rounded-lg px-3 py-1.5">
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Next</p>
-                      <p className="text-xs font-bold text-foreground">{data.earnings.next_date}</p>
                     </div>
                   )}
-                  {data.earnings.last_signal && (
-                    <span className="text-[9px] font-bold px-2 py-1 rounded-full text-white"
-                          style={{ background: data.earnings.last_signal === "BUY" ? "#4DC820" : "#E8193C" }}>
-                      {data.earnings.last_signal}
-                    </span>
-                  )}
-                </div>
-                {data.earnings.flags?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {data.earnings.flags.map((f: any, i: number) => (
-                      <span key={i} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                            style={{ background: f.type === "green" ? "#4DC82018" : "#E8193C18", color: f.type === "green" ? "#4DC820" : "#E8193C" }}>
-                        {f.type === "green" ? "+" : "−"} {f.text}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* ── INTEL CONNECTIONS (cross-ticker graph) ── */}
-            {data.intel_connections?.length > 0 && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <GitBranch size={14} style={{ color: "#7B2FBE" }} />
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Intel Connections</p>
-                </div>
-                <div className="space-y-2">
-                  {data.intel_connections.map((c: any, i: number) => (
-                    <div key={i} className="px-3 py-2 rounded-lg bg-muted">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                              style={{ background: sentimentColor(c.direction) + "18", color: sentimentColor(c.direction) }}>
-                          {c.direction}
-                        </span>
-                        <span className="text-xs font-bold text-foreground">{c.headline}</span>
+                  {/* Earnings detail */}
+                  {data.earnings && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Calendar size={14} style={{ color: "#7B2FBE" }} />
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Earnings Intel</p>
                       </div>
-                      {c.other_tickers?.length > 0 && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span className="text-[9px] text-muted-foreground">Linked:</span>
-                          {c.other_tickers.map((t: string) => (
-                            <Link key={t} href={`/tickers/${t}`}>
-                              <span className="text-[9px] font-black px-1 py-0.5 rounded bg-background border border-border hover:border-[#4DC820] transition-colors cursor-pointer"
-                                    style={{ fontFamily: "var(--font-mono)" }}>${t}</span>
-                            </Link>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {data.earnings.next_date && (
+                          <div className="bg-muted rounded-lg px-3 py-1.5">
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Next</p>
+                            <p className="text-xs font-bold text-foreground">{data.earnings.next_date}</p>
+                          </div>
+                        )}
+                        {data.earnings.last_signal && (
+                          <span className="text-[9px] font-bold px-2 py-1 rounded-full text-white"
+                                style={{ background: data.earnings.last_signal === "BUY" ? "#4DC820" : "#E8193C" }}>
+                            {data.earnings.last_signal}
+                          </span>
+                        )}
+                      </div>
+                      {data.earnings.flags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {data.earnings.flags.map((f: any, i: number) => (
+                            <span key={i} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                                  style={{ background: f.type === "green" ? "#4DC82018" : "#E8193C18", color: f.type === "green" ? "#4DC820" : "#E8193C" }}>
+                              {f.type === "green" ? "+" : "−"} {f.text}
+                            </span>
                           ))}
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  )}
 
-            {/* ── VIDEOS ── */}
-            {data.videos?.length > 0 && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Play size={14} style={{ color: "#E8193C" }} />
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Videos mentioning ${symbol}</p>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
-                  {data.videos.map((v: any) => (
-                    <Link key={v.id} href={`/video/${v.id}`}>
-                      <div className="flex-shrink-0 w-52 bg-muted rounded-xl overflow-hidden border border-transparent hover:border-border transition-all cursor-pointer group">
-                        <div className="relative aspect-video bg-background">
-                          {v.thumbnail_url && <img src={v.thumbnail_url} alt={v.title} className="w-full h-full object-cover" />}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Play size={16} className="text-white" />
-                          </div>
-                          {v.duration_seconds && (
-                            <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/80 text-white px-1 py-0.5 rounded">
-                              {Math.floor(v.duration_seconds / 60)}:{String(v.duration_seconds % 60).padStart(2, "0")}
-                            </span>
-                          )}
-                          {v.sentiment && (
-                            <span className="absolute top-1 left-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                                  style={{ background: sentimentColor(v.sentiment) }}>{v.sentiment}</span>
-                          )}
-                        </div>
-                        <div className="p-2">
-                          <p className="text-[10px] font-bold text-foreground line-clamp-2 leading-tight">{v.title}</p>
-                          {v.creator_name && <p className="text-[9px] text-muted-foreground mt-0.5">{v.creator_name}</p>}
-                          {v.mention_context && (
-                            <p className="text-[9px] text-muted-foreground mt-1 line-clamp-2 italic">"{v.mention_context}"</p>
-                          )}
-                        </div>
+                  {/* Videos */}
+                  {data.videos?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Play size={14} style={{ color: "#E8193C" }} />
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Creator Coverage</p>
                       </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── COMMUNITY POSTS ── */}
-            {data.community_posts?.length > 0 && (
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Users size={14} style={{ color: "#4DC820" }} />
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Community on ${symbol}</p>
-                </div>
-                <div className="space-y-2">
-                  {data.community_posts.map((p: any, i: number) => (
-                    <div key={i} className="px-3 py-2 rounded-lg bg-muted">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-[10px] font-bold text-foreground">{p.author}</span>
-                        {p.is_agent && <span className="text-[8px] font-bold px-1 py-0.5 rounded-full text-white" style={{ background: "#7B2FBE" }}>AI</span>}
-                        {p.sentiment && (
-                          <span className="text-[9px] font-bold" style={{ color: sentimentColor(p.sentiment) }}>
-                            {p.sentiment === "bullish" ? "🔥" : p.sentiment === "bearish" ? "🐻" : "👀"} {p.sentiment}
-                          </span>
-                        )}
-                        <span className="text-[9px] text-muted-foreground ml-auto">{p.likes > 0 ? `${p.likes} likes` : ""}</span>
+                      <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+                        {data.videos.map((v: any) => (
+                          <Link key={v.id} href={`/video/${v.id}`}>
+                            <div className="flex-shrink-0 w-48 bg-muted rounded-xl overflow-hidden border border-transparent hover:border-border transition-all cursor-pointer group">
+                              <div className="relative aspect-video bg-background">
+                                {v.thumbnail_url && <img src={v.thumbnail_url} alt={v.title} className="w-full h-full object-cover" />}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <Play size={14} className="text-white" />
+                                </div>
+                              </div>
+                              <div className="p-2">
+                                <p className="text-[10px] font-bold text-foreground line-clamp-2 leading-tight">{v.title}</p>
+                                {v.creator_name && <p className="text-[9px] text-muted-foreground mt-0.5">{v.creator_name}</p>}
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
                       </div>
-                      <p className="text-xs text-foreground leading-relaxed">{p.body}</p>
                     </div>
-                  ))}
-                </div>
-                <Link href={`/tickers/${symbol}`}>
-                  <button className="w-full text-[10px] font-bold py-2 mt-2 rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1">
-                    View all posts <ArrowUpRight size={9} />
-                  </button>
-                </Link>
-              </div>
-            )}
+                  )}
+                </motion.div>
+              )}
 
-            {/* ── THEMES ── */}
-            {data.themes?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {data.themes.map((t: string, i: number) => (
-                  <span key={i} className="text-[9px] font-bold px-2 py-1 rounded-full flex items-center gap-1"
-                        style={{ background: "#F7900918", color: "#F79009" }}>
-                    <Flame size={10} /> {t}
-                  </span>
-                ))}
-              </div>
-            )}
+              {/* ═══ CONNECTIONS TAB ═══ */}
+              {tab === "connections" && (
+                <motion.div key="connections" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                  {/* Neural graph */}
+                  <ConnectionGraph symbol={symbol} connections={data.intel_connections || []} />
 
+                  {/* Community posts */}
+                  {data.community_posts?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Users size={14} style={{ color: "#4DC820" }} />
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Community on ${symbol}</p>
+                      </div>
+                      <div className="space-y-2">
+                        {data.community_posts.map((p: any, i: number) => {
+                          const sc = p.sentiment === "bullish" ? "#4DC820" : p.sentiment === "bearish" ? "#E8193C" : "#667085";
+                          return (
+                            <div key={i} className="px-3 py-2 rounded-lg bg-muted">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-[10px] font-bold text-foreground">{p.author}</span>
+                                {p.is_agent && <span className="text-[8px] font-bold px-1 py-0.5 rounded-full text-white" style={{ background: "#7B2FBE" }}>AI</span>}
+                                {p.sentiment && <div className="w-1.5 h-1.5 rounded-full" style={{ background: sc }} />}
+                              </div>
+                              <p className="text-xs text-foreground leading-relaxed">{p.body}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Themes */}
+                  {data.themes?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Active Themes</p>
+                      <div className="flex flex-wrap gap-2">
+                        {data.themes.map((t: string, i: number) => (
+                          <span key={i} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5"
+                                style={{ background: "#F7900918", color: "#F79009" }}>
+                            <Flame size={11} /> {t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {data.intel_connections?.length === 0 && data.community_posts?.length === 0 && (
+                    <div className="text-center py-12">
+                      <GitBranch size={24} className="text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No connections data yet for ${symbol}</p>
+                      <p className="text-xs text-muted-foreground">Intel connections build over time as Kai processes news and cross-ticker signals</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </div>
