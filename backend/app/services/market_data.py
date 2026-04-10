@@ -216,6 +216,100 @@ async def fetch_bulk_quotes(symbols: list[str] | None = None) -> dict[str, dict]
         return _quote_cache.get("data", {})
 
 
+# ── EODHD News + Fundamentals (for dossier) ────────────────────────────────
+
+async def fetch_ticker_news(symbol: str, limit: int = 5) -> list[dict]:
+    """Fetch recent news for a ticker from EODHD News API."""
+    s = get_settings()
+    if not s.eodhd_api_key:
+        return []
+    eodhd_code, _ = normalise_symbol(symbol)
+    if not eodhd_code:
+        return []
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://eodhistoricaldata.com/api/news",
+                params={"api_token": s.eodhd_api_key, "s": eodhd_code, "limit": limit, "fmt": "json"},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return []
+            articles = resp.json()
+            if not isinstance(articles, list):
+                return []
+            return [
+                {
+                    "date": (a.get("date") or "")[:10],
+                    "title": (a.get("title") or "")[:200],
+                    "sentiment": a.get("sentiment", {}).get("polarity") if isinstance(a.get("sentiment"), dict) else None,
+                    "link": a.get("link"),
+                }
+                for a in articles[:limit]
+            ]
+    except Exception as e:
+        log.warning("EODHD news fetch failed for %s: %s", symbol, e)
+        return []
+
+
+async def fetch_ticker_fundamentals(symbol: str) -> dict | None:
+    """Fetch company fundamentals from EODHD — General, Highlights, Valuation, Technicals."""
+    s = get_settings()
+    if not s.eodhd_api_key:
+        return None
+    eodhd_code, _ = normalise_symbol(symbol)
+    if not eodhd_code:
+        return None
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://eodhistoricaldata.com/api/fundamentals/{eodhd_code}",
+                params={"api_token": s.eodhd_api_key, "filter": "General,Highlights,Valuation,Technicals", "fmt": "json"},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if not isinstance(data, dict):
+                return None
+
+            general = data.get("General", {})
+            highlights = data.get("Highlights", {})
+            valuation = data.get("Valuation", {})
+            technicals = data.get("Technicals", {})
+
+            return {
+                "name": general.get("Name"),
+                "sector": general.get("Sector"),
+                "industry": general.get("Industry"),
+                "description": (general.get("Description") or "")[:300],
+                "market_cap": highlights.get("MarketCapitalization"),
+                "pe_ratio": highlights.get("PERatio"),
+                "forward_pe": valuation.get("ForwardPE"),
+                "eps": highlights.get("EarningsShare"),
+                "dividend_yield": highlights.get("DividendYield"),
+                "profit_margin": highlights.get("ProfitMargin"),
+                "quarterly_revenue_growth": highlights.get("QuarterlyRevenueGrowthYOY"),
+                "quarterly_earnings_growth": highlights.get("QuarterlyEarningsGrowthYOY"),
+                "analyst_target": highlights.get("WallStreetTargetPrice"),
+                "beta": technicals.get("Beta"),
+                "high_52w": technicals.get("52WeekHigh"),
+                "low_52w": technicals.get("52WeekLow"),
+                "ma_50d": technicals.get("50DayMA"),
+                "ma_200d": technicals.get("200DayMA"),
+                "short_ratio": technicals.get("ShortRatio"),
+                "book_value": highlights.get("BookValue"),
+                "ebitda": highlights.get("EBITDA"),
+                "roe": highlights.get("ReturnOnEquityTTM"),
+                "operating_margin": highlights.get("OperatingMarginTTM"),
+                "revenue_ttm": highlights.get("RevenueTTM"),
+                "ev_to_ebitda": valuation.get("EnterpriseValueEbitda"),
+            }
+    except Exception as e:
+        log.warning("EODHD fundamentals fetch failed for %s: %s", symbol, e)
+        return None
+
+
 async def get_market_summary() -> dict:
     """Get market overview: index performance, breadth, top movers."""
     now = time.time()

@@ -343,39 +343,92 @@ async def ticker_lookup(symbol: str, user: dict | None = Depends(get_current_use
 
 
 @router.post("/ticker/{symbol}/analyze")
-async def trigger_analysis(symbol: str, user: dict | None = Depends(get_current_user)):
-    """On-demand Kai analysis for a ticker. Generates via Claude, caches to
-    tickers table. Returns the analysis fields. ~2s latency, ~$0.02 cost."""
+async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_user)):
+    """Full dossier: aggregates ALL data sources into structured JSON for
+    the analysis page. Runs on-demand, caches AI analysis for 24h.
+
+    Data sources (all fetched in parallel):
+      - EODHD live quote + fundamentals + news (instant, $0)
+      - sent_alerts + alert_performance (instant, $0)
+      - vault_store themes + earnings + intel connections (instant, $0)
+      - content_tickers → curated videos (instant, $0)
+      - community feed posts about this ticker (instant, $0)
+      - Kai synthesis (Claude Haiku, ~$0.02, cached 24h)
+    """
+    import asyncio
+    from app.services.market_data import fetch_bulk_quotes, fetch_ticker_news, fetch_ticker_fundamentals
     from app.services.ticker_analysis import analyze_ticker
 
-    try:
-        result = await analyze_ticker(symbol.upper())
-    except Exception as e:
-        log.error("analyze_ticker crashed for %s: %s", symbol, e, exc_info=True)
-        raise HTTPException(500, f"Analysis failed: {str(e)[:200]}")
+    sym = symbol.upper()
+    db = get_supabase()
 
-    if not result:
-        db2 = get_supabase()
-        t = maybe_one(db2.table("tickers").select("symbol").eq("symbol", symbol.upper()))
-        if not t.data:
-            raise HTTPException(404, f"Unknown ticker {symbol.upper()}")
-        raise HTTPException(502, f"Kai analysis generation failed for {symbol.upper()} — check API key and logs")
+    # 1. Check ticker exists
+    t = maybe_one(db.table("tickers").select("*").eq("symbol", sym))
+    if not t.data:
+        raise HTTPException(404, f"Unknown ticker {sym}")
+    ticker_data = t.data
+    _fill_from_raw_data(ticker_data)
 
-    # Enrich with context data for the full analysis page
-    db2 = get_supabase()
+    # 2. Parallel fetch: quote, fundamentals, news, analysis (all async)
+    quote_task = fetch_bulk_quotes([sym])
+    fund_task = fetch_ticker_fundamentals(sym)
+    news_task = fetch_ticker_news(sym, limit=6)
+
+    # Only call Claude if no cached analysis from today
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    needs_analysis = ticker_data.get("analysis_date") != today or not ticker_data.get("daily_analysis")
+    analysis_task = analyze_ticker(sym) if needs_analysis else asyncio.sleep(0)
+
+    quote_result, fundamentals, news, analysis_result = await asyncio.gather(
+        quote_task, fund_task, news_task, analysis_task,
+        return_exceptions=True,
+    )
+
+    # Process quote
+    live_quote = {}
+    if isinstance(quote_result, dict):
+        live_quote = quote_result.get(sym, {})
+
+    # Process analysis
+    kai_analysis = None
+    if needs_analysis and isinstance(analysis_result, dict):
+        kai_analysis = analysis_result
+    elif not needs_analysis:
+        kai_analysis = {
+            "analysis": ticker_data.get("daily_analysis"),
+            "key_levels": ticker_data.get("key_levels"),
+            "catalysts": ticker_data.get("catalysts"),
+            "risks": ticker_data.get("risks"),
+            "tldr": ticker_data.get("catalyst"),
+        }
+
+    if isinstance(fundamentals, Exception):
+        fundamentals = None
+    if isinstance(news, Exception):
+        news = []
+
+    # 3. DB lookups (sync, fast)
+
+    # Track record
+    track_record = _build_track_record(sym, db)
+
+    # Earnings from vault
+    earnings = _build_earnings(sym, db)
 
     # Related videos
     videos = []
     try:
-        mentions = db2.table("content_tickers").select("content_id").eq("ticker", symbol.upper()).limit(6).execute()
-        cids = [m["content_id"] for m in (mentions.data or [])]
+        mentions = db.table("content_tickers").select("content_id, mention_context, sentiment").eq("ticker", sym).order("created_at", desc=True).limit(8).execute()
+        cids = list({m["content_id"] for m in (mentions.data or [])})
         if cids:
-            vrows = db2.table("content").select(
-                "id, title, thumbnail_url, duration_seconds, quick_take, published_at, "
+            vrows = db.table("content").select(
+                "id, title, thumbnail_url, duration_seconds, quick_take, published_at, topics, "
                 "creators:creator_id(name, slug)"
             ).in_("id", cids).eq("is_published", True).order("published_at", desc=True).limit(6).execute()
             for v in (vrows.data or []):
                 cr = v.pop("creators", None) or {}
+                # Find the mention context for this video
+                mention = next((m for m in (mentions.data or []) if m["content_id"] == v["id"]), {})
                 videos.append({
                     "id": v["id"], "title": v["title"],
                     "thumbnail_url": v.get("thumbnail_url"),
@@ -383,40 +436,101 @@ async def trigger_analysis(symbol: str, user: dict | None = Depends(get_current_
                     "quick_take": v.get("quick_take"),
                     "creator_name": cr.get("name"),
                     "published_at": v.get("published_at"),
+                    "mention_context": mention.get("mention_context"),
+                    "sentiment": mention.get("sentiment"),
                 })
     except Exception:
         pass
 
-    # Track record
-    track_record = _build_track_record(symbol.upper(), db2)
+    # Community posts about this ticker
+    community_posts = []
+    try:
+        posts_res = db.table("feed_posts").select(
+            "id, post_type, body, sentiment, created_at, likes_count, "
+            "profiles:user_id(display_name, handle, is_agent)"
+        ).eq("ticker", sym).order("created_at", desc=True).limit(5).execute()
+        for p in (posts_res.data or []):
+            prof = p.pop("profiles", None) or {}
+            community_posts.append({
+                "body": (p.get("body") or "")[:200],
+                "sentiment": p.get("sentiment"),
+                "post_type": p.get("post_type"),
+                "author": prof.get("display_name") or prof.get("handle") or "Trader",
+                "is_agent": bool(prof.get("is_agent")),
+                "likes": p.get("likes_count", 0),
+                "created_at": p.get("created_at"),
+            })
+    except Exception:
+        pass
 
-    # Earnings
-    earnings = _build_earnings(symbol.upper(), db2)
+    # Vault intel connections
+    intel_connections = []
+    try:
+        vault_intel = maybe_one(db.table("vault_store").select("value").eq("key", f"intel:{sym}"))
+        if vault_intel.data:
+            val = vault_intel.data.get("value")
+            if isinstance(val, dict):
+                for conn in (val.get("connections") or [])[:8]:
+                    intel_connections.append({
+                        "headline": conn.get("headline"),
+                        "direction": conn.get("direction"),
+                        "chain": (conn.get("chain") or "")[:200],
+                        "other_tickers": conn.get("tickers_affected", [])[:5],
+                    })
+    except Exception:
+        pass
 
-    # Ticker base data for header
-    base = maybe_one(db2.table("tickers").select(
-        "symbol, name, last_price, price_change_pct, sector, market_cap, trending_score, convergence_score, direction, themes"
-    ).eq("symbol", symbol.upper()))
-    ticker_info = base.data or {}
-    _fill_from_raw_data(ticker_info)
+    # Score breakdown + drivers from raw data
+    ev_chain = ticker_data.get("evidence_chain", [])
+    score_breakdown = _build_score_breakdown(ticker_data, ev_chain)
+    drivers = _build_drivers(ticker_data)
 
+    # 4. Build response — comprehensive structured JSON
     return {
-        "symbol": symbol.upper(),
-        "name": ticker_info.get("name"),
-        "last_price": ticker_info.get("last_price"),
-        "price_change_pct": ticker_info.get("price_change_pct"),
-        "sector": ticker_info.get("sector"),
-        "convergence_score": ticker_info.get("convergence_score"),
-        "direction": ticker_info.get("direction"),
-        "daily_analysis": result.get("analysis") or result.get("daily_analysis"),
-        "key_levels": result.get("key_levels"),
-        "catalysts": result.get("catalysts"),
-        "risks": result.get("risks"),
-        "catalyst": result.get("tldr") or result.get("catalyst"),
-        "videos": videos,
+        # Header
+        "symbol": sym,
+        "name": ticker_data.get("name") or (fundamentals or {}).get("name"),
+        "last_price": live_quote.get("price") or ticker_data.get("last_price"),
+        "price_change_pct": live_quote.get("change_pct") or ticker_data.get("price_change_pct"),
+        "convergence_score": ticker_data.get("convergence_score"),
+        "direction": ticker_data.get("direction"),
+        "timeframe": ticker_data.get("timeframe"),
+        "sector": ticker_data.get("sector") or (fundamentals or {}).get("sector"),
+        "themes": ticker_data.get("themes", []),
+
+        # Score + drivers
+        "score_breakdown": score_breakdown,
+        "drivers": drivers,
+
+        # Fundamentals (visual cards)
+        "fundamentals": fundamentals if not isinstance(fundamentals, Exception) else None,
+
+        # News (card scroll)
+        "news": news if not isinstance(news, Exception) else [],
+
+        # Kai synthesis (cached 24h)
+        "kai_analysis": {
+            "tldr": (kai_analysis or {}).get("tldr") or (kai_analysis or {}).get("catalyst"),
+            "analysis": (kai_analysis or {}).get("analysis") or (kai_analysis or {}).get("daily_analysis"),
+            "key_levels": (kai_analysis or {}).get("key_levels"),
+            "catalysts": (kai_analysis or {}).get("catalysts"),
+            "risks": (kai_analysis or {}).get("risks"),
+        } if kai_analysis else None,
+
+        # Track record
         "track_record": track_record,
+
+        # Earnings
         "earnings": earnings,
-        "themes": ticker_info.get("themes", []),
+
+        # Related videos
+        "videos": videos,
+
+        # Community
+        "community_posts": community_posts,
+
+        # Intel connections (cross-ticker relationship graph)
+        "intel_connections": intel_connections,
     }
 
 
