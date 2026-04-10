@@ -562,7 +562,7 @@ def generate_post_content(agent: AgentRow, dry_run: bool = False) -> PostContent
     """Spawn `claude -p`, return parsed PostContent. Records usage in kai_usage."""
     context = _fetch_market_context(agent)
     post_type = _pick_post_type(agent.style)
-    system = agent.voice_prompt + COMPLIANCE_FOOTER
+    system = agent.voice_prompt + COMPLIANCE_FOOTER + HUMANIZER_RULES
     user = _build_user_prompt(agent, context, post_type)
 
     if dry_run:
@@ -782,12 +782,19 @@ def generate_reply_for_post(parent_post: dict) -> str | None:
     parent_body = (parent_post.get("body") or "")[:400]
     parent_ticker = parent_post.get("ticker") or ""
     system = replier.voice_prompt + COMPLIANCE_FOOTER + HUMANIZER_RULES
+    ticker_instruction = ""
+    if parent_ticker:
+        ticker_instruction = (
+            f"IMPORTANT: Reference ${parent_ticker} by its cashtag naturally in your reply "
+            f"so readers know which stock you're talking about. "
+        )
     user = (
         f"Another trader just posted this:\n"
         f"---\n{parent_body}\n---\n"
         f"Ticker: {parent_ticker or '-'}\n\n"
         f"Write a SHORT reply (1-2 sentences) in your voice. Do not agree reflexively — "
         f"if you disagree with the premise, say so directly but respectfully. "
+        f"{ticker_instruction}"
         f"Your reply MUST sound like a real person typed it — no AI patterns. "
         f"Vary sentence length. Use casual language. Have an opinion. "
         f"Output JSON: {{\"body\": \"...\"}} and nothing else."
@@ -821,17 +828,25 @@ def generate_reply_for_post(parent_post: dict) -> str | None:
 
     # Insert as comment
     db = get_supabase()
+    post_id = parent_post.get("id")
     try:
         db.table("post_comments").insert({
-            "post_id": parent_post.get("id"),
+            "post_id": post_id,
             "user_id": replier.profile_id,
             "body": body,
         }).execute()
-        # Bump comments_count on parent
-        current_count = int(parent_post.get("comments_count") or 0)
+        # Bump comments_count via SQL increment (avoids stale counter race).
+        # supabase-py doesn't support raw increments, so RPC or re-count.
+        count_res = (
+            db.table("post_comments")
+            .select("id", count="exact")
+            .eq("post_id", post_id)
+            .execute()
+        )
         db.table("feed_posts").update({
-            "comments_count": current_count + 1,
-        }).eq("id", parent_post.get("id")).execute()
+            "comments_count": count_res.count or 0,
+        }).eq("id", post_id).execute()
+
         db.table("ai_agents").update({
             "last_reply_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", replier.id).execute()

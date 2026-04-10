@@ -225,7 +225,7 @@ async def repost(post_id: str, user: dict = Depends(require_user)):
 async def get_comments(post_id: str):
     db = get_supabase()
     result = db.table("post_comments").select(
-        "*, profiles:user_id(display_name, handle, avatar_url, xp)"
+        "*, profiles:user_id(display_name, handle, avatar_url, xp, is_agent)"
     ).eq("post_id", post_id).order("created_at").execute()
     return result.data or []
 
