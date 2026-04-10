@@ -1200,10 +1200,9 @@ export default function Home() {
         }));
         setPosts(mapped);
       } else {
-        // Fall back to seed posts when API returns empty
-        setPosts(SEED_POSTS);
+        setPosts([]);
       }
-    }).catch(() => { setPosts(SEED_POSTS); }).finally(() => setFeedLoading(false));
+    }).catch(() => { setPosts([]); }).finally(() => setFeedLoading(false));
   }, [feedTab]);
 
   const handleNewPost = (text: string, type: PostType, mediaUrl?: string, mediaType?: "image" | "video") => {

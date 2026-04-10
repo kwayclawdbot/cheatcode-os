@@ -241,6 +241,12 @@ export default function CoachesCornerPage() {
   return (
     <div className="min-h-screen bg-background">
       <Nav />
+      {/* Coming-soon banner — remove once real coaches exist in coach_profiles */}
+      <div className="bg-[#7B2FBE]/10 border-b border-[#7B2FBE]/20 px-4 py-3 text-center">
+        <p className="text-sm text-[#7B2FBE] font-semibold">
+          Coaches Corner is launching soon — apply below to be one of the first verified coaches
+        </p>
+      </div>
 
       <main className="page-enter">
         {/* ── Hero ── */}

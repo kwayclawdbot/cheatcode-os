@@ -68,8 +68,8 @@ async def create_checkout_session(
         payment_method_types=["card"],
         line_items=[{"price": price_id, "quantity": 1}],
         mode="subscription",
-        success_url="https://cheatcode.com/welcome?session_id={CHECKOUT_SESSION_ID}",
-        cancel_url="https://cheatcode.com/pricing",
+        success_url=f"{s.frontend_url}/welcome?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{s.frontend_url}/pricing",
         metadata={"user_id": user["id"], "tier": tier},
     )
     log.info(
@@ -96,7 +96,7 @@ async def customer_portal(user: dict = Depends(require_user)):
 
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
-        return_url="https://cheatcode.com/settings",
+        return_url=f"{s.frontend_url}/settings",
     )
     return {"url": session.url}
 
