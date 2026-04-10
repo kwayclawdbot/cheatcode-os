@@ -93,6 +93,11 @@ class TickerDetail(TickerLookup):
     key_levels: dict | None = None
     catalysts: list[str] | None = None
     risks: list[str] | None = None
+    # V2 enrichments — visual components on ticker page
+    score_breakdown: dict | None = None     # {technical:25, momentum:15, ...}
+    drivers: list[dict] | None = None       # [{icon, text, type}]
+    track_record: dict | None = None        # {alerts[], setup_win_rate, total_alerts}
+    earnings: dict | None = None            # {next_date, last_signal, flags[]}
 
 
 class PredictionCard(BaseModel):

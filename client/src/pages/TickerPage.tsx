@@ -636,6 +636,137 @@ export default function TickerPage() {
                     </div>
                   </div>
 
+                  {/* Score breakdown — horizontal bars per category */}
+                  {tickerData?.score_breakdown && Object.values(tickerData.score_breakdown).some((v: any) => v > 0) && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Score Breakdown</p>
+                      <div className="space-y-2">
+                        {[
+                          { key: "technical", label: "Technical", max: 25, color: "#00AEEF" },
+                          { key: "momentum", label: "Momentum", max: 25, color: "#4DC820" },
+                          { key: "volume", label: "Volume", max: 25, color: "#7B2FBE" },
+                          { key: "catalyst", label: "Catalyst", max: 25, color: "#F79009" },
+                          { key: "content", label: "Content", max: 25, color: "#00AEEF" },
+                          { key: "flow", label: "Flow", max: 25, color: "#E8193C" },
+                        ].filter(b => (tickerData.score_breakdown[b.key] || 0) > 0).map(b => {
+                          const val = tickerData.score_breakdown[b.key] || 0;
+                          const pct = Math.min(100, (val / b.max) * 100);
+                          return (
+                            <div key={b.key} className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-muted-foreground w-16 text-right">{b.label}</span>
+                              <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: b.color }} />
+                              </div>
+                              <span className="text-[10px] font-black text-foreground w-10 text-right" style={{ fontFamily: "var(--font-mono)" }}>
+                                {val}/{b.max}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Drivers — icon + one-line pills */}
+                  {tickerData?.drivers && tickerData.drivers.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">What's Driving This</p>
+                      <div className="space-y-1.5">
+                        {tickerData.drivers.map((d: any, i: number) => {
+                          const iconColor = d.type === "theme" ? "#F79009" : d.type === "flow" ? "#E8193C" : d.type === "catalyst" ? "#7B2FBE" : "#00AEEF";
+                          return (
+                            <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted">
+                              <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+                                   style={{ background: iconColor + "18", color: iconColor }}>
+                                {d.type === "theme" ? <Flame size={11} /> :
+                                 d.type === "flow" ? <Activity size={11} /> :
+                                 d.type === "catalyst" ? <Zap size={11} /> :
+                                 <TrendingUp size={11} />}
+                              </div>
+                              <span className="text-xs text-foreground leading-snug">{d.text}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Track record — alert history for this ticker */}
+                  {tickerData?.track_record && tickerData.track_record.alerts?.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Our Track Record</p>
+                        {tickerData.track_record.setup_win_rate != null && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                                style={{ background: tickerData.track_record.setup_win_rate >= 60 ? "#4DC820" : "#F79009" }}>
+                            {tickerData.track_record.setup_win_rate}% win rate
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        {tickerData.track_record.alerts.map((a: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground w-16 flex-shrink-0">{a.date}</span>
+                            <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
+                              ${a.price?.toFixed(2)}
+                            </span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                              Score {a.score}
+                            </span>
+                            {a.pattern && (
+                              <span className="text-[9px] text-muted-foreground">{a.pattern}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {tickerData.track_record.best_gain_pct != null && (
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          Best gain: <span className="font-bold" style={{ color: "#4DC820" }}>+{tickerData.track_record.best_gain_pct}%</span>
+                          {" · "}{tickerData.track_record.total_alerts} total alerts
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Earnings — compact summary with flags */}
+                  {tickerData?.earnings && (tickerData.earnings.next_date || tickerData.earnings.last_signal) && (
+                    <div className="bg-card rounded-xl border border-border p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Earnings</p>
+                      <div className="flex items-center gap-3 flex-wrap mb-2">
+                        {tickerData.earnings.next_date && (
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Next</p>
+                            <p className="text-xs font-bold text-foreground">{tickerData.earnings.next_date}</p>
+                          </div>
+                        )}
+                        {tickerData.earnings.last_signal && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                                style={{ background: tickerData.earnings.last_signal === "BUY" ? "#4DC820" : tickerData.earnings.last_signal === "SELL" ? "#E8193C" : "#F79009" }}>
+                            {tickerData.earnings.last_signal}
+                          </span>
+                        )}
+                        {tickerData.earnings.tone && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Tone: {tickerData.earnings.tone}{tickerData.earnings.tone_score ? ` (${tickerData.earnings.tone_score})` : ""}
+                          </span>
+                        )}
+                      </div>
+                      {tickerData.earnings.flags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {tickerData.earnings.flags.map((f: any, i: number) => (
+                            <span key={i} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                                  style={{
+                                    background: f.type === "green" ? "#4DC82018" : "#E8193C18",
+                                    color: f.type === "green" ? "#4DC820" : "#E8193C",
+                                  }}>
+                              {f.type === "green" ? "+" : "−"} {f.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Kai's take */}
                   {tickerData?.analysis && (
                     <div className="bg-card rounded-xl border border-border p-4">
