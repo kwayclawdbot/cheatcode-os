@@ -61,8 +61,8 @@ function ScoreGauge({ score, direction }: { score: number; direction: string }) 
 // ── Momentum Gauge (needle style) ────────────────────────────────────────
 
 function MomentumGauge({ changePct, volRatio }: { changePct: number; volRatio: number }) {
-  // Normalize: -10% to +10% maps to 0-180 degrees
-  const angle = Math.min(180, Math.max(0, ((changePct + 10) / 20) * 180));
+  // Normalize: -20% to +20% maps to 0-180 degrees (wider range for big moves)
+  const angle = Math.min(180, Math.max(0, ((changePct + 20) / 40) * 180));
   const radians = (angle - 90) * (Math.PI / 180);
   const nx = 60 + 40 * Math.cos(radians);
   const ny = 60 + 40 * Math.sin(radians);
@@ -234,52 +234,112 @@ function EarningsCountdown({ earnings }: { earnings: any }) {
   );
 }
 
-// ── Key Levels Price Ladder ──────────────────────────────────────────────
+// ── Mini Price Chart with S/R Levels ─────────────────────────────────────
 
-function KeyLevelsLadder({ levels, currentPrice }: { levels: any; currentPrice: number }) {
-  if (!levels) return null;
-  const allPrices: { price: number; label: string; color: string }[] = [];
-  const res = levels.resistance;
-  const sup = levels.support;
-  const inv = levels.invalidation;
-  (Array.isArray(res) ? res : res != null ? [res] : []).forEach((v: number, i: number) =>
-    allPrices.push({ price: v, label: i === 0 ? "Resistance" : `R${i+1}`, color: "#E8193C" })
-  );
-  if (currentPrice > 0) allPrices.push({ price: currentPrice, label: "Current", color: "#00AEEF" });
-  (Array.isArray(sup) ? sup : sup != null ? [sup] : []).forEach((v: number, i: number) =>
-    allPrices.push({ price: v, label: i === 0 ? "Support" : `S${i+1}`, color: "#4DC820" })
-  );
-  if (inv) {
-    const invPrice = typeof inv === "number" ? inv : parseFloat(String(inv).replace(/[^0-9.]/g, ""));
-    if (invPrice > 0) allPrices.push({ price: invPrice, label: "Invalidation", color: "#F79009" });
+function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
+  priceHistory: { date: string; close: number; high: number; low: number; open?: number }[];
+  levels: any;
+  currentPrice: number;
+}) {
+  if (!priceHistory?.length && !levels) return null;
+
+  const W = 500, H = 220, PAD = { top: 12, right: 60, bottom: 20, left: 10 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
+  // Collect all S/R prices
+  const levelLines: { price: number; label: string; color: string; dash: boolean }[] = [];
+  if (levels) {
+    const res = levels.resistance;
+    const sup = levels.support;
+    const inv = levels.invalidation;
+    (Array.isArray(res) ? res : res != null ? [res] : []).forEach((v: number, i: number) =>
+      levelLines.push({ price: v, label: i === 0 ? "R" : `R${i+1}`, color: "#E8193C", dash: false })
+    );
+    (Array.isArray(sup) ? sup : sup != null ? [sup] : []).forEach((v: number, i: number) =>
+      levelLines.push({ price: v, label: i === 0 ? "S" : `S${i+1}`, color: "#4DC820", dash: false })
+    );
+    if (inv) {
+      const invP = typeof inv === "number" ? inv : parseFloat(String(inv).replace(/[^0-9.]/g, ""));
+      if (invP > 0) levelLines.push({ price: invP, label: "INV", color: "#F79009", dash: true });
+    }
   }
-  allPrices.sort((a, b) => b.price - a.price);
+
+  const bars = priceHistory?.length ? priceHistory : [];
+  const allPrices = [
+    ...bars.flatMap(b => [b.high, b.low]),
+    ...levelLines.map(l => l.price),
+    currentPrice,
+  ].filter(Boolean);
+
   if (allPrices.length === 0) return null;
-  const min = allPrices[allPrices.length - 1].price * 0.98;
-  const max = allPrices[0].price * 1.02;
-  const range = max - min || 1;
+
+  const minP = Math.min(...allPrices) * 0.99;
+  const maxP = Math.max(...allPrices) * 1.01;
+  const rangeP = maxP - minP || 1;
+
+  const priceToY = (p: number) => PAD.top + chartH - ((p - minP) / rangeP) * chartH;
+
+  // Build candlestick path
+  const barWidth = bars.length > 0 ? Math.max(2, chartW / bars.length - 1) : 4;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-3">Key Levels</p>
-      <div className="relative" style={{ height: allPrices.length * 36 + 8 }}>
-        {/* Vertical track */}
-        <div className="absolute left-24 top-0 bottom-0 w-px bg-border" />
-        {allPrices.map((p, i) => {
-          const top = ((max - p.price) / range) * (allPrices.length * 36);
-          const isCurrent = p.label === "Current";
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Price Chart + Key Levels</p>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
+        {/* Grid lines */}
+        {[0.25, 0.5, 0.75].map(pct => {
+          const y = PAD.top + chartH * pct;
+          return <line key={pct} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="var(--border)" strokeWidth={0.5} />;
+        })}
+
+        {/* Candlesticks */}
+        {bars.map((bar, i) => {
+          const x = PAD.left + (i / Math.max(1, bars.length - 1)) * chartW;
+          const open = bar.open ?? bar.close;
+          const isGreen = bar.close >= open;
+          const color = isGreen ? "#4DC820" : "#E8193C";
+          const bodyTop = priceToY(Math.max(open, bar.close));
+          const bodyBot = priceToY(Math.min(open, bar.close));
+          const bodyH = Math.max(1, bodyBot - bodyTop);
           return (
-            <div key={i} className="absolute flex items-center gap-2" style={{ top, left: 0, right: 0 }}>
-              <span className="text-[9px] font-bold uppercase tracking-wide w-20 text-right" style={{ color: p.color }}>{p.label}</span>
-              <div className="w-3 h-3 rounded-full flex-shrink-0 border-2" style={{ borderColor: p.color, background: isCurrent ? p.color : "transparent" }} />
-              <div className="flex-1 h-px" style={{ background: p.color, opacity: isCurrent ? 1 : 0.3 }} />
-              <span className="text-xs font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                ${typeof p.price === "number" ? p.price.toFixed(2) : p.price}
-              </span>
-            </div>
+            <g key={i}>
+              <line x1={x} y1={priceToY(bar.high)} x2={x} y2={priceToY(bar.low)} stroke={color} strokeWidth={0.8} />
+              <rect x={x - barWidth / 2} y={bodyTop} width={barWidth} height={bodyH} fill={color} rx={0.5} />
+            </g>
           );
         })}
-      </div>
+
+        {/* S/R level lines */}
+        {levelLines.map((l, i) => {
+          const y = priceToY(l.price);
+          if (y < PAD.top || y > H - PAD.bottom) return null;
+          return (
+            <g key={`level-${i}`}>
+              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y}
+                    stroke={l.color} strokeWidth={1} strokeDasharray={l.dash ? "4 3" : "0"} opacity={0.7} />
+              <rect x={W - PAD.right + 2} y={y - 8} width={50} height={16} rx={4} fill={l.color} opacity={0.15} />
+              <text x={W - PAD.right + 6} y={y + 4} fontSize="9" fontWeight="800" fill={l.color}
+                    style={{ fontFamily: "var(--font-mono)" }}>
+                {l.label} ${l.price.toFixed(0)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Current price line */}
+        {currentPrice > 0 && (
+          <g>
+            <line x1={PAD.left} y1={priceToY(currentPrice)} x2={W - PAD.right} y2={priceToY(currentPrice)}
+                  stroke="#00AEEF" strokeWidth={1.5} strokeDasharray="6 3" />
+            <rect x={W - PAD.right + 2} y={priceToY(currentPrice) - 9} width={54} height={18} rx={4} fill="#00AEEF" />
+            <text x={W - PAD.right + 6} y={priceToY(currentPrice) + 4} fontSize="9" fontWeight="900" fill="white"
+                  style={{ fontFamily: "var(--font-mono)" }}>
+              ${currentPrice.toFixed(2)}
+            </text>
+          </g>
+        )}
+      </svg>
     </div>
   );
 }
@@ -378,7 +438,9 @@ export default function TickerAnalyzePage() {
   }, [symbol]);
 
   const chg = data?.price_change_pct || 0;
-  const dirColor = (data?.direction || "").toLowerCase() === "bullish" ? "#4DC820" : (data?.direction || "").toLowerCase() === "bearish" ? "#E8193C" : "#F79009";
+  // Use news-derived direction from backend (overrides raw price direction)
+  const direction = (data?.news_sentiment?.direction || data?.direction || "neutral").toLowerCase();
+  const dirColor = direction === "bullish" ? "#4DC820" : direction === "bearish" ? "#E8193C" : "#F79009";
   const fund = data?.fundamentals;
   const kai = data?.kai_analysis;
 
@@ -389,9 +451,9 @@ export default function TickerAnalyzePage() {
     return 1 + (sb.volume || 0) / 16; // reverse the formula
   }, [data]);
 
-  // News sentiment counts
-  const newsPos = useMemo(() => (data?.news || []).filter((n: any) => n.sentiment > 0).length, [data]);
-  const newsNeg = useMemo(() => (data?.news || []).filter((n: any) => n.sentiment < 0).length, [data]);
+  // News sentiment from backend aggregate
+  const newsPos = data?.news_sentiment?.positive || 0;
+  const newsNeg = data?.news_sentiment?.negative || 0;
 
   // Radar chart data for fundamentals
   const radarData = useMemo(() => {
@@ -453,7 +515,7 @@ export default function TickerAnalyzePage() {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="text-2xl font-black text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${symbol}</span>
                     {data.name && <span className="text-sm text-muted-foreground">{data.name}</span>}
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: dirColor }}>{data.direction || "Neutral"}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: dirColor }}>{direction || "neutral"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-bold text-foreground" style={{ fontFamily: "var(--font-mono)" }}>${(data.last_price || 0).toFixed(2)}</span>
@@ -463,7 +525,7 @@ export default function TickerAnalyzePage() {
                     </span>
                   </div>
                 </div>
-                <ScoreGauge score={data.convergence_score || 0} direction={data.direction || "neutral"} />
+                <ScoreGauge score={data.convergence_score || 0} direction={direction} />
               </div>
 
               {/* Kai TLDR — terminal style */}
@@ -497,7 +559,7 @@ export default function TickerAnalyzePage() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <MomentumGauge changePct={chg} volRatio={volRatio} />
                     <VolumeBar volume={parseFloat(data.score_breakdown?.volume || 0) * 1e6 / 16 + (fund?.market_cap ? 5e6 : 1e6)} avgVolume={fund?.market_cap ? 5e6 : 1e6} />
-                    <SentimentCompass communityBullPct={60} newsPositive={newsPos} newsNegative={newsNeg} direction={data.direction || "neutral"} />
+                    <SentimentCompass communityBullPct={60} newsPositive={newsPos} newsNegative={newsNeg} direction={direction} />
                     <EarningsCountdown earnings={data.earnings} />
                   </div>
 
@@ -588,8 +650,12 @@ export default function TickerAnalyzePage() {
               {/* ═══ DEEP DIVE TAB ═══ */}
               {tab === "deep" && (
                 <motion.div key="deep" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-                  {/* Key levels visual */}
-                  {kai?.key_levels && <KeyLevelsLadder levels={kai.key_levels} currentPrice={data.last_price || 0} />}
+                  {/* Price chart with S/R levels */}
+                  <PriceChartWithLevels
+                    priceHistory={data.price_history || []}
+                    levels={kai?.key_levels}
+                    currentPrice={data.last_price || 0}
+                  />
 
                   {/* Catalysts + Risks side by side */}
                   {((kai?.catalysts?.length > 0) || (kai?.risks?.length > 0)) && (

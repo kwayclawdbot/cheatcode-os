@@ -356,7 +356,10 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
       - Kai synthesis (Claude Haiku, ~$0.02, cached 24h)
     """
     import asyncio
-    from app.services.market_data import fetch_bulk_quotes, fetch_ticker_news, fetch_ticker_fundamentals
+    from app.services.market_data import (
+        fetch_bulk_quotes, fetch_ticker_news, fetch_ticker_fundamentals,
+        fetch_price_history,
+    )
     from app.services.ticker_analysis import analyze_ticker
 
     sym = symbol.upper()
@@ -369,18 +372,19 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     ticker_data = t.data
     _fill_from_raw_data(ticker_data)
 
-    # 2. Parallel fetch: quote, fundamentals, news, analysis (all async)
+    # 2. Parallel fetch: quote, fundamentals, news, price history, analysis
     quote_task = fetch_bulk_quotes([sym])
     fund_task = fetch_ticker_fundamentals(sym)
-    news_task = fetch_ticker_news(sym, limit=6)
+    news_task = fetch_ticker_news(sym, limit=10)
+    history_task = fetch_price_history(sym, days=60)
 
     # Only call Claude if no cached analysis from today
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     needs_analysis = ticker_data.get("analysis_date") != today or not ticker_data.get("daily_analysis")
     analysis_task = analyze_ticker(sym) if needs_analysis else asyncio.sleep(0)
 
-    quote_result, fundamentals, news, analysis_result = await asyncio.gather(
-        quote_task, fund_task, news_task, analysis_task,
+    quote_result, fundamentals, news, price_history, analysis_result = await asyncio.gather(
+        quote_task, fund_task, news_task, history_task, analysis_task,
         return_exceptions=True,
     )
 
@@ -485,6 +489,60 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     score_breakdown = _build_score_breakdown(ticker_data, ev_chain)
     drivers = _build_drivers(ticker_data)
 
+    # Process price history for chart
+    chart_data = []
+    if isinstance(price_history, list):
+        chart_data = [
+            {"date": p.get("date"), "close": p.get("close"), "high": p.get("high"), "low": p.get("low"), "open": p.get("open"), "volume": p.get("volume")}
+            for p in price_history if p.get("close")
+        ]
+
+    # Derive sentiment from NEWS (not price action) — more accurate
+    safe_news = news if isinstance(news, list) else []
+    news_pos = sum(1 for n in safe_news if isinstance(n.get("sentiment"), (int, float)) and n["sentiment"] > 0)
+    news_neg = sum(1 for n in safe_news if isinstance(n.get("sentiment"), (int, float)) and n["sentiment"] < 0)
+    news_total = news_pos + news_neg
+    if news_total >= 2:
+        # Override direction with news consensus when we have enough data
+        if news_pos > news_neg * 1.5:
+            derived_direction = "bullish"
+        elif news_neg > news_pos * 1.5:
+            derived_direction = "bearish"
+        else:
+            derived_direction = "neutral"
+    else:
+        derived_direction = ticker_data.get("direction") or "neutral"
+
+    news_sentiment = {
+        "positive": news_pos,
+        "negative": news_neg,
+        "neutral": len(safe_news) - news_pos - news_neg,
+        "direction": derived_direction,
+    }
+
+    # If no vault intel_connections, build from news cross-references
+    if not intel_connections and safe_news:
+        # EODHD news articles include "symbols" field with related tickers
+        seen_tickers: set[str] = set()
+        for article in safe_news:
+            title = article.get("title") or ""
+            sentiment_val = article.get("sentiment")
+            direction_str = "bullish" if isinstance(sentiment_val, (int, float)) and sentiment_val > 0 else "bearish" if isinstance(sentiment_val, (int, float)) and sentiment_val < 0 else "neutral"
+            # Extract $TICKER cashtags from title as connections
+            import re
+            mentioned = re.findall(r'\$([A-Z]{1,5})', title)
+            others = [t for t in mentioned if t != sym and t not in seen_tickers]
+            if others:
+                intel_connections.append({
+                    "headline": title[:120],
+                    "direction": direction_str,
+                    "chain": "",
+                    "other_tickers": others[:3],
+                })
+                seen_tickers.update(others)
+                if len(intel_connections) >= 6:
+                    break
+
     # 4. Build response — comprehensive structured JSON
     return {
         # Header
@@ -493,7 +551,7 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
         "last_price": live_quote.get("price") or ticker_data.get("last_price"),
         "price_change_pct": live_quote.get("change_pct") or ticker_data.get("price_change_pct"),
         "convergence_score": ticker_data.get("convergence_score"),
-        "direction": ticker_data.get("direction"),
+        "direction": derived_direction,
         "timeframe": ticker_data.get("timeframe"),
         "sector": ticker_data.get("sector") or (fundamentals or {}).get("sector"),
         "themes": ticker_data.get("themes", []),
@@ -505,8 +563,12 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
         # Fundamentals (visual cards)
         "fundamentals": fundamentals if not isinstance(fundamentals, Exception) else None,
 
-        # News (card scroll)
-        "news": news if not isinstance(news, Exception) else [],
+        # News (card scroll) + aggregate sentiment
+        "news": safe_news[:6],
+        "news_sentiment": news_sentiment,
+
+        # Price history for chart (60 days OHLCV)
+        "price_history": chart_data,
 
         # Kai synthesis (cached 24h)
         "kai_analysis": {
