@@ -382,28 +382,50 @@ def _pick_next_agent(agents: list[AgentRow]) -> AgentRow | None:
 def _fetch_market_context(agent: AgentRow) -> dict:
     """Gather fresh, grounded context for the post prompt.
 
-    - Top movers from `tickers` filtered by agent's specialty_tickers
-      (or top overall convergence_score if the agent is macro/risk/newbie)
-    - Latest radar_snapshots sentiment summary
-    - Recent agent posts (last 2h) so we don't repeat ourselves
+    Two layers of tickers are provided:
+      1. **Today's trending** — top movers by abs(price_change_pct) across
+         the entire universe. Every agent sees these so posts stay on-topic
+         with what's actually moving in the market.
+      2. **Specialty focus** — the agent's own specialty_tickers, ordered by
+         convergence_score. This keeps posts on-brand for the persona.
+
+    Plus: latest radar sentiment + recent posts (dedup).
     """
     db = get_supabase()
     ctx: dict[str, Any] = {}
+    fields = "symbol, name, sector, last_price, price_change_pct, convergence_score, direction, catalyst"
 
-    # Specialty-filtered ticker snapshot
+    # 1. Top trending movers (all agents see these)
     try:
-        q = db.table("tickers").select(
-            "symbol, name, sector, last_price, price_change_pct, convergence_score, direction, catalyst"
+        trending = (
+            db.table("tickers")
+            .select(fields)
+            .order("trending_score", desc=True)
+            .limit(8)
+            .execute()
         )
-        if agent.specialty_tickers:
-            q = q.in_("symbol", agent.specialty_tickers)
-            res = q.order("price_change_pct", desc=True).limit(8).execute()
-        else:
-            res = q.order("convergence_score", desc=True).limit(10).execute()
-        ctx["tickers"] = res.data or []
+        ctx["trending"] = trending.data or []
     except Exception as e:
-        log.warning("ticker fetch failed: %s", e)
-        ctx["tickers"] = []
+        log.warning("trending fetch failed: %s", e)
+        ctx["trending"] = []
+
+    # 2. Agent's specialty tickers (if any)
+    try:
+        if agent.specialty_tickers:
+            spec = (
+                db.table("tickers")
+                .select(fields)
+                .in_("symbol", agent.specialty_tickers)
+                .order("convergence_score", desc=True)
+                .limit(6)
+                .execute()
+            )
+            ctx["specialty"] = spec.data or []
+        else:
+            ctx["specialty"] = []
+    except Exception as e:
+        log.warning("specialty fetch failed: %s", e)
+        ctx["specialty"] = []
 
     # Latest radar sentiment
     try:
@@ -496,18 +518,30 @@ def _build_user_prompt(agent: AgentRow, context: dict, post_type: str) -> str:
         if summ:
             lines.append(f"Sentiment summary: {summ[:300]}")
 
-    tickers = context.get("tickers") or []
-    if tickers:
+    def _format_ticker_line(t: dict) -> str:
+        chg = t.get("price_change_pct")
+        chg_s = f"{chg:+.2f}%" if isinstance(chg, (int, float)) else "n/a"
+        return (
+            f"- ${t.get('symbol')} ({t.get('name') or '?'}) {chg_s} "
+            f"conv={t.get('convergence_score',0)} dir={t.get('direction') or '?'} "
+            f"catalyst={(t.get('catalyst') or '')[:80]}"
+        )
+
+    # Trending movers — what the whole market is talking about today
+    trending = context.get("trending") or []
+    if trending:
         lines.append("")
-        lines.append("Tickers on your radar right now (symbol, name, change%, convergence, direction, catalyst):")
-        for t in tickers[:8]:
-            chg = t.get("price_change_pct")
-            chg_s = f"{chg:+.2f}%" if isinstance(chg, (int, float)) else "n/a"
-            lines.append(
-                f"- {t.get('symbol')} ({t.get('name') or '?'}) {chg_s} "
-                f"conv={t.get('convergence_score',0)} dir={t.get('direction') or '?'} "
-                f"catalyst={(t.get('catalyst') or '')[:80]}"
-            )
+        lines.append("TODAY'S TOP TRENDING MOVERS (post about one of these — they're what the community is watching):")
+        for t in trending[:6]:
+            lines.append(_format_ticker_line(t))
+
+    # Agent's specialty tickers
+    specialty = context.get("specialty") or []
+    if specialty:
+        lines.append("")
+        lines.append("Your specialty tickers (your niche — use if relevant to today's action):")
+        for t in specialty[:4]:
+            lines.append(_format_ticker_line(t))
 
     recent = context.get("recent_posts") or []
     if recent:
@@ -530,6 +564,9 @@ def _build_user_prompt(agent: AgentRow, context: dict, post_type: str) -> str:
         "",
         "Tags should be 0-3 lowercase single-word topics (e.g. vwap, earnings, macro, flow, breakout).",
         "If the post is a question or education piece, sentiment should usually be null.",
+        "IMPORTANT: Always use $CASHTAG format for tickers in your body text (e.g. $NVDA not NVDA).",
+        "IMPORTANT: Pick a specific ticker from the trending or specialty list — don't write generic posts about 'the market'.",
+        "The 'ticker' field in your JSON should be the primary ticker you're discussing (without the $).",
         "Do NOT wrap the JSON in markdown code fences.",
     ])
     return "\n".join(lines)
