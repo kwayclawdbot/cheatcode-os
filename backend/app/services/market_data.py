@@ -750,3 +750,54 @@ async def fetch_price_history(symbol: str, days: int = 30) -> list[dict]:
     except Exception as exc:
         log.warning("EODHD price history error for %s: %s", symbol, exc)
         return []
+
+
+async def fetch_ohlcv_history(symbol: str, days: int = 60) -> list[dict]:
+    """Fetch OHLCV daily bars from EODHD for candlestick charts.
+    Returns list of {date, open, high, low, close, volume}.
+    """
+    s = get_settings()
+    if not s.eodhd_api_key:
+        return []
+
+    ticker_code, _ = normalise_symbol(symbol)
+    if not ticker_code:
+        return []
+
+    from datetime import timedelta
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt - timedelta(days=days + 14)
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://eodhistoricaldata.com/api/eod/{ticker_code}",
+                params={
+                    "api_token": s.eodhd_api_key,
+                    "fmt": "json",
+                    "from": start_dt.strftime("%Y-%m-%d"),
+                    "to": end_dt.strftime("%Y-%m-%d"),
+                    "period": "d",
+                },
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return []
+            raw = resp.json()
+            if not isinstance(raw, list):
+                return []
+            return [
+                {
+                    "date": r.get("date"),
+                    "open": r.get("open"),
+                    "high": r.get("high"),
+                    "low": r.get("low"),
+                    "close": r.get("close"),
+                    "volume": r.get("volume"),
+                }
+                for r in raw[-days:]
+                if r.get("close") is not None
+            ]
+    except Exception as e:
+        log.warning("EODHD OHLCV fetch failed for %s: %s", symbol, e)
+        return []

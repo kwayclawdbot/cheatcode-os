@@ -358,7 +358,7 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     import asyncio
     from app.services.market_data import (
         fetch_bulk_quotes, fetch_ticker_news, fetch_ticker_fundamentals,
-        fetch_price_history,
+        fetch_ohlcv_history,
     )
     from app.services.ticker_analysis import analyze_ticker
 
@@ -376,7 +376,7 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     quote_task = fetch_bulk_quotes([sym])
     fund_task = fetch_ticker_fundamentals(sym)
     news_task = fetch_ticker_news(sym, limit=10)
-    history_task = fetch_price_history(sym, days=60)
+    history_task = fetch_ohlcv_history(sym, days=60)
 
     # Only call Claude if no cached analysis from today
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -489,13 +489,9 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     score_breakdown = _build_score_breakdown(ticker_data, ev_chain)
     drivers = _build_drivers(ticker_data)
 
-    # Process price history for chart
-    chart_data = []
-    if isinstance(price_history, list):
-        chart_data = [
-            {"date": p.get("date"), "close": p.get("close"), "high": p.get("high"), "low": p.get("low"), "open": p.get("open"), "volume": p.get("volume")}
-            for p in price_history if p.get("close")
-        ]
+    # Process price history for chart — fetch_ohlcv_history already returns
+    # the right shape {date, open, high, low, close, volume}
+    chart_data = price_history if isinstance(price_history, list) else []
 
     # Derive sentiment from NEWS (not price action) — more accurate
     safe_news = news if isinstance(news, list) else []
