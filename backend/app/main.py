@@ -63,9 +63,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — locked to allow-listed origins only (set via CORS_ALLOWED_ORIGINS env var,
-# comma-separated). Wide-open "*" is a CSRF vector for authenticated users.
-_cors_origins = [o.strip() for o in s.cors_allowed_origins.split(",") if o.strip()]
+# CORS — locked to allow-listed origins only. FRONTEND_URL is always included
+# so Stripe redirects and the Vercel frontend work without extra config.
+_cors_origins = list({
+    o.strip() for o in s.cors_allowed_origins.split(",") if o.strip()
+} | {s.frontend_url})
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

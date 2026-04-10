@@ -541,7 +541,7 @@ function TickerHub({ ticker, radarTickers, onClose }: {
   const [activeTab, setActiveTab] = useState<TickerTab>("feed");
   const [tickerData, setTickerData] = useState<any>(null);
   const [videos, setVideos] = useState<any[]>([]);
-  const [posts, setPosts] = useState<Post[]>(SEED_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [bullVotes, setBullVotes] = useState(62);
   const [bearVotes, setBearVotes] = useState(38);
   const [voted, setVoted] = useState<"bull" | "bear" | null>(null);
@@ -1053,9 +1053,9 @@ export default function CommunityPage() {
           }));
           setPosts(normalized);
         } else {
-          setPosts(SEED_POSTS);
+          setPosts([]);
         }
-      }).catch(() => setPosts(SEED_POSTS))
+      }).catch(() => setPosts([]))
         .finally(() => setFeedLoading(false));
     });
   }, [feedFilter, hideAgents]);

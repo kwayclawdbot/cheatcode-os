@@ -46,8 +46,13 @@ class Settings(BaseSettings):
     stripe_pro_price_id: str = Field(..., min_length=1, description="Stripe Pro tier price_xxx ID")
     stripe_elite_price_id: str = ""  # May not be created yet — handled gracefully downstream
 
-    # CORS — comma-separated list of allowed origins
-    # Set CORS_ALLOWED_ORIGINS in Railway to your production domain(s)
+    # Frontend URL for Stripe redirect URLs and CORS. Set in Railway to your
+    # production Vercel domain (e.g. https://cheatcode-os.vercel.app). Locally
+    # defaults to http://localhost:5173. NO trailing slash.
+    frontend_url: str = "http://localhost:5173"
+
+    # CORS — comma-separated list of allowed origins.
+    # FRONTEND_URL is automatically included; add extras here if needed.
     cors_allowed_origins: str = "http://localhost:3000,http://localhost:5173"
 
     # Kai spend caps (USD per user per month, plus global daily circuit breaker)

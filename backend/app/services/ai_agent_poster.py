@@ -760,6 +760,20 @@ def run_scheduled_post_job(max_posts: int = 1) -> dict:
         post_id = post_as_agent(agent, content)
         if post_id:
             status["post_id"] = post_id
+            # Try to generate a reply from another agent (30% chance)
+            try:
+                parent_post = {
+                    "id": post_id,
+                    "user_id": agent.profile_id,
+                    "body": content.body,
+                    "ticker": content.ticker,
+                    "comments_count": 0,
+                }
+                reply = generate_reply_for_post(parent_post)
+                if reply:
+                    status["reply"] = True
+            except Exception as e:
+                log.warning("reply generation failed: %s", e)
             # Remove this agent from candidates for subsequent iterations
             agents = [a for a in agents if a.id != agent.id]
 
