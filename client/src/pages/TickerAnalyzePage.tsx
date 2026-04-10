@@ -243,7 +243,7 @@ function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
 }) {
   if (!priceHistory?.length && !levels) return null;
 
-  const W = 500, H = 220, PAD = { top: 12, right: 60, bottom: 20, left: 10 };
+  const W = 600, H = 260, PAD = { top: 12, right: 65, bottom: 20, left: 10 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
@@ -281,7 +281,7 @@ function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
   const priceToY = (p: number) => PAD.top + chartH - ((p - minP) / rangeP) * chartH;
 
   // Build candlestick path
-  const barWidth = bars.length > 0 ? Math.max(2, chartW / bars.length - 1) : 4;
+  const barWidth = bars.length > 0 ? Math.max(3, (chartW / bars.length) * 0.7) : 5;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
@@ -346,52 +346,113 @@ function PriceChartWithLevels({ priceHistory, levels, currentPrice }: {
 
 // ── Neural Connection Graph (simplified SVG) ─────────────────────────────
 
-function ConnectionGraph({ symbol, connections }: { symbol: string; connections: any[] }) {
-  if (!connections?.length) return null;
-  const centerX = 150, centerY = 100;
-  const radius = 70;
-  const nodes = connections.slice(0, 6).map((c, i) => {
-    const angle = (i / Math.min(connections.length, 6)) * 2 * Math.PI - Math.PI / 2;
-    return { ...c, x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) };
-  });
+function ConnectionGraph({ symbol, connections, communityPosts, videos, news }: {
+  symbol: string;
+  connections: any[];
+  communityPosts?: any[];
+  videos?: any[];
+  news?: any[];
+}) {
+  // Build nodes from ALL available data sources
+  const graphNodes: { label: string; type: string; color: string; sublabel?: string }[] = [];
+
+  // Intel connections (highest priority)
+  for (const c of (connections || []).slice(0, 4)) {
+    const t = (c.other_tickers || [])[0];
+    if (t) graphNodes.push({ label: `$${t}`, type: "intel", color: c.direction === "bullish" ? "#4DC820" : c.direction === "bearish" ? "#E8193C" : "#667085", sublabel: (c.headline || "").slice(0, 18) });
+  }
+
+  // News sources
+  for (const n of (news || []).slice(0, 3)) {
+    if (graphNodes.length >= 8) break;
+    const sentiment = typeof n.sentiment === "number" ? (n.sentiment > 0 ? "#4DC820" : n.sentiment < 0 ? "#E8193C" : "#667085") : "#667085";
+    graphNodes.push({ label: "News", type: "news", color: sentiment, sublabel: (n.title || "").slice(0, 18) });
+  }
+
+  // Videos / creators
+  for (const v of (videos || []).slice(0, 2)) {
+    if (graphNodes.length >= 8) break;
+    graphNodes.push({ label: v.creator_name?.split(" ")[0] || "Video", type: "video", color: "#E8193C", sublabel: (v.title || "").slice(0, 18) });
+  }
+
+  // Community voices
+  for (const p of (communityPosts || []).slice(0, 2)) {
+    if (graphNodes.length >= 8) break;
+    const sc = p.sentiment === "bullish" ? "#4DC820" : p.sentiment === "bearish" ? "#E8193C" : "#667085";
+    graphNodes.push({ label: (p.author || "Trader").split(" ")[0], type: "community", color: sc, sublabel: p.is_agent ? "AI" : "Trader" });
+  }
+
+  if (graphNodes.length === 0) return null;
+
+  const W = 360, H = 240;
+  const centerX = W / 2, centerY = H / 2;
+  const radius = 85;
+  const typeIcon: Record<string, string> = { intel: "⚡", news: "📰", video: "▶", community: "💬" };
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
       <div className="flex items-center gap-2 mb-3">
         <GitBranch size={14} style={{ color: "#7B2FBE" }} />
-        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Connections</p>
+        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Intelligence Network</p>
       </div>
-      <svg width="300" height="200" viewBox="0 0 300 200" className="mx-auto">
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {/* Pulsing rings around center */}
+        <circle cx={centerX} cy={centerY} r={30} fill="none" stroke="#4DC820" strokeWidth={0.5} opacity={0.15} />
+        <circle cx={centerX} cy={centerY} r={55} fill="none" stroke="#4DC820" strokeWidth={0.3} opacity={0.08} strokeDasharray="4 4" />
+
         {/* Edges */}
-        {nodes.map((n, i) => {
-          const edgeColor = n.direction === "bullish" ? "#4DC82080" : n.direction === "bearish" ? "#E8193C80" : "#66708580";
-          return <line key={i} x1={centerX} y1={centerY} x2={n.x} y2={n.y} stroke={edgeColor} strokeWidth={1.5} />;
-        })}
-        {/* Center node */}
-        <circle cx={centerX} cy={centerY} r={20} fill="#4DC820" opacity={0.15} />
-        <circle cx={centerX} cy={centerY} r={14} fill="#4DC820" opacity={0.3} />
-        <text x={centerX} y={centerY + 4} textAnchor="middle" fontSize="10" fontWeight="900" fill="#4DC820"
-              style={{ fontFamily: "var(--font-mono)" }}>{symbol}</text>
-        {/* Outer nodes */}
-        {nodes.map((n, i) => {
-          const tickers = n.other_tickers || [];
-          const label = tickers[0] || `T${i}`;
-          const dirColor = n.direction === "bullish" ? "#4DC820" : n.direction === "bearish" ? "#E8193C" : "#667085";
+        {graphNodes.map((n, i) => {
+          const angle = (i / graphNodes.length) * 2 * Math.PI - Math.PI / 2;
+          const nx = centerX + radius * Math.cos(angle);
+          const ny = centerY + radius * Math.sin(angle);
           return (
-            <g key={i}>
-              <circle cx={n.x} cy={n.y} r={12} fill={dirColor} opacity={0.15} />
-              <circle cx={n.x} cy={n.y} r={8} fill={dirColor} opacity={0.4} />
-              <text x={n.x} y={n.y + 3} textAnchor="middle" fontSize="7" fontWeight="800" fill={dirColor}
-                    style={{ fontFamily: "var(--font-mono)" }}>{label}</text>
-              {/* Headline label on edge */}
-              <text x={(centerX + n.x) / 2} y={(centerY + n.y) / 2 - 4} textAnchor="middle" fontSize="6" fill="var(--muted-foreground)"
-                    style={{ pointerEvents: "none" }}>
-                {(n.headline || "").slice(0, 20)}
-              </text>
+            <line key={`e${i}`} x1={centerX} y1={centerY} x2={nx} y2={ny}
+                  stroke={n.color} strokeWidth={1.2} opacity={0.4}
+                  strokeDasharray={n.type === "community" ? "3 3" : "0"} />
+          );
+        })}
+
+        {/* Center node */}
+        <circle cx={centerX} cy={centerY} r={22} fill="#4DC820" opacity={0.12} />
+        <circle cx={centerX} cy={centerY} r={16} fill="#4DC820" opacity={0.25} />
+        <text x={centerX} y={centerY + 4} textAnchor="middle" fontSize="11" fontWeight="900" fill="#4DC820"
+              style={{ fontFamily: "var(--font-mono)" }}>${symbol}</text>
+
+        {/* Outer nodes */}
+        {graphNodes.map((n, i) => {
+          const angle = (i / graphNodes.length) * 2 * Math.PI - Math.PI / 2;
+          const nx = centerX + radius * Math.cos(angle);
+          const ny = centerY + radius * Math.sin(angle);
+          return (
+            <g key={`n${i}`}>
+              <circle cx={nx} cy={ny} r={14} fill={n.color} opacity={0.1} />
+              <circle cx={nx} cy={ny} r={10} fill={n.color} opacity={0.25} />
+              <text x={nx} y={ny - 1} textAnchor="middle" fontSize="6">{typeIcon[n.type] || "●"}</text>
+              <text x={nx} y={ny + 8} textAnchor="middle" fontSize="7" fontWeight="700" fill={n.color}>{n.label}</text>
+              {/* Sublabel along edge */}
+              {n.sublabel && (
+                <text x={(centerX + nx) / 2} y={(centerY + ny) / 2 - 5} textAnchor="middle"
+                      fontSize="5.5" fill="var(--muted-foreground)" opacity={0.7}>
+                  {n.sublabel}
+                </text>
+              )}
             </g>
           );
         })}
       </svg>
+      {/* Legend */}
+      <div className="flex justify-center gap-3 mt-2">
+        {[
+          { icon: "⚡", label: "Intel", color: "#7B2FBE" },
+          { icon: "📰", label: "News", color: "#00AEEF" },
+          { icon: "▶", label: "Creators", color: "#E8193C" },
+          { icon: "💬", label: "Community", color: "#4DC820" },
+        ].map(l => (
+          <span key={l.label} className="text-[8px] font-bold flex items-center gap-1" style={{ color: l.color }}>
+            {l.icon} {l.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -562,6 +623,13 @@ export default function TickerAnalyzePage() {
                     <SentimentCompass communityBullPct={60} newsPositive={newsPos} newsNegative={newsNeg} direction={direction} />
                     <EarningsCountdown earnings={data.earnings} />
                   </div>
+
+                  {/* Candlestick chart with S/R levels */}
+                  <PriceChartWithLevels
+                    priceHistory={data.price_history || []}
+                    levels={kai?.key_levels}
+                    currentPrice={data.last_price || 0}
+                  />
 
                   {/* 52W Range */}
                   {fund && (fund.high_52w || fund.low_52w) && (
@@ -790,8 +858,14 @@ export default function TickerAnalyzePage() {
               {/* ═══ CONNECTIONS TAB ═══ */}
               {tab === "connections" && (
                 <motion.div key="connections" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-                  {/* Neural graph */}
-                  <ConnectionGraph symbol={symbol} connections={data.intel_connections || []} />
+                  {/* Neural graph — shows ALL data sources as nodes */}
+                  <ConnectionGraph
+                    symbol={symbol}
+                    connections={data.intel_connections || []}
+                    communityPosts={data.community_posts}
+                    videos={data.videos}
+                    news={data.news}
+                  />
 
                   {/* Community posts */}
                   {data.community_posts?.length > 0 && (
