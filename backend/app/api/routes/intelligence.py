@@ -184,17 +184,25 @@ def _build_track_record(symbol: str, db) -> dict | None:
 
 
 def _build_earnings(symbol: str, db) -> dict | None:
-    """Pull earnings data from vault_store (Kai earnings intel)."""
+    """Pull earnings data from vault_store (Kai earnings intel).
+    vault_store schema: path (text PK), content (text), updated_at.
+    Content is stored as text (may be JSON-parseable).
+    """
     try:
+        import json as _json
         res = maybe_one(
             db.table("vault_store")
-            .select("value")
-            .eq("key", f"earnings:{symbol}")
+            .select("content")
+            .eq("path", f"earnings:{symbol}")
         )
         if not res.data:
             return None
-        val = res.data.get("value")
-        if not isinstance(val, dict):
+        raw = res.data.get("content") or ""
+        try:
+            val = _json.loads(raw) if raw.strip().startswith("{") else {}
+        except Exception:
+            val = {}
+        if not isinstance(val, dict) or not val:
             return None
 
         return {
@@ -470,9 +478,14 @@ async def ticker_dossier(symbol: str, user: dict | None = Depends(get_current_us
     # Vault intel connections
     intel_connections = []
     try:
-        vault_intel = maybe_one(db.table("vault_store").select("value").eq("key", f"intel:{sym}"))
+        vault_intel = maybe_one(db.table("vault_store").select("content").eq("path", f"intel:{sym}"))
         if vault_intel.data:
-            val = vault_intel.data.get("value")
+            raw_content = vault_intel.data.get("content") or ""
+            import json as _json2
+            try:
+                val = _json2.loads(raw_content) if raw_content.strip().startswith("{") else {}
+            except Exception:
+                val = {}
             if isinstance(val, dict):
                 for conn in (val.get("connections") or [])[:8]:
                     intel_connections.append({

@@ -27,19 +27,19 @@ async def lifespan(app: FastAPI):
     # Start background jobs — every job is wrapped in with_telemetry so each
     # run lands in the scheduler_runs table with start/end/status/duration.
     # Admin endpoint GET /api/v1/admin/runs surfaces recent executions.
-    scheduler.add_job(with_telemetry(run_curation_cycle, "curation"),       "cron", hour=6, minute=0,  id="curation")
-    scheduler.add_job(with_telemetry(run_brain_cycle, "brain"),             "interval", minutes=60,    id="brain")
-    scheduler.add_job(with_telemetry(generate_radar, "radar_morning"),      "cron", hour=6, minute=30, id="radar_morning")
-    scheduler.add_job(with_telemetry(generate_radar, "radar_midday"),       "cron", hour=14, minute=0, id="radar_midday")
-    # EOD price sync strategy (cheap — ~50 API calls/day vs ~2300/day for per-symbol):
-    #   - Daily 21:00 UTC: bulk sync ALL 4 exchanges (US stocks+ETFs, crypto, forex, indices) = 4 API calls
-    #   - Every hour:       bulk sync CC + FOREX only (24/7 markets) = 2 API calls/hour
-    scheduler.add_job(with_telemetry(sync_eod_prices,      "eod_daily"),   "cron", hour=21, minute=0, id="eod_daily")
-    scheduler.add_job(with_telemetry(sync_eod_prices_24_7, "eod_hourly"),  "interval", minutes=60,   id="eod_hourly")
-    scheduler.add_job(with_telemetry(ingest_all_pending, "daily_ingest"),   "cron", hour=7, minute=15, id="daily_ingest")
-    scheduler.add_job(with_telemetry(rescore_recent_content, "daily_rescore"), "cron", hour=7, minute=20, id="daily_rescore")
-    scheduler.add_job(with_telemetry(run_daily_analysis, "daily_analysis"), "cron", hour=7, minute=30, id="daily_analysis")
-    scheduler.add_job(with_telemetry(compute_trending_scores, "trending_score"), "interval", minutes=15, id="trending_score")
+    # ── PRE-LAUNCH SCHEDULE: all jobs run ONCE DAILY to conserve API credits.
+    # When ready for live users, restore brain/trending to hourly/15-min and
+    # re-enable eod_hourly + radar_midday. See git history for original cadence.
+    scheduler.add_job(with_telemetry(run_curation_cycle, "curation"),           "cron", hour=6, minute=0,  id="curation")
+    scheduler.add_job(with_telemetry(run_brain_cycle, "brain"),                 "cron", hour=6, minute=15, id="brain")           # was: every 60 min
+    scheduler.add_job(with_telemetry(generate_radar, "radar_morning"),          "cron", hour=6, minute=30, id="radar_morning")
+    # radar_midday disabled pre-launch (Claude cost). Re-enable: "cron", hour=14, minute=0
+    scheduler.add_job(with_telemetry(sync_eod_prices,      "eod_daily"),       "cron", hour=21, minute=0, id="eod_daily")
+    # eod_hourly disabled pre-launch (EODHD API calls). Re-enable: "interval", minutes=60
+    scheduler.add_job(with_telemetry(ingest_all_pending, "daily_ingest"),       "cron", hour=7, minute=15, id="daily_ingest")
+    scheduler.add_job(with_telemetry(rescore_recent_content, "daily_rescore"),  "cron", hour=7, minute=20, id="daily_rescore")
+    scheduler.add_job(with_telemetry(run_daily_analysis, "daily_analysis"),     "cron", hour=7, minute=30, id="daily_analysis")
+    scheduler.add_job(with_telemetry(compute_trending_scores, "trending_score"),"cron", hour=7, minute=45, id="trending_score")  # was: every 15 min
 
     # AI persona agents seed the community feed. Generation (text via
     # `claude -p`) lives on a LOCAL worker — see scripts/run_agent_poster.py

@@ -95,10 +95,17 @@ async def get_trending(
     if asset_class:
         q = q.eq("asset_class", asset_class)
 
-    # For stocks and ETFs, filter to mid-cap and above ($2B+) so we don't
-    # surface penny stocks / shell companies. Crypto/forex/index don't
-    # have meaningful market caps so we don't filter them.
-    if asset_class in ("stocks", "etf") or asset_class is None:
+    # Filter out junk: penny stocks, shell companies, and obscure crypto dust.
+    # When browsing "all markets" (no asset_class), only show tickers with
+    # a known market_cap_tier — this excludes thousands of micro-cap crypto
+    # tokens that would otherwise dominate trending on any volatile day.
+    if asset_class in ("stocks", "etf"):
+        q = q.in_("market_cap_tier", ["mid", "large", "mega"])
+    elif asset_class == "crypto":
+        # Crypto: require minimum volume to filter out dust tokens
+        q = q.gt("last_volume", 100000)
+    elif asset_class is None:
+        # All markets: require known market cap tier (excludes unknown crypto)
         q = q.in_("market_cap_tier", ["mid", "large", "mega"])
 
     result = q.execute()
