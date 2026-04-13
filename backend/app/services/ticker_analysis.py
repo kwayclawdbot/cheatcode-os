@@ -86,11 +86,11 @@ def _get_kai_context(symbol: str) -> str:
         # 4. News intel connections — today's vault intel
         intel_key = f"Kai/Intel/{today}.json"
         intel = maybe_one(
-            db.table("vault_store").select("value").eq("key", intel_key)
+            db.table("vault_store").select("content").eq("path", intel_key)
         )
         if intel.data:
             try:
-                raw = intel.data.get("value", "{}")
+                raw = intel.data.get("content", "{}")
                 intel_data = json.loads(raw) if isinstance(raw, str) else raw
                 connections = intel_data.get("connections", [])
                 relevant = [
@@ -118,13 +118,13 @@ def _get_kai_context(symbol: str) -> str:
         earnings_key = f"12 - Earnings Intel/by-ticker/{symbol}"
         earnings = (
             db.table("vault_store")
-            .select("key, value")
-            .ilike("key", f"%{earnings_key}%")
+            .select("path, content")
+            .ilike("path", f"%{earnings_key}%")
             .limit(1)
             .execute()
         )
         if earnings.data:
-            val = earnings.data[0].get("value", "")
+            val = earnings.data[0].get("content", "")
             snippet = val[:500] if isinstance(val, str) else str(val)[:500]
             if snippet:
                 sections.append(f"EARNINGS ANALYSIS:\n  {snippet}")
@@ -225,7 +225,7 @@ Change: {quote.get('change_pct', 'N/A')}%
 Open: ${quote.get('open', 'N/A')}
 High: ${quote.get('high', 'N/A')}
 Low: ${quote.get('low', 'N/A')}
-Volume: {quote.get('volume', 'N/A'):,}
+Volume: {quote.get('volume') or 0:,}
 
 EVIDENCE CHAIN:
 {json.dumps(t.get('evidence_chain', [])[:5], indent=2)}
