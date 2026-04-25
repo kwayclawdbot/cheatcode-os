@@ -58,6 +58,7 @@ import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 import TickerPage from "./pages/TickerPage";
 import TickerAnalyzePage from "./pages/TickerAnalyzePage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import SuccessPage from "./pages/SuccessPage";
 /**
  * Redirect new authenticated users to onboarding if they haven't completed it.
  * Uses two signals:
@@ -115,6 +116,7 @@ function Router() {
       <Route path="/learn" component={LearnPage} />
       <Route path="/newsletter" component={NewsletterPage} />
       <Route path="/pricing" component={PricingPage} />
+      <Route path="/success" component={SuccessPage} />
 
       {/* ── Terminal ── */}
       <Route path="/terminal" component={TerminalPage} />
