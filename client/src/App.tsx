@@ -53,6 +53,7 @@ import CoachesCornerPage from "./pages/CoachesCornerPage";
 import CoachProfilePage from "./pages/CoachProfilePage";
 import DiscoverPage from "./pages/DiscoverPage";
 import KaiAssistPage from "./pages/KaiAssistPage";
+import KaiPage from "./pages/KaiPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 import TickerPage from "./pages/TickerPage";
@@ -142,6 +143,16 @@ function Router() {
 
       {/* ── Legacy feed route → redirect to swipe feed ── */}
       <Route path="/social-feed" component={FeedPage} />
+      {/* ── K.AI Module — /kai dashboard (Today, Ticker, History, Settings) ── */}
+      {/* Sub-routes are matched inside KaiPage so the shell + entitlement gate
+          render once and child routes only swap the main pane. */}
+      <Route path="/kai" component={KaiPage} />
+      <Route path="/kai/history" component={KaiPage} />
+      <Route path="/kai/settings" component={KaiPage} />
+      <Route path="/kai/t/:symbol" component={KaiPage} />
+      {/* /kai/chat repurposes the existing KaiAssistPage chat UI. The legacy
+          /assist URL stays alive for backwards compatibility. */}
+      <Route path="/kai/chat" component={KaiAssistPage} />
       <Route path="/assist" component={KaiAssistPage} />
       <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/learn/university" component={YouTubeUniversityPage} />

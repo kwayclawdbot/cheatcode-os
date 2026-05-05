@@ -346,3 +346,65 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 .page-enter { animation: page-in 0.2s ease-out forwards; }
+
+/* ════════════════════════════════════════════════════════════════════════
+ * K.AI Module — terminal aesthetic scoped to .kai-module wrapper
+ * Inherits OS theme switching (light/dark) but expresses its own identity.
+ * ════════════════════════════════════════════════════════════════════════
+ */
+.kai-module {
+  /* Light mode (default) — cream surface, warm ink, deep gold accent */
+  --kai-bg:           #FBF9F4;
+  --kai-surface:      #FFFFFF;
+  --kai-surface-2:    #F5F1E8;
+  --kai-border:       #E5DFD2;
+  --kai-border-light: #D6CFBE;
+  --kai-text:         #1A1A1C;
+  --kai-text-2:       #525048;
+  --kai-text-muted:   #8B8580;
+  --kai-text-dim:     #A8A296;
+  --kai-gold:         #B07F1E;        /* warmer gold for light bg */
+  --kai-gold-dark:    #6B4D17;
+  --kai-green:        #2F8559;
+  --kai-green-dim:    #5A8C70;
+  --kai-red:          #A84B3F;
+  --kai-pulse-shadow: 0 0 0 3px rgb(47 133 89 / 0.18);
+
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background: var(--kai-bg);
+  color: var(--kai-text);
+}
+.dark .kai-module {
+  /* Dark mode — mockup's exact palette */
+  --kai-bg:           #0E0E10;
+  --kai-surface:      #161618;
+  --kai-surface-2:    #1C1C20;
+  --kai-border:       #2A2A2E;
+  --kai-border-light: #3A3A3E;
+  --kai-text:         #F5F1E8;
+  --kai-text-2:       #B8B0A4;
+  --kai-text-muted:   #8B8580;
+  --kai-text-dim:     #5A554F;
+  --kai-gold:         #C9A961;
+  --kai-gold-dark:    #8B6F2A;
+  --kai-green:        #5FBA8A;
+  --kai-green-dim:    #7FA890;
+  --kai-red:          #C97A6E;
+  --kai-pulse-shadow: 0 0 0 3px rgb(95 186 138 / 0.25);
+}
+
+/* Serif used for "Kai's Read" italic narrative */
+.kai-module .kai-serif {
+  font-family: 'Source Serif 4', 'Source Serif Pro', Georgia, serif;
+  font-style: italic;
+}
+
+/* Pulse animation for triggered state dots */
+@keyframes kai-pulse-ring {
+  0%   { box-shadow: 0 0 0 0     rgb(95 186 138 / 0.45); }
+  70%  { box-shadow: 0 0 0 8px   rgb(95 186 138 / 0); }
+  100% { box-shadow: 0 0 0 0     rgb(95 186 138 / 0); }
+}
+.kai-module .kai-pulse {
+  animation: kai-pulse-ring 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

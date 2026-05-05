@@ -67,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   // Promoted from Intelligence sub-menu — Kai is the headline product.
   { type: "link", href: "/intelligence", label: "Analyze",       emoji: "🧠" },
+  { type: "link", href: "/kai",          label: "K.AI",          emoji: "⚡" },
   { type: "link", href: "/journal",      label: "Connect",       emoji: "🤝" },
 ];
 
@@ -111,8 +112,9 @@ const MOBILE_ENTRIES: MobileEntry[] = [
     ],
   },
   { type: "link", href: "/intelligence", label: "Analyze", emoji: "🧠" },
+  { type: "link", href: "/kai",          label: "K.AI",    emoji: "⚡" },
   { type: "link", href: "/journal",      label: "Connect", emoji: "🤝" },
-  { type: "link", href: "/pricing",      label: "Pricing", emoji: "⚡" },
+  { type: "link", href: "/pricing",      label: "Pricing", emoji: "💎" },
 ];
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
