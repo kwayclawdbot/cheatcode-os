@@ -24,6 +24,7 @@ import { AssetClassProvider } from "./contexts/AssetClassContext";
 import { WatchlistProvider } from "./contexts/WatchlistContext";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
+import MagicClaimPage from "./pages/MagicClaimPage";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchWatchlist } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
@@ -163,6 +164,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/auth/callback" component={AuthCallbackPage} />
       <Route path="/auth/reset-password" component={ResetPasswordPage} />
+      <Route path="/m/:token" component={MagicClaimPage} />
 
       {/* ── Creator / topic routes ── */}
       <Route path="/topics/:id" component={TopicsPage} />
