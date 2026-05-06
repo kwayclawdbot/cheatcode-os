@@ -9,6 +9,10 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy manifests first for layer caching
 COPY package.json pnpm-lock.yaml ./
 
+# Copy patches before install — package.json references patches/wouter@3.7.1.patch
+# via pnpm.patchedDependencies, and pnpm reads patch contents during install.
+COPY patches ./patches
+
 # Install all deps (including devDeps needed for build)
 RUN pnpm install --frozen-lockfile
 
