@@ -23,6 +23,8 @@ import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
 import { KaiWalkthrough } from "@/components/kai/KaiWalkthrough";
+import { AlertCard, AlertCardData } from "@/components/shared/AlertCard";
+import { TradeAlertComposer } from "@/components/shared/TradeAlertComposer";
 import { TickerLogo } from "@/components/intelligence/TickerLogo";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -50,9 +52,10 @@ function getLevel(xp: number) {
 }
 
 // ─── Post Types ───────────────────────────────────────────────────────────────
-type PostType = "trade_idea" | "pl_share" | "market_take" | "question";
+type PostType = "trade_idea" | "pl_share" | "market_take" | "question" | "trade_alert";
 const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string; bg: string }> = {
   trade_idea:  { label: "Trade Idea",   color: "#00AEEF", bg: "#E6F7FD" },
+  trade_alert: { label: "Trade Alert",  color: "#4DC820", bg: "#EDFBE6" },
   pl_share:    { label: "Wall of Fame", color: "#4DC820", bg: "#EDFBE6" },
   market_take: { label: "Market Take",  color: "#7B2FBE", bg: "#F3E8FF" },
   question:    { label: "Question",     color: "#667085", bg: "#F2F4F7" },
@@ -183,11 +186,16 @@ interface Post {
     initials: string;
     color: string;
     avatarUrl?: string;
+    avatar_url?: string;
     style: string;
     level: string;
     levelColor: string;
     xp?: number;
     assetClass?: string;
+    belt?: string;
+    win_rate?: number;
+    alert_count?: number;
+    is_agent?: boolean;
   };
   timestamp: string;
   sentiment?: "bullish" | "bearish" | "neutral";
@@ -205,6 +213,12 @@ interface Post {
   reactions: { emoji: string; label: string; count: number; active?: boolean }[];
   comments: number;
   reposts: number;
+  kai_score?: number;
+  kai_rationale?: string;
+  direction?: "long" | "short";
+  tracking_active?: boolean;
+  current_pnl_pct?: number;
+  r_multiple?: number;
 }
 
 const SEED_POSTS: Post[] = [
@@ -245,6 +259,42 @@ const SEED_POSTS: Post[] = [
 ];
 
 function SocialPostCard({ post, onTickerClick }: { post: Post; onTickerClick: (ticker: string) => void }) {
+  // Render AlertCard for trade_alert type
+  if (post.type === "trade_alert") {
+    const alertData: AlertCardData = {
+      id: post.id,
+      user: {
+        name: post.user.name,
+        handle: post.user.handle.replace('@', ''),
+        avatar_url: (post.user as any).avatar_url,
+        belt: (post.user as any).belt,
+        win_rate: (post.user as any).win_rate,
+        alert_count: (post.user as any).alert_count,
+        is_agent: (post.user as any).is_agent,
+      },
+      post_type: "trade_alert",
+      ticker: post.ticker,
+      direction: (post as any).direction,
+      timeframe: post.timeframe,
+      entry_price: post.entry?.replace('$',''),
+      target_price: post.target?.replace('$',''),
+      stop_price: post.stop?.replace('$',''),
+      thesis: post.thesis,
+      body: post.text,
+      kai_score: (post as any).kai_score,
+      kai_rationale: (post as any).kai_rationale,
+      outcome: post.outcome as any,
+      current_pnl_pct: (post as any).current_pnl_pct,
+      tracking_active: (post as any).tracking_active,
+      r_multiple: (post as any).r_multiple,
+      likes_count: post.reactions?.[0]?.count || 0,
+      comments_count: post.comments,
+      reposts_count: post.reposts,
+      created_at: post.timestamp,
+    };
+    return <AlertCard post={alertData} />;
+  }
+
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<any[]>([]);
@@ -1009,6 +1059,7 @@ export default function Home() {
   const [feedTab, setFeedTab] = useState<"trending" | "for_you" | "trade_ideas" | "wall_of_fame">("trending");
   const [posts, setPosts] = useState<Post[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
+  const [tradeComposerOpen, setTradeComposerOpen] = useState(false);
 
   // Live quotes for ticker rail
   const [quotes, setQuotes] = useState<Record<string, { price: number; change_pct: number }>>({})
@@ -1182,6 +1233,11 @@ export default function Home() {
             levelColor: getLevel(p.user?.xp || 0).color,
             xp: p.user?.xp || 0,
             assetClass: p.user?.asset_class || "Stocks",
+            avatar_url: p.user?.avatar_url,
+            belt: p.user?.belt,
+            win_rate: p.user?.alert_win_rate,
+            alert_count: p.user?.alert_count,
+            is_agent: p.user?.is_agent,
           },
           timestamp: p.created_at ? new Date(p.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "now",
           sentiment: p.sentiment,
@@ -1197,6 +1253,12 @@ export default function Home() {
           reactions: p.reactions || [{ emoji: "🔥", label: "Bullish", count: p.likes || 0 }],
           comments: p.comment_count || p.comments || 0,
           reposts: p.repost_count || p.reposts || 0,
+          kai_score: p.kai_score,
+          kai_rationale: p.kai_rationale,
+          direction: p.direction as "long" | "short" | undefined,
+          tracking_active: p.tracking_active,
+          current_pnl_pct: p.current_pnl_pct,
+          r_multiple: p.r_multiple,
         }));
         setPosts(mapped);
       } else {
@@ -1371,6 +1433,15 @@ export default function Home() {
           <div className="min-w-0">
             <div data-tour="compose-bar">
               <ComposeBar onPost={handleNewPost} />
+              <div className="flex justify-end mt-2">
+                <button
+                  onClick={() => setTradeComposerOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  style={{ background: "linear-gradient(135deg, #4DC820, #C8D400)", color: "#101828" }}
+                >
+                  ⚡ Post Alert
+                </button>
+              </div>
             </div>
 
             {/* Feed filter tabs — Trending first */}
@@ -1633,6 +1704,15 @@ export default function Home() {
 
       <KaiChat />
       <KaiWalkthrough />
+      <TradeAlertComposer
+        open={tradeComposerOpen}
+        onClose={() => setTradeComposerOpen(false)}
+        onPost={async (data) => {
+          await import("@/lib/api").then(({ createPost }) => createPost(data));
+          setTradeComposerOpen(false);
+          toast.success("Alert posted! +25 XP 🔥");
+        }}
+      />
     </div>
   );
 }

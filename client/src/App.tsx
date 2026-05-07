@@ -56,6 +56,7 @@ import DiscoverPage from "./pages/DiscoverPage";
 import KaiAssistPage from "./pages/KaiAssistPage";
 import KaiPage from "./pages/KaiPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import BeatKaiPage from "./pages/BeatKaiPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
 import TickerPage from "./pages/TickerPage";
 import TickerAnalyzePage from "./pages/TickerAnalyzePage";
@@ -161,6 +162,7 @@ function Router() {
           /assist URL stays alive for backwards compatibility. */}
       <Route path="/kai/chat" component={KaiAssistPage} />
       <Route path="/assist" component={KaiAssistPage} />
+      <Route path="/leaderboard/beat-kai" component={BeatKaiPage} />
       <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/learn/university" component={YouTubeUniversityPage} />
       <Route path="/tickers/:symbol/analyze" component={TickerAnalyzePage} />

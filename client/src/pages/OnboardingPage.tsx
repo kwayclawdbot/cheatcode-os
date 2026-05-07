@@ -8,8 +8,9 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, ChevronRight, Search, X, ArrowRight, Zap, TrendingUp, BarChart2, DollarSign, Bitcoin, Package, Building2 } from "lucide-react";
+import { Check, ChevronRight, Search, X, ArrowRight, Zap, TrendingUp, BarChart2, DollarSign, Bitcoin, Package, Building2, Bell } from "lucide-react";
 import { toast } from "sonner";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -553,6 +554,16 @@ function BrokerScreen({ connected, onConnect, onSkip }: {
   onConnect: () => void;
   onSkip: () => void;
 }) {
+  const { permission, loading: pushLoading, requestPermission } = usePushNotifications();
+  const [pushEnabled, setPushEnabled] = useState(permission === "granted");
+
+  const handleEnableNotifications = async () => {
+    const ok = await requestPermission();
+    if (ok) {
+      setPushEnabled(true);
+      toast.success("Trade alerts enabled! 🔔");
+    }
+  };
   return (
     <OnboardingShell
       step={6}
@@ -576,6 +587,34 @@ function BrokerScreen({ connected, onConnect, onSkip }: {
             Plus unlock the Trading Journal, Verified P&L badge, and Kai's trade analysis.
           </p>
         </div>
+      </div>
+
+      {/* Push notification opt-in */}
+      <div
+        className="flex items-center justify-between p-4 rounded-2xl mb-4"
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(77,200,32,0.12)" }}>
+            <Bell size={16} style={{ color: "#4DC820" }} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground">Trade alert notifications</p>
+            <p className="text-xs text-muted-foreground">Get notified when coaches post new alerts</p>
+          </div>
+        </div>
+        <button
+          onClick={handleEnableNotifications}
+          disabled={pushEnabled || pushLoading}
+          className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+          style={{
+            background: pushEnabled ? "rgba(77,200,32,0.15)" : "rgba(77,200,32,0.9)",
+            color: pushEnabled ? "#4DC820" : "#101828",
+            opacity: pushLoading ? 0.7 : 1,
+          }}
+        >
+          {pushEnabled ? "✓ Enabled" : pushLoading ? "..." : "Enable"}
+        </button>
       </div>
 
       {/* Broker grid */}

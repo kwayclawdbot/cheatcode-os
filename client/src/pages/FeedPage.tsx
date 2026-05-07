@@ -16,10 +16,11 @@ import {
 import { toast } from "sonner";
 import { Nav } from "@/components/layout/Nav";
 import { KaiChat } from "@/components/kai/KaiChat";
+import { AlertCard, AlertCardData } from "@/components/shared/AlertCard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type PostType = "trade_idea" | "pl_share" | "market_take" | "chart_post";
+type PostType = "trade_idea" | "pl_share" | "market_take" | "chart_post" | "trade_alert";
 type Sentiment = "bullish" | "bearish" | "neutral";
 type FeedTab = "following" | "discover" | "trending" | "live";
 
@@ -30,10 +31,15 @@ interface Post {
     name: string;
     handle: string;
     avatar: string;
+    avatar_url?: string;
     style: string;
     level: string;
     levelColor: string;
     verified?: boolean;
+    belt?: string;
+    win_rate?: number;
+    alert_count?: number;
+    is_agent?: boolean;
   };
   timestamp: string;
   sentiment?: Sentiment;
@@ -52,6 +58,12 @@ interface Post {
   reposts: number;
   liked?: boolean;
   bookmarked?: boolean;
+  kai_score?: number;
+  kai_rationale?: string;
+  direction?: "long" | "short";
+  tracking_active?: boolean;
+  current_pnl_pct?: number;
+  r_multiple?: number;
 }
 
 // ─── Mock Feed Data ───────────────────────────────────────────────────────────
@@ -747,6 +759,12 @@ export default function FeedPage() {
             reposts: p.reposts_count || 0,
             liked: p.user_liked || false,
             bookmarked: p.user_bookmarked || false,
+            kai_score: p.kai_score,
+            kai_rationale: p.kai_rationale,
+            direction: p.direction as "long" | "short" | undefined,
+            tracking_active: p.tracking_active,
+            current_pnl_pct: p.current_pnl_pct,
+            r_multiple: p.r_multiple,
           })));
         }
       }).catch(() => {});
@@ -840,9 +858,43 @@ export default function FeedPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {posts.map(post => (
-              <PostCard key={post.id} post={post} onLike={handleLike} onBookmark={handleBookmark} />
-            ))}
+            {posts.map(post => {
+              if (post.type === "trade_alert") {
+                const alertData: AlertCardData = {
+                  id: post.id,
+                  user: {
+                    name: post.user.name,
+                    handle: post.user.handle.replace('@', ''),
+                    avatar_url: post.user.avatar_url || post.user.avatar,
+                    belt: post.user.belt,
+                    win_rate: post.user.win_rate,
+                    alert_count: post.user.alert_count,
+                    is_agent: post.user.is_agent,
+                  },
+                  post_type: "trade_alert",
+                  ticker: post.ticker,
+                  direction: post.direction,
+                  timeframe: post.timeframe,
+                  entry_price: post.entry?.replace('$',''),
+                  target_price: post.target?.replace('$',''),
+                  stop_price: post.stop?.replace('$',''),
+                  thesis: post.thesis,
+                  body: post.text,
+                  kai_score: post.kai_score,
+                  kai_rationale: post.kai_rationale,
+                  outcome: post.outcome as any,
+                  current_pnl_pct: post.current_pnl_pct,
+                  tracking_active: post.tracking_active,
+                  r_multiple: post.r_multiple,
+                  likes_count: post.likes,
+                  comments_count: post.comments,
+                  reposts_count: post.reposts,
+                  created_at: post.timestamp,
+                };
+                return <AlertCard key={post.id} post={alertData} />;
+              }
+              return <PostCard key={post.id} post={post} onLike={handleLike} onBookmark={handleBookmark} />;
+            })}
 
             {/* Load more */}
             <button

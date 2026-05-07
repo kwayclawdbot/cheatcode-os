@@ -108,7 +108,7 @@ export default function LeaderboardPage() {
         {/* Hero header */}
         <div className="border-b border-border bg-card">
           <div className="container mx-auto py-6">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center cc-gradient-bg">
                   <Trophy size={20} className="text-[#101828]" />
@@ -120,8 +120,22 @@ export default function LeaderboardPage() {
                   <p className="text-xs text-muted-foreground">{activeCat.description}</p>
                 </div>
               </div>
-              {/* Timeframe selector */}
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              {/* Beat Kai CTA */}
+              <Link href="/leaderboard/beat-kai">
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all hover:scale-[1.03]"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(77,200,32,0.15), rgba(96,165,250,0.1))",
+                    color: "#4DC820",
+                    border: "1px solid rgba(77,200,32,0.3)",
+                  }}
+                >
+                  🏆 Beat Kai
+                </button>
+              </Link>
+            </div>
+            {/* Timeframe selector */}
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
                 {(["week", "month", "all"] as const).map(t => (
                   <button
                     key={t}
