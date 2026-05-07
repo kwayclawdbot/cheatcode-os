@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import get_settings
 from app.core.supabase import get_supabase
 from app.core.telemetry import with_telemetry
-from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market, coach, chart, auth_magic
+from app.api.routes import home, content, intelligence, kai, payments, admin, events, social, journal, profile, market, coach, chart, auth_magic, leaderboard
 from app.services.curation import run_curation_cycle, rescore_recent_content
 from app.services.intelligence import run_brain_cycle, generate_radar
 from app.services.market_data import sync_eod_prices, sync_eod_prices_24_7
@@ -92,6 +92,7 @@ app.include_router(market.router, prefix=s.api_prefix)
 app.include_router(coach.router, prefix=s.api_prefix)
 app.include_router(chart.router, prefix=s.api_prefix)
 app.include_router(auth_magic.router, prefix=s.api_prefix)
+app.include_router(leaderboard.router, prefix=s.api_prefix)
 
 
 @app.get("/health")

@@ -641,3 +641,35 @@ export async function fetchChartData(
 ): Promise<any> {
   return apiFetch(`/chart/${symbol}?sensitivity=${sensitivity}&period=${period}&limit=${limit}&colors=${colors}`);
 }
+
+// ── Leaderboard ──────────────────────────────────────────────────────────────
+
+export async function fetchBeatKaiLeaderboard(): Promise<any> {
+  return apiFetch("/leaderboard/beat-kai");
+}
+
+export async function fetchAllTimeLeaderboard(
+  sort: "win_rate" | "xp" | "belt" | "calls" = "win_rate",
+  belt?: string,
+): Promise<any[]> {
+  const params = new URLSearchParams({ sort });
+  if (belt) params.set("belt", belt);
+  return apiFetch(`/leaderboard/all-time?${params}`);
+}
+
+// ── Preview Score ─────────────────────────────────────────────────────────────
+
+export async function previewAlertScore(data: {
+  ticker: string;
+  direction?: string;
+  entry_price?: string;
+  target_price?: string;
+  stop_price?: string;
+  thesis?: string;
+}): Promise<{ score: number; emoji: string; label: string }> {
+  return apiFetch("/social/preview-score", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+

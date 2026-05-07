@@ -1,36 +1,108 @@
-"""Gamification engine — XP, levels, badges."""
+"""Gamification engine — XP, belts, badges."""
 
 import logging
+from datetime import datetime, timezone
 
 from app.core.supabase import get_supabase, maybe_one
 
 log = logging.getLogger("gamification")
 
 XP_ACTIONS = {
+    # Learning (passive)
     "video_view": 5,
-    "video_complete": 15,
+    "video_complete": 10,
+    "quiz_pass_first_try": 75,
+    "track_complete": 500,
     "ticker_lookup": 2,
     "kai_message": 3,
-    "post_create": 20,
-    "post_like_received": 2,
-    "comment_create": 10,
-    "journal_entry": 25,
     "bookmark": 1,
+
+    # Community (social)
+    "post_create": 15,
+    "comment_create": 8,
+    "post_like_received": 3,
     "follow": 2,
+
+    # Trading (performance — primary XP path)
+    "alert_posted": 25,
+    "alert_win": 100,        # base, scaled by R in tracker
+    "alert_win_r2": 200,
+    "alert_win_r3plus": 400,
+    "alert_loss": 15,        # correct stop-out behavior rewarded
+    "beat_kai_weekly": 500,
+
+    # Onboarding
     "onboarding_complete": 100,
-    "streak_day": 10,
+    "journal_entry": 25,
     "first_trade_logged": 50,
+    "streak_day": 10,
+}
+
+BELT_ORDER = ['white', 'yellow', 'orange', 'green', 'blue', 'purple', 'brown', 'black']
+
+BELT_THRESHOLDS = {
+    'yellow':  {'min_alerts': 5,   'min_xp': 500,   'min_wr': 0},
+    'orange':  {'min_alerts': 20,  'min_xp': 1500,  'min_wr': 50.0},
+    'green':   {'min_alerts': 50,  'min_xp': 4000,  'min_wr': 55.0},
+    'blue':    {'min_alerts': 100, 'min_xp': 10000, 'min_wr': 60.0},
+    'purple':  {'min_alerts': 200, 'min_xp': 25000, 'min_wr': 63.0},
+    'brown':   {'min_alerts': 350, 'min_xp': 50000, 'min_wr': 65.0},
+    'black':   {'min_alerts': 500, 'min_xp': 100000,'min_wr': 68.0},
 }
 
 BADGE_DEFS = {
-    "verified_pl": {"label": "Verified P&L", "desc": "Brokerage connected", "check": lambda p: p.get("broker_connected")},
+    "verified_pl": {"label": "Broker Verified", "desc": "Brokerage connected", "check": lambda p: p.get("broker_connected")},
     "first_post": {"label": "First Post", "desc": "Published first post", "check": lambda p: p.get("post_count", 0) >= 1},
+    "first_alert": {"label": "First Alert", "desc": "Posted first trade alert", "check": lambda p: p.get("alert_count", 0) >= 1},
     "educator": {"label": "Educator", "desc": "10+ posts", "check": lambda p: p.get("post_count", 0) >= 10},
-    "journal_starter": {"label": "Journal Starter", "desc": "5+ journal entries", "check": lambda p: p.get("total_trades", 0) >= 5},
-    "consistent_trader": {"label": "Consistent", "desc": "30+ trades logged", "check": lambda p: p.get("total_trades", 0) >= 30},
+    "consistent_trader": {"label": "Consistent", "desc": "30+ tracked alerts", "check": lambda p: p.get("alert_count", 0) >= 30},
     "community_pillar": {"label": "Community Pillar", "desc": "50+ followers", "check": lambda p: p.get("follower_count", 0) >= 50},
-    "top_caller": {"label": "Top Caller", "desc": "Win rate above 60%", "check": lambda p: (p.get("win_rate") or 0) >= 60},
+    "top_caller": {"label": "Top Caller", "desc": "Win rate above 60%", "check": lambda p: (p.get("alert_win_rate") or 0) >= 60},
+    "beat_kai": {"label": "Beat Kai", "desc": "Outperformed Kai in a week", "check": lambda p: p.get("xp", 0) >= 1000},
 }
+
+
+def check_and_advance_belt(user_id: str) -> str | None:
+    """Check if user qualifies for belt advancement. Returns new belt name or None."""
+    db = get_supabase()
+    try:
+        profile = maybe_one(db.table("profiles").select(
+            "belt,xp,alert_count,alert_win_rate"
+        ).eq("id", user_id))
+        if not profile.data:
+            return None
+
+        p = profile.data
+        current_belt = p.get("belt") or "white"
+        xp = p.get("xp") or 0
+        alert_count = p.get("alert_count") or 0
+        win_rate = float(p.get("alert_win_rate") or 0)
+
+        current_idx = BELT_ORDER.index(current_belt) if current_belt in BELT_ORDER else 0
+        new_belt = current_belt
+
+        for belt in BELT_ORDER[current_idx + 1:]:
+            thresh = BELT_THRESHOLDS.get(belt)
+            if not thresh:
+                break
+            if (alert_count >= thresh['min_alerts'] and
+                    xp >= thresh['min_xp'] and
+                    win_rate >= thresh['min_wr']):
+                new_belt = belt
+            else:
+                break
+
+        if new_belt != current_belt:
+            db.table("profiles").update({
+                "belt": new_belt,
+                "belt_updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", user_id).execute()
+            log.info("Belt advancement: %s → %s for user %s", current_belt, new_belt, user_id)
+            return new_belt
+    except Exception as e:
+        log.error("Belt check failed for %s: %s", user_id, e)
+    return None
+
 
 
 def award_xp(user_id: str, action: str, metadata: dict | None = None) -> int:

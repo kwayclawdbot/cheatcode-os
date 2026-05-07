@@ -26,7 +26,7 @@ import AuthCallbackPage from "./pages/AuthCallbackPage";
 import AuthPage from "./pages/AuthPage";
 import MagicClaimPage from "./pages/MagicClaimPage";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchWatchlist } from "@/lib/api";
+import { fetchMyProfile } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 
 // Pages
@@ -63,37 +63,43 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SuccessPage from "./pages/SuccessPage";
 /**
  * Redirect new authenticated users to onboarding if they haven't completed it.
- * Uses two signals:
- * 1. localStorage flag `cc-onboarding-complete` (set by OnboardingPage on finish)
- * 2. /profile/me watchlist — if user has zero watchlist entries, they're likely new
+ * Source of truth: profiles.onboarding_complete in Supabase (via /profile/me).
+ * localStorage is used as a fast cache to avoid a network hit on every render —
+ * but the server value always wins on first load after login.
  */
 function NewUserRedirect() {
   const { isAuthenticated, loading } = useAuth();
   const [location, navigate] = useLocation();
 
-  // Only query watchlist if authenticated and not already on onboarding/auth
-  const skip = !isAuthenticated || loading || location.startsWith("/auth") || location === "/onboarding";
-  const { data: watchlist, loading: watchlistLoading } = useApi<string[]>(
-    () => (skip ? Promise.resolve([] as string[]) : fetchWatchlist()),
-    [],
+  // Skip fetching on non-authenticated routes to avoid unnecessary API calls
+  const skip = !isAuthenticated || loading || location.startsWith("/auth") || location === "/onboarding" || location.startsWith("/m/");
+  const { data: profile, loading: profileLoading } = useApi<any>(
+    () => (skip ? Promise.resolve(null) : fetchMyProfile()),
+    null,
     [skip],
   );
 
   useEffect(() => {
     if (loading || !isAuthenticated) return;
-    if (location.startsWith("/auth") || location === "/onboarding") return;
-    if (watchlistLoading) return;
+    if (location.startsWith("/auth") || location === "/onboarding" || location.startsWith("/m/")) return;
+    if (profileLoading || skip) return;
 
-    // Primary: localStorage flag set by OnboardingPage.finish()
-    const done = localStorage.getItem("cc-onboarding-complete");
-    if (done) return;
+    // Server is the source of truth — onboarding_complete from Supabase profiles table
+    if (profile?.onboarding_complete === true) {
+      // Cache in localStorage so subsequent navigations don't need a fetch
+      localStorage.setItem("cc-onboarding-complete", "true");
+      return;
+    }
 
-    // Secondary: if user has no watchlist entries, they haven't onboarded
-    if (skip) return;
-    if (Array.isArray(watchlist) && watchlist.length === 0) {
+    // Fast path: already cached from a previous session on this device
+    const cached = localStorage.getItem("cc-onboarding-complete");
+    if (cached) return;
+
+    // Profile loaded and onboarding_complete is false/null — send to onboarding
+    if (profile !== null) {
       navigate("/onboarding");
     }
-  }, [isAuthenticated, loading, location, navigate, watchlist, watchlistLoading, skip]);
+  }, [isAuthenticated, loading, location, navigate, profile, profileLoading, skip]);
 
   return null;
 }

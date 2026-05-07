@@ -1,0 +1,12 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.kai-agent"
+
+[deploy]
+runtime = "V2"
+numReplicas = 1
+# Every 30 min during market hours Mon-Fri (ET = UTC-4/5)
+# 13:30-21:00 UTC = 9:30 AM - 5:00 PM ET
+cronSchedule = "*/30 13-21 * * 1-5"
+startCommand = "python alert_tracker.py"
+restartPolicyType = "NEVER"
