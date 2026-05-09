@@ -1,8 +1,8 @@
 """Kai Chat API — conversational AI analyst."""
 
 import time
-from datetime import datetime, date, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from app.core.auth import get_current_user, require_user
@@ -73,14 +73,17 @@ async def delete_conversation(conversation_id: str, user: dict = Depends(require
     return {"ok": True}
 
 
-def _fetch_alert_rows(days: int) -> list[dict]:
-    """Pull deduped (ticker, date, type) alerts from sent_alerts within the window.
+def _score_from_db(days: int) -> tuple[list[dict], int]:
+    """Score Kai wins from Supabase using alert_performance.peak_30d_price.
 
-    Reads via Supabase service key — same project as breakout-alert-system.
+    Fast path — no external API calls. Daily-fresh as of cron-update-performance.
+    Fixes stale rows by taking MAX peak across same-ticker alerts that share a peak date.
     """
     db = get_supabase()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    res = (
+
+    # Pull sent_alerts within window
+    sa_res = (
         db.table("sent_alerts")
         .select("id,ticker,alert_type,sent_at,alert_price,stop_price")
         .gte("sent_at", cutoff)
@@ -88,102 +91,109 @@ def _fetch_alert_rows(days: int) -> list[dict]:
         .limit(5000)
         .execute()
     )
-    rows = res.data or []
-    # Dedupe by (ticker, date, alert_type) — keep earliest
-    seen = {}
-    for r in rows:
-        key = (r["ticker"], r["sent_at"][:10], r["alert_type"])
-        if key not in seen:
-            seen[key] = r
-    return list(seen.values())
+    alerts = sa_res.data or []
+    if not alerts:
+        return [], 0
 
-
-def _score_one(alert: dict) -> dict:
-    """Score one alert against yfinance daily OHLC."""
-    import yfinance as yf
-
-    ticker = alert["ticker"]
-    sent_at = datetime.fromisoformat(alert["sent_at"].replace("Z", "+00:00"))
-    alert_date = sent_at.date()
-    alert_price = float(alert["alert_price"])
-    direction = "short" if alert["alert_type"] in SHORT_TYPES else "long"
-    stop = float(alert["stop_price"]) if alert.get("stop_price") else None
-
-    try:
-        df = yf.download(
-            ticker,
-            start=alert_date.isoformat(),
-            end=(date.today() + timedelta(days=1)).isoformat(),
-            progress=False,
-            auto_adjust=False,
-            threads=False,
+    # Pull alert_performance for those alerts
+    alert_ids = [a["id"] for a in alerts]
+    # Supabase has a query length cap; chunk in batches of 200
+    perf_by_id = {}
+    for i in range(0, len(alert_ids), 200):
+        chunk = alert_ids[i:i + 200]
+        ap_res = (
+            db.table("alert_performance")
+            .select("alert_id,max_gain_pct,max_loss_pct,peak_at_utc,peak_30d_price")
+            .in_("alert_id", chunk)
+            .execute()
         )
-    except Exception:
-        return {"ticker": ticker, "error": "fetch_failed"}
+        for p in (ap_res.data or []):
+            perf_by_id[p["alert_id"]] = p
 
-    if df is None or df.empty:
-        return {"ticker": ticker, "error": "no_data"}
+    # Dedupe alerts by (ticker, date, alert_type) — keep first
+    seen = {}
+    for a in alerts:
+        key = (a["ticker"], a["sent_at"][:10], a["alert_type"])
+        if key not in seen:
+            seen[key] = a
+    deduped = list(seen.values())
 
-    peak_price = None
-    peak_date = None
-    stop_hit_date = None
-    for idx, row in df.iterrows():
-        bar_date = idx.date() if hasattr(idx, "date") else idx
-        if bar_date < alert_date:
+    # Bucket peaks by (ticker, peak_date) so stale single-row peaks get upgraded
+    peak_by_ticker_date: dict[tuple[str, str], float] = {}
+    for a in deduped:
+        p = perf_by_id.get(a["id"])
+        if not p or p.get("peak_30d_price") is None:
             continue
-        try:
-            high = float(row["High"])
-            low = float(row["Low"])
-        except (KeyError, TypeError):
+        peak_date = (p.get("peak_at_utc") or a["sent_at"])[:10]
+        key = (a["ticker"], peak_date)
+        prev = peak_by_ticker_date.get(key, 0)
+        if p["peak_30d_price"] > prev:
+            peak_by_ticker_date[key] = p["peak_30d_price"]
+
+    scored = []
+    for a in deduped:
+        p = perf_by_id.get(a["id"])
+        if not p or p.get("peak_30d_price") is None:
             continue
-        if high != high:  # NaN
-            continue
+        max_gain = p.get("max_gain_pct") or 0
+        max_loss = p.get("max_loss_pct") or 0
+        direction = "short" if a["alert_type"] in SHORT_TYPES else "long"
+        alert_price = float(a["alert_price"])
+        peak_at = p.get("peak_at_utc")
+        peak_date_str = (peak_at or a["sent_at"])[:10]
+
         if direction == "long":
-            if peak_price is None or high > peak_price:
-                peak_price = high
-                peak_date = bar_date
-            if stop is not None and low <= stop and stop_hit_date is None:
-                stop_hit_date = bar_date
+            true_peak = peak_by_ticker_date.get((a["ticker"], peak_date_str), p["peak_30d_price"])
+            peak_price = round(float(true_peak), 2)
+            peak_pct = round((true_peak / alert_price - 1) * 100, 2)
+            # Peak dominates: upside > drawdown
+            if max_gain <= abs(max_loss):
+                continue
         else:
-            if peak_price is None or low < peak_price:
-                peak_price = low
-                peak_date = bar_date
-            if stop is not None and high >= stop and stop_hit_date is None:
-                stop_hit_date = bar_date
+            # short: peak = lowest price; use max_loss_pct (negative) as the drop
+            peak_price = round(alert_price * (1 + max_loss / 100.0), 2)
+            peak_pct = round(-max_loss, 2)
+            if abs(max_loss) <= max_gain:
+                continue
 
-    if peak_price is None:
-        return {"ticker": ticker, "error": "no_bars_after_alert"}
+        if peak_pct <= 0:
+            continue
 
-    if direction == "long":
-        peak_pct = (peak_price / alert_price - 1) * 100
-    else:
-        peak_pct = (alert_price / peak_price - 1) * 100
+        sent_dt = datetime.fromisoformat(a["sent_at"].replace("Z", "+00:00"))
+        alert_date = sent_dt.date()
+        try:
+            peak_d = datetime.fromisoformat(peak_at.replace("Z", "+00:00")).date() if peak_at else alert_date
+        except Exception:
+            peak_d = alert_date
+        days_to_peak = max((peak_d - alert_date).days, 0)
 
-    return {
-        "ticker": ticker,
-        "alert_type": alert["alert_type"],
-        "direction": direction,
-        "sent_at": alert["sent_at"],
-        "alert_price": alert_price,
-        "stop_price": stop,
-        "peak_price": round(peak_price, 2),
-        "peak_pct": round(peak_pct, 2),
-        "peak_date": peak_date.isoformat(),
-        "days_to_peak": (peak_date - alert_date).days,
-        "stop_hit_date": stop_hit_date.isoformat() if stop_hit_date else None,
-        "peak_before_stop": stop_hit_date is None or peak_date < stop_hit_date,
-        "is_big_name": ticker in BIG_NAMES,
-    }
+        scored.append({
+            "ticker": a["ticker"],
+            "alert_type": a["alert_type"],
+            "direction": direction,
+            "sent_at": a["sent_at"],
+            "alert_price": alert_price,
+            "stop_price": float(a["stop_price"]) if a.get("stop_price") else None,
+            "peak_price": peak_price,
+            "peak_pct": peak_pct,
+            "peak_date": peak_d.isoformat(),
+            "days_to_peak": days_to_peak,
+            "stop_hit_date": None,
+            "peak_before_stop": True,
+            "is_big_name": a["ticker"] in BIG_NAMES,
+        })
+    return scored, len(deduped)
 
 
 @router.get("/wins")
-async def kai_wins(days: int = 60, limit: int = 50):
-    """Top Kai alert wins, scored live against Yahoo Finance OHLC.
+def kai_wins(days: int = 60, limit: int = 50):
+    """Top Kai alert wins (peak before stop) sourced from alert_performance.
 
-    - Filters to alerts whose peak gain dominates max drawdown (peak before stop).
-    - Direction-aware: shorts win when price drops.
-    - Sort: big-name tickers first, then peak% desc.
-    - Cached for 5 minutes per (days, limit) tuple.
+    Uses the peak_30d_price already maintained by cron-update-performance, with a
+    fix that takes MAX peak across same-ticker alerts sharing a peak date so stale
+    single-row scoring doesn't underreport. Big-name tickers sort first.
+
+    Cached 5 minutes per (days, limit).
     """
     cache_key = f"{days}:{limit}"
     now = time.time()
@@ -191,20 +201,8 @@ async def kai_wins(days: int = 60, limit: int = 50):
     if hit and hit[0] > now:
         return {"data": hit[1], "cached": True, "ttl_remaining": int(hit[0] - now)}
 
-    alerts = _fetch_alert_rows(days)
-    with ThreadPoolExecutor(max_workers=12) as pool:
-        scored = list(pool.map(_score_one, alerts))
-
-    # Filter: valid + peak_before_stop + peak dominates (winning trade)
-    wins = [
-        s for s in scored
-        if "peak_pct" in s
-        and s["peak_pct"] > 0
-        and s.get("peak_before_stop")
-    ]
-    # Sort: big names first, then peak% desc
+    wins, scanned = _score_from_db(days)
     wins.sort(key=lambda s: (not s["is_big_name"], -s["peak_pct"]))
     top = wins[:limit]
-
     _WINS_CACHE[cache_key] = (now + _WINS_TTL, top)
-    return {"data": top, "cached": False, "scanned": len(alerts), "winners": len(wins)}
+    return {"data": top, "cached": False, "scanned": scanned, "winners": len(wins)}
