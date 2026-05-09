@@ -151,7 +151,6 @@ export default function LeaderboardPage() {
                   </button>
                 ))}
               </div>
-            </div>
 
             {/* Category tabs */}
             <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>

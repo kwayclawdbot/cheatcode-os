@@ -62,7 +62,7 @@ function calcRRatio(entry: string, target: string, stop: string): number | null 
 
 // ── Main Composer ──────────────────────────────────────────────────────────
 
-export default function TradeAlertComposer({ open, onClose, onPost }: ComposerProps) {
+export function TradeAlertComposer({ open, onClose, onPost }: ComposerProps) {
   const [step, setStep] = useState(1);
   const [ticker, setTicker] = useState("");
   const [direction, setDirection] = useState<"long" | "short">("long");

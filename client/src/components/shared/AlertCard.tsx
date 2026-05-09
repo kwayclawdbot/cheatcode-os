@@ -191,7 +191,7 @@ function PnlBar({ entry, target, stop, current, direction }: {
 
 // ── Main AlertCard ─────────────────────────────────────────────────────────
 
-export default function AlertCard({
+export function AlertCard({
   post,
   onLike,
   onAskKai,
