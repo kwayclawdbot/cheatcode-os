@@ -588,7 +588,10 @@ function ShareControls({ detail }: { detail: KaiWinDetail }) {
   const offscreenRef = useRef<HTMLDivElement | null>(null);
 
   const copyShareUrl = async () => {
-    const shareUrl = `${window.location.origin}/kai/wins/${detail.ticker}`;
+    // Use the standalone OG service URL so iMessage / Twitter / Discord etc.
+    // render the per-ticker preview card. The share page redirects humans
+    // back to the SPA route after meta tags are served.
+    const shareUrl = `https://cheatcode-og.vercel.app/share/${detail.ticker}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
