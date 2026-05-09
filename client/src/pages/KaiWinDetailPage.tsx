@@ -4,7 +4,7 @@
 // and a one-tap "Share PNG" that exports a 1080×1080 card via html-to-image.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Download, Share2, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, Check, Download, Link2, Share2, TrendingDown, TrendingUp } from "lucide-react";
 import {
   AreaSeries,
   createChart,
@@ -584,7 +584,20 @@ function ShareControls({ detail }: { detail: KaiWinDetail }) {
   const [size, setSize] = useState<ShareSize>("square");
   const [busy, setBusy] = useState(false);
   const [pendingCapture, setPendingCapture] = useState<null | "download" | "share">(null);
+  const [copied, setCopied] = useState(false);
   const offscreenRef = useRef<HTMLDivElement | null>(null);
+
+  const copyShareUrl = async () => {
+    const shareUrl = `${window.location.origin}/share/${detail.ticker}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Fallback: open prompt
+      window.prompt("Copy this URL", shareUrl);
+    }
+  };
 
   // When pendingCapture is set, the offscreen ShareCard is mounted; capture it on next paint.
   useEffect(() => {
@@ -663,6 +676,22 @@ function ShareControls({ detail }: { detail: KaiWinDetail }) {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={copyShareUrl}
+          className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] uppercase px-3 py-2 rounded-md transition-opacity"
+          style={{
+            background: copied
+              ? "color-mix(in oklab, #10b981 20%, transparent)"
+              : "rgba(255,255,255,0.06)",
+            border: copied ? "1px solid #10b98166" : "1px solid rgba(255,255,255,0.1)",
+            color: copied ? "#10b981" : "#f5f1e8",
+          }}
+          title="Copy a share-friendly link with auto-generated preview image"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Link2 className="w-3 h-3" />}
+          {copied ? "Copied" : "Link"}
+        </button>
         <button
           type="button"
           disabled={busy}
