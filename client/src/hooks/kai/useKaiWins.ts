@@ -19,6 +19,8 @@ export interface KaiWin {
   stop_hit_date: string | null;
   peak_before_stop: boolean;
   is_big_name: boolean;
+  alert_dates: string[]; // YYYY-MM-DD, sorted, includes the best alert's date
+  alert_count: number;
 }
 
 interface UseKaiWins {

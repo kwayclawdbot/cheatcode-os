@@ -5,20 +5,16 @@ import { Star } from "lucide-react";
 import { useLocation } from "wouter";
 import { useKaiWins, type KaiWin } from "@/hooks/kai/useKaiWins";
 
-const ET_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function formatAlertEt(iso: string): string {
-  // "MM/DD, HH:MM" → "MM-DD HH:MM"
-  return ET_FMT.format(new Date(iso))
-    .replace(",", "")
-    .replace("/", "-");
+function formatAlertDates(dates: string[]): { display: string; tooltip: string } {
+  // Each date is YYYY-MM-DD. Compress to MM-DD; if many, show first 3 + "+N".
+  const short = dates.map((d) => d.slice(5)); // MM-DD
+  if (short.length <= 3) {
+    return { display: short.join(", "), tooltip: short.join(", ") };
+  }
+  return {
+    display: `${short.slice(0, 3).join(", ")} +${short.length - 3}`,
+    tooltip: short.join(", "),
+  };
 }
 
 function formatMoney(n: number): string {
@@ -117,8 +113,8 @@ export function KaiWinsPage() {
               >
                 <th className="text-left py-2 pr-2">Ticker</th>
                 <th className="text-left py-2 pr-2">Dir</th>
-                <th className="text-left py-2 pr-2">Alert ET</th>
-                <th className="text-right py-2 pr-2">Entry</th>
+                <th className="text-left py-2 pr-2">Alert Dates</th>
+                <th className="text-right py-2 pr-2">Best Entry</th>
                 <th className="text-right py-2 pr-2">Peak</th>
                 <th className="text-right py-2 pr-2">%</th>
                 <th className="text-left py-2 pr-2">Peak Dt</th>
@@ -139,6 +135,7 @@ export function KaiWinsPage() {
 
 function WinRow({ w, onClick }: { w: KaiWin; onClick: () => void }) {
   const isShort = w.direction === "short";
+  const dates = formatAlertDates(w.alert_dates ?? [w.sent_at.slice(0, 10)]);
   return (
     <tr
       onClick={onClick}
@@ -154,6 +151,18 @@ function WinRow({ w, onClick }: { w: KaiWin; onClick: () => void }) {
             />
           )}
           <span style={{ color: "var(--kai-text)" }}>{w.ticker}</span>
+          {w.alert_count > 1 && (
+            <span
+              className="text-[9px] tracking-[0.1em] px-1 rounded-sm"
+              style={{
+                background: "color-mix(in oklab, var(--kai-gold) 15%, transparent)",
+                color: "var(--kai-gold)",
+              }}
+              title={`${w.alert_count} alerts in window`}
+            >
+              {w.alert_count}×
+            </span>
+          )}
         </span>
       </td>
       <td className="py-2 pr-2">
@@ -169,8 +178,8 @@ function WinRow({ w, onClick }: { w: KaiWin; onClick: () => void }) {
           {w.direction}
         </span>
       </td>
-      <td className="py-2 pr-2" style={{ color: "var(--kai-text-2)" }}>
-        {formatAlertEt(w.sent_at)}
+      <td className="py-2 pr-2" style={{ color: "var(--kai-text-2)" }} title={dates.tooltip}>
+        {dates.display}
       </td>
       <td className="py-2 pr-2 text-right tabular-nums" style={{ color: "var(--kai-text-2)" }}>
         {formatMoney(w.alert_price)}

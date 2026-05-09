@@ -193,6 +193,10 @@ def kai_wins(days: int = 60, limit: int = 50):
     fix that takes MAX peak across same-ticker alerts sharing a peak date so stale
     single-row scoring doesn't underreport. Big-name tickers sort first.
 
+    One row per ticker — the best alert (highest peak %, i.e. cheapest entry on
+    the same peak) is canonical, and every other alert date for that ticker in
+    the window is attached as `alert_dates`.
+
     Cached 5 minutes per (days, limit).
     """
     cache_key = f"{days}:{limit}"
@@ -202,7 +206,25 @@ def kai_wins(days: int = 60, limit: int = 50):
         return {"data": hit[1], "cached": True, "ttl_remaining": int(hit[0] - now)}
 
     wins, scanned = _score_from_db(days)
-    wins.sort(key=lambda s: (not s["is_big_name"], -s["peak_pct"]))
-    top = wins[:limit]
+    # Sort so the best (highest peak%) row per ticker comes first
+    wins.sort(key=lambda s: -s["peak_pct"])
+
+    by_ticker: dict[str, dict] = {}
+    extra_dates: dict[str, list[str]] = defaultdict(list)
+    for w in wins:
+        t = w["ticker"]
+        date_str = w["sent_at"][:10]
+        if t not in by_ticker:
+            by_ticker[t] = w
+        else:
+            extra_dates[t].append(date_str)
+
+    grouped = []
+    for t, best in by_ticker.items():
+        all_dates = sorted({best["sent_at"][:10], *extra_dates[t]})
+        grouped.append({**best, "alert_dates": all_dates, "alert_count": len(all_dates)})
+
+    grouped.sort(key=lambda s: (not s["is_big_name"], -s["peak_pct"]))
+    top = grouped[:limit]
     _WINS_CACHE[cache_key] = (now + _WINS_TTL, top)
-    return {"data": top, "cached": False, "scanned": scanned, "winners": len(wins)}
+    return {"data": top, "cached": False, "scanned": scanned, "winners": len(grouped)}
