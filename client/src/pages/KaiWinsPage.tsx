@@ -13,15 +13,8 @@ function formatPct(n: number): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
 }
 
-function compactDates(dates: string[]): { display: string; tooltip: string } {
-  const short = dates.map((d) => d.slice(5)); // MM-DD
-  if (short.length <= 2) {
-    return { display: short.join(" · "), tooltip: short.join(", ") };
-  }
-  return {
-    display: `${short.slice(0, 2).join(" · ")} +${short.length - 2}`,
-    tooltip: short.join(", "),
-  };
+function shortDates(dates: string[]): string[] {
+  return dates.map((d) => d.slice(5)); // YYYY-MM-DD → MM-DD
 }
 
 export function KaiWinsPage() {
@@ -115,7 +108,8 @@ function WinCard({ w, rank }: { w: KaiWin; rank: number }) {
   const isLong = w.direction === "long";
   const accent = isLong ? "#10b981" : "#f43f5e"; // emerald / rose
   const Icon = isLong ? TrendingUp : TrendingDown;
-  const dates = compactDates(w.alert_dates ?? [w.sent_at.slice(0, 10)]);
+  const dates = shortDates(w.alert_dates ?? [w.sent_at.slice(0, 10)]);
+  const MAX_VISIBLE_DATES = 6;
 
   return (
     <button
@@ -181,9 +175,8 @@ function WinCard({ w, rank }: { w: KaiWin; rank: number }) {
           <div
             className="font-mono text-[9px] tracking-[0.18em] uppercase opacity-50"
             style={{ color: "var(--kai-text-2)" }}
-            title={dates.tooltip}
           >
-            {isLong ? "long" : "short"} · {dates.display}
+            {isLong ? "long" : "short"}
           </div>
         </div>
 
@@ -213,9 +206,38 @@ function WinCard({ w, rank }: { w: KaiWin; rank: number }) {
         </div>
       </div>
 
+      {/* Alert dates as chips */}
+      <div className="mt-3 flex flex-wrap gap-1" title={dates.join(", ")}>
+        {dates.slice(0, MAX_VISIBLE_DATES).map((d) => (
+          <span
+            key={d}
+            className="font-mono text-[9px] tracking-[0.1em] tabular-nums px-1.5 py-0.5 rounded-md"
+            style={{
+              background: `color-mix(in oklab, ${accent} 14%, transparent)`,
+              border: `1px solid color-mix(in oklab, ${accent} 28%, transparent)`,
+              color: accent,
+            }}
+          >
+            {d}
+          </span>
+        ))}
+        {dates.length > MAX_VISIBLE_DATES && (
+          <span
+            className="font-mono text-[9px] tracking-[0.1em] tabular-nums px-1.5 py-0.5 rounded-md opacity-70"
+            style={{
+              background: "color-mix(in oklab, var(--kai-text) 8%, transparent)",
+              border: "1px solid color-mix(in oklab, var(--kai-text) 14%, transparent)",
+              color: "var(--kai-text-2)",
+            }}
+          >
+            +{dates.length - MAX_VISIBLE_DATES}
+          </span>
+        )}
+      </div>
+
       {/* Entry → Peak rail */}
       <div
-        className="mt-4 flex items-center justify-between gap-2 px-3 py-2 rounded-lg font-mono tabular-nums"
+        className="mt-3 flex items-center justify-between gap-2 px-3 py-2 rounded-lg font-mono tabular-nums"
         style={{
           background: "color-mix(in oklab, var(--kai-text) 4%, transparent)",
         }}
