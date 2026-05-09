@@ -156,6 +156,7 @@ function Router() {
           render once and child routes only swap the main pane. */}
       <Route path="/kai" component={KaiPage} />
       <Route path="/kai/history" component={KaiPage} />
+      <Route path="/kai/wins" component={KaiPage} />
       <Route path="/kai/settings" component={KaiPage} />
       <Route path="/kai/t/:symbol" component={KaiPage} />
       {/* /kai/chat repurposes the existing KaiAssistPage chat UI. The legacy

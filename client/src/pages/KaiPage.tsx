@@ -11,6 +11,7 @@ import { KaiTodayPage } from "./KaiTodayPage";
 import { KaiHistoryPage } from "./KaiHistoryPage";
 import { KaiSettingsPage } from "./KaiSettingsPage";
 import { KaiTickerDetailPage } from "./KaiTickerDetailPage";
+import { KaiWinsPage } from "./KaiWinsPage";
 
 export default function KaiPage() {
   return (
@@ -25,6 +26,7 @@ function KaiPageInner() {
   const [, navigate] = useLocation();
   const [isToday] = useRoute("/kai");
   const [isHistory] = useRoute("/kai/history");
+  const [isWins] = useRoute("/kai/wins");
   const [isSettings] = useRoute("/kai/settings");
   const [tickerMatch, tickerParams] = useRoute("/kai/t/:symbol");
   const { prefs } = useKaiAlertPrefs();
@@ -125,6 +127,7 @@ function KaiPageInner() {
           >
             <SubnavLink href="/kai" label="Today" active={!!isToday} />
             <SubnavLink href="/kai/history" label="History" active={!!isHistory} />
+            <SubnavLink href="/kai/wins" label="Wins" active={!!isWins} />
           </nav>
         )}
       </header>
@@ -132,6 +135,7 @@ function KaiPageInner() {
       <main className="max-w-2xl mx-auto px-4 py-5 pb-20">
         {isToday && <KaiTodayPage />}
         {isHistory && <KaiHistoryPage />}
+        {isWins && <KaiWinsPage />}
         {isSettings && <KaiSettingsPage />}
         {tickerMatch && tickerParams?.symbol && (
           <KaiTickerDetailPage symbol={tickerParams.symbol.toUpperCase()} />
