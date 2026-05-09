@@ -235,36 +235,59 @@ _TICKER_CACHE: dict[str, tuple[float, dict]] = {}
 _TICKER_TTL = 600  # 10 minutes
 
 
-def _fetch_ohlc(ticker: str, days_back: int = 90) -> list[dict]:
-    """Fetch daily OHLC for a single ticker via yfinance (cheap, single ticker)."""
+def _fetch_ohlc(ticker: str, days_back: int = 90) -> tuple[list[dict], str | None]:
+    """Fetch daily OHLC for a single ticker via yfinance.
+
+    Returns (bars, error_string). error_string is None on success.
+    """
     try:
         import yfinance as yf
-    except Exception:
-        return []
+    except Exception as e:
+        return [], f"yfinance import: {e}"
     from datetime import date as _date
     start = (_date.today() - timedelta(days=days_back)).isoformat()
     end = (_date.today() + timedelta(days=1)).isoformat()
     try:
-        df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False, threads=False)
-    except Exception:
-        return []
+        df = yf.download(
+            ticker,
+            start=start,
+            end=end,
+            progress=False,
+            auto_adjust=False,
+            threads=False,
+        )
+    except Exception as e:
+        return [], f"download: {e}"
     if df is None or df.empty:
-        return []
+        return [], "empty dataframe"
     bars = []
+    # Multi-ticker download returns columns as MultiIndex (Price, Ticker).
+    # For a single-ticker call yfinance still sometimes returns this shape;
+    # flatten by selecting the ticker level if present.
+    try:
+        if hasattr(df.columns, "nlevels") and df.columns.nlevels > 1:
+            df = df.xs(ticker, axis=1, level=-1)
+    except Exception:
+        pass
     for idx, row in df.iterrows():
         try:
             d = idx.date() if hasattr(idx, "date") else idx
+            high = float(row["High"])
+            low = float(row["Low"])
+            if high != high or low != low:  # NaN guard
+                continue
+            vol_raw = row["Volume"]
             bars.append({
                 "date": d.isoformat(),
                 "open": float(row["Open"]),
-                "high": float(row["High"]),
-                "low": float(row["Low"]),
+                "high": high,
+                "low": low,
                 "close": float(row["Close"]),
-                "volume": int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
+                "volume": int(vol_raw) if vol_raw == vol_raw else 0,
             })
         except Exception:
             continue
-    return bars
+    return bars, None if bars else "no parsable rows"
 
 
 @router.get("/wins/{ticker}")
@@ -296,6 +319,17 @@ def kai_win_detail(ticker: str):
     if not alerts:
         return {"ticker": ticker, "error": "no alerts in last 60 days"}
 
+    # Dedupe alerts by (date, alert_type) — keep the first sent that day
+    seen_keys = set()
+    deduped_alerts = []
+    for a in alerts:
+        key = (a["sent_at"][:10], a["alert_type"])
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped_alerts.append(a)
+    alerts = deduped_alerts
+
     alert_ids = [a["id"] for a in alerts]
     perf_by_id: dict[int, dict] = {}
     for i in range(0, len(alert_ids), 200):
@@ -309,34 +343,58 @@ def kai_win_detail(ticker: str):
         for p in (ap_res.data or []):
             perf_by_id[p["alert_id"]] = p
 
-    # Pick the "best" alert: highest peak_30d_price for longs, lowest for shorts
     direction = "short" if alerts[0]["alert_type"] in SHORT_TYPES else "long"
+
+    # True peak across all alerts of this ticker (fixes stale single-row scoring).
+    # For longs we take the max peak_30d_price; for shorts we take the min low
+    # implied by max_loss_pct.
+    true_peak_price = None
+    true_peak_at = None
+    for a in alerts:
+        p = perf_by_id.get(a["id"])
+        if not p:
+            continue
+        if direction == "long":
+            pk = p.get("peak_30d_price")
+            if pk is not None and (true_peak_price is None or pk > true_peak_price):
+                true_peak_price = float(pk)
+                true_peak_at = p.get("peak_at_utc")
+        else:
+            ml = p.get("max_loss_pct") or 0
+            implied_low = float(a["alert_price"]) * (1 + ml / 100.0)
+            if true_peak_price is None or implied_low < true_peak_price:
+                true_peak_price = implied_low
+                true_peak_at = p.get("peak_at_utc")
+
+    # Pick the alert with the best peak% measured against the TRUE peak.
+    # For longs: cheapest entry wins. For shorts: highest entry wins.
     best_alert = None
     best_peak_pct = -float("inf")
     for a in alerts:
-        p = perf_by_id.get(a["id"])
-        if not p or p.get("peak_30d_price") is None:
-            continue
         ap = float(a["alert_price"])
-        peak = float(p["peak_30d_price"])
+        if true_peak_price is None:
+            continue
         if direction == "long":
-            pct = (peak / ap - 1) * 100
+            pct = (true_peak_price / ap - 1) * 100
         else:
-            ml = p.get("max_loss_pct") or 0
-            pct = -ml
-            peak = ap * (1 + ml / 100.0)
+            pct = (ap / true_peak_price - 1) * 100
         if pct > best_peak_pct:
             best_peak_pct = pct
-            best_alert = {"alert": a, "perf": p, "peak_price": peak, "peak_pct": pct}
+            best_alert = {
+                "alert": a,
+                "perf": perf_by_id.get(a["id"], {}),
+                "peak_price": true_peak_price,
+                "peak_pct": pct,
+                "peak_at": true_peak_at,
+            }
 
     if best_alert is None:
-        # Fallback: first alert, no perf yet
-        best_alert = {"alert": alerts[0], "perf": {}, "peak_price": None, "peak_pct": None}
+        best_alert = {"alert": alerts[0], "perf": perf_by_id.get(alerts[0]["id"], {}), "peak_price": None, "peak_pct": None, "peak_at": None}
 
     a = best_alert["alert"]
     p = best_alert["perf"]
     sent_dt = datetime.fromisoformat(a["sent_at"].replace("Z", "+00:00"))
-    peak_at = p.get("peak_at_utc")
+    peak_at = best_alert.get("peak_at") or p.get("peak_at_utc")
     try:
         peak_d = datetime.fromisoformat(peak_at.replace("Z", "+00:00")).date() if peak_at else None
     except Exception:
@@ -381,8 +439,11 @@ def kai_win_detail(ticker: str):
             }
             for x in alerts
         ],
-        "ohlc": _fetch_ohlc(ticker, days_back=90),
     }
+    bars, ohlc_err = _fetch_ohlc(ticker, days_back=90)
+    payload["ohlc"] = bars
+    if ohlc_err:
+        payload["ohlc_error"] = ohlc_err
 
     _TICKER_CACHE[ticker] = (now + _TICKER_TTL, payload)
     return {**payload, "cached": False}
