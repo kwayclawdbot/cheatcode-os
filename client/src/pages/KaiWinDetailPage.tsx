@@ -16,7 +16,9 @@ import {
   type Time,
 } from "lightweight-charts";
 import { toPng } from "html-to-image";
+import { createPortal } from "react-dom";
 import { useKaiWinDetail, type KaiWinDetail, type KaiOhlcBar } from "@/hooks/kai/useKaiWinDetail";
+import { ShareCard, SHARE_SIZES, type ShareSize } from "@/components/kai/ShareCard";
 
 interface Props {
   ticker: string;
@@ -106,7 +108,7 @@ function KaiWinDetailInner({ detail }: { detail: KaiWinDetail }) {
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Wins
           </button>
-          <ShareControls cardRef={cardRef} ticker={detail.ticker} />
+          <ShareControls detail={detail} />
         </div>
       </div>
 
@@ -578,81 +580,138 @@ function KaiAlertChart({
   return <div ref={containerRef} className="w-full" style={{ height: 280 }} />;
 }
 
-function ShareControls({ cardRef, ticker }: { cardRef: React.RefObject<HTMLDivElement | null>; ticker: string }) {
+function ShareControls({ detail }: { detail: KaiWinDetail }) {
+  const [size, setSize] = useState<ShareSize>("square");
   const [busy, setBusy] = useState(false);
+  const [pendingCapture, setPendingCapture] = useState<null | "download" | "share">(null);
+  const offscreenRef = useRef<HTMLDivElement | null>(null);
 
-  const exportPng = async (action: "download" | "share") => {
-    if (!cardRef.current) return;
-    setBusy(true);
-    try {
-      const dataUrl = await toPng(cardRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#0a0a0c",
-      });
-      if (action === "download") {
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `kai-${ticker}-${Date.now()}.png`;
-        a.click();
-      } else if (action === "share" && (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share) {
-        const blob = await (await fetch(dataUrl)).blob();
-        const file = new File([blob], `kai-${ticker}.png`, { type: "image/png" });
-        const navWithShare = navigator as Navigator & { canShare?: (d: ShareData) => boolean; share: (d: ShareData) => Promise<void> };
-        if (navWithShare.canShare?.({ files: [file] })) {
-          await navWithShare.share({ files: [file], title: `K.AI ${ticker}` });
-        } else {
-          // Fallback: download
-          const a = document.createElement("a");
-          a.href = dataUrl;
-          a.download = `kai-${ticker}-${Date.now()}.png`;
-          a.click();
+  // When pendingCapture is set, the offscreen ShareCard is mounted; capture it on next paint.
+  useEffect(() => {
+    if (!pendingCapture || !offscreenRef.current) return;
+    const action = pendingCapture;
+    const node = offscreenRef.current;
+    const target = SHARE_SIZES[size];
+    const run = async () => {
+      try {
+        // Wait two frames so the portal definitely paints before capture.
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const dataUrl = await toPng(node, {
+          cacheBust: true,
+          pixelRatio: 1, // Card is already at full pixel size
+          width: target.w,
+          height: target.h,
+          backgroundColor: "#0a0a0c",
+        });
+        const filename = `kai-${detail.ticker}-${size}-${Date.now()}.png`;
+        if (action === "share") {
+          const navWithShare = navigator as Navigator & {
+            canShare?: (d: ShareData) => boolean;
+            share?: (d: ShareData) => Promise<void>;
+          };
+          if (navWithShare.share) {
+            const blob = await (await fetch(dataUrl)).blob();
+            const file = new File([blob], filename, { type: "image/png" });
+            if (navWithShare.canShare?.({ files: [file] })) {
+              await navWithShare.share({ files: [file], title: `K.AI ${detail.ticker}` });
+              return;
+            }
+          }
         }
-      } else {
         const a = document.createElement("a");
         a.href = dataUrl;
-        a.download = `kai-${ticker}-${Date.now()}.png`;
+        a.download = filename;
         a.click();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("PNG export failed", e);
+      } finally {
+        setPendingCapture(null);
+        setBusy(false);
       }
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("PNG export failed", e);
-    } finally {
-      setBusy(false);
-    }
+    };
+    run();
+  }, [pendingCapture, size, detail]);
+
+  const trigger = (action: "download" | "share") => {
+    setBusy(true);
+    setPendingCapture(action);
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => exportPng("download")}
-        className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] uppercase px-3 py-2 rounded-md transition-opacity"
-        style={{
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          color: "#f5f1e8",
-          opacity: busy ? 0.5 : 1,
-        }}
-      >
-        <Download className="w-3 h-3" />
-        PNG
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => exportPng("share")}
-        className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] uppercase px-3 py-2 rounded-md transition-opacity"
-        style={{
-          background: "linear-gradient(135deg, #B07F1E, #6B4D17)",
-          color: "#0a0a0c",
-          opacity: busy ? 0.5 : 1,
-        }}
-      >
-        <Share2 className="w-3 h-3" />
-        Share
-      </button>
-    </div>
+    <>
+      <div className="flex items-center gap-1.5">
+        {/* Size selector */}
+        <div
+          className="flex items-center rounded-md p-0.5"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+        >
+          {(["square", "story", "banner"] as ShareSize[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSize(s)}
+              className="px-2 py-1 text-[9px] tracking-[0.18em] uppercase rounded-sm transition-colors"
+              style={{
+                background: s === size ? "var(--kai-gold, #B07F1E)" : "transparent",
+                color: s === size ? "#0a0a0c" : "#f5f1e8aa",
+                fontWeight: 700,
+              }}
+              title={`${SHARE_SIZES[s].w}×${SHARE_SIZES[s].h}`}
+            >
+              {s === "square" ? "1:1" : s === "story" ? "9:16" : "OG"}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => trigger("download")}
+          className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] uppercase px-3 py-2 rounded-md transition-opacity"
+          style={{
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "#f5f1e8",
+            opacity: busy ? 0.5 : 1,
+          }}
+        >
+          <Download className="w-3 h-3" />
+          PNG
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => trigger("share")}
+          className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] uppercase px-3 py-2 rounded-md transition-opacity"
+          style={{
+            background: "linear-gradient(135deg, #B07F1E, #6B4D17)",
+            color: "#0a0a0c",
+            opacity: busy ? 0.5 : 1,
+          }}
+        >
+          <Share2 className="w-3 h-3" />
+          Share
+        </button>
+      </div>
+
+      {/* Offscreen capture surface — mounted only while we're capturing */}
+      {pendingCapture && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            opacity: 0,
+            pointerEvents: "none",
+            zIndex: -1,
+          }}
+        >
+          <div ref={offscreenRef}>
+            <ShareCard detail={detail} size={size} />
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
