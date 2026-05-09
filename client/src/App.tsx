@@ -55,6 +55,7 @@ import CoachProfilePage from "./pages/CoachProfilePage";
 import DiscoverPage from "./pages/DiscoverPage";
 import KaiAssistPage from "./pages/KaiAssistPage";
 import KaiPage from "./pages/KaiPage";
+import { KaiWinDetailPage } from "./pages/KaiWinDetailPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import BeatKaiPage from "./pages/BeatKaiPage";
 import YouTubeUniversityPage from "./pages/YouTubeUniversityPage";
@@ -157,6 +158,9 @@ function Router() {
       <Route path="/kai" component={KaiPage} />
       <Route path="/kai/history" component={KaiPage} />
       <Route path="/kai/wins" component={KaiPage} />
+      <Route path="/kai/wins/:ticker">
+        {(params) => <KaiWinDetailPage ticker={params.ticker.toUpperCase()} />}
+      </Route>
       <Route path="/kai/settings" component={KaiPage} />
       <Route path="/kai/t/:symbol" component={KaiPage} />
       {/* /kai/chat repurposes the existing KaiAssistPage chat UI. The legacy

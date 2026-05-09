@@ -123,7 +123,7 @@ export function KaiWinsPage() {
             </thead>
             <tbody>
               {wins.map((w, i) => (
-                <WinRow key={`${w.ticker}-${w.sent_at}-${i}`} w={w} onClick={() => navigate(`/kai/t/${w.ticker}`)} />
+                <WinRow key={`${w.ticker}-${w.sent_at}-${i}`} w={w} onClick={() => navigate(`/kai/wins/${w.ticker}`)} />
               ))}
             </tbody>
           </table>

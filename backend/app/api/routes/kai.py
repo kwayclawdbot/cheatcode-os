@@ -228,3 +228,161 @@ def kai_wins(days: int = 60, limit: int = 50):
     top = grouped[:limit]
     _WINS_CACHE[cache_key] = (now + _WINS_TTL, top)
     return {"data": top, "cached": False, "scanned": scanned, "winners": len(grouped)}
+
+
+# Per-ticker detail cache. {ticker_upper: (expires_at, payload)}
+_TICKER_CACHE: dict[str, tuple[float, dict]] = {}
+_TICKER_TTL = 600  # 10 minutes
+
+
+def _fetch_ohlc(ticker: str, days_back: int = 90) -> list[dict]:
+    """Fetch daily OHLC for a single ticker via yfinance (cheap, single ticker)."""
+    try:
+        import yfinance as yf
+    except Exception:
+        return []
+    from datetime import date as _date
+    start = (_date.today() - timedelta(days=days_back)).isoformat()
+    end = (_date.today() + timedelta(days=1)).isoformat()
+    try:
+        df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False, threads=False)
+    except Exception:
+        return []
+    if df is None or df.empty:
+        return []
+    bars = []
+    for idx, row in df.iterrows():
+        try:
+            d = idx.date() if hasattr(idx, "date") else idx
+            bars.append({
+                "date": d.isoformat(),
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                "volume": int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
+            })
+        except Exception:
+            continue
+    return bars
+
+
+@router.get("/wins/{ticker}")
+def kai_win_detail(ticker: str):
+    """Enriched per-ticker detail for /kai/wins click-through.
+
+    Bundles all sent_alerts in the last 60 days for this ticker, the perf
+    snapshot for the best alert, the original thesis text, and 90 days of
+    OHLC for charting. Cached 10 minutes per ticker.
+    """
+    ticker = ticker.upper()
+    now = time.time()
+    hit = _TICKER_CACHE.get(ticker)
+    if hit and hit[0] > now:
+        return {**hit[1], "cached": True, "ttl_remaining": int(hit[0] - now)}
+
+    db = get_supabase()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+
+    sa_res = (
+        db.table("sent_alerts")
+        .select("id,ticker,alert_type,sent_at,alert_price,stop_price,humanized_message,setup_label,quality_score,catalyst_type,sector")
+        .eq("ticker", ticker)
+        .gte("sent_at", cutoff)
+        .order("sent_at")
+        .execute()
+    )
+    alerts = sa_res.data or []
+    if not alerts:
+        return {"ticker": ticker, "error": "no alerts in last 60 days"}
+
+    alert_ids = [a["id"] for a in alerts]
+    perf_by_id: dict[int, dict] = {}
+    for i in range(0, len(alert_ids), 200):
+        chunk = alert_ids[i:i + 200]
+        ap_res = (
+            db.table("alert_performance")
+            .select("alert_id,max_gain_pct,max_loss_pct,peak_at_utc,peak_30d_price,gain_5min,gain_15min,gain_30min,gain_1hour,gain_1day,gain_3day,gain_1week,current_price")
+            .in_("alert_id", chunk)
+            .execute()
+        )
+        for p in (ap_res.data or []):
+            perf_by_id[p["alert_id"]] = p
+
+    # Pick the "best" alert: highest peak_30d_price for longs, lowest for shorts
+    direction = "short" if alerts[0]["alert_type"] in SHORT_TYPES else "long"
+    best_alert = None
+    best_peak_pct = -float("inf")
+    for a in alerts:
+        p = perf_by_id.get(a["id"])
+        if not p or p.get("peak_30d_price") is None:
+            continue
+        ap = float(a["alert_price"])
+        peak = float(p["peak_30d_price"])
+        if direction == "long":
+            pct = (peak / ap - 1) * 100
+        else:
+            ml = p.get("max_loss_pct") or 0
+            pct = -ml
+            peak = ap * (1 + ml / 100.0)
+        if pct > best_peak_pct:
+            best_peak_pct = pct
+            best_alert = {"alert": a, "perf": p, "peak_price": peak, "peak_pct": pct}
+
+    if best_alert is None:
+        # Fallback: first alert, no perf yet
+        best_alert = {"alert": alerts[0], "perf": {}, "peak_price": None, "peak_pct": None}
+
+    a = best_alert["alert"]
+    p = best_alert["perf"]
+    sent_dt = datetime.fromisoformat(a["sent_at"].replace("Z", "+00:00"))
+    peak_at = p.get("peak_at_utc")
+    try:
+        peak_d = datetime.fromisoformat(peak_at.replace("Z", "+00:00")).date() if peak_at else None
+    except Exception:
+        peak_d = None
+    days_to_peak = (peak_d - sent_dt.date()).days if peak_d else None
+
+    payload = {
+        "ticker": ticker,
+        "direction": direction,
+        "is_big_name": ticker in BIG_NAMES,
+        "best": {
+            "sent_at": a["sent_at"],
+            "alert_type": a["alert_type"],
+            "alert_price": float(a["alert_price"]),
+            "stop_price": float(a["stop_price"]) if a.get("stop_price") else None,
+            "peak_price": round(best_alert["peak_price"], 2) if best_alert["peak_price"] is not None else None,
+            "peak_pct": round(best_alert["peak_pct"], 2) if best_alert["peak_pct"] is not None else None,
+            "peak_date": peak_d.isoformat() if peak_d else None,
+            "days_to_peak": days_to_peak,
+            "thesis": a.get("humanized_message"),
+            "setup_label": a.get("setup_label"),
+            "quality_score": a.get("quality_score"),
+            "catalyst": a.get("catalyst_type"),
+            "sector": a.get("sector"),
+        },
+        "performance": {
+            "gain_5min": p.get("gain_5min"),
+            "gain_15min": p.get("gain_15min"),
+            "gain_30min": p.get("gain_30min"),
+            "gain_1hour": p.get("gain_1hour"),
+            "gain_1day": p.get("gain_1day"),
+            "gain_3day": p.get("gain_3day"),
+            "gain_1week": p.get("gain_1week"),
+            "current_price": float(p["current_price"]) if p.get("current_price") else None,
+        },
+        "all_alerts": [
+            {
+                "sent_at": x["sent_at"],
+                "alert_type": x["alert_type"],
+                "alert_price": float(x["alert_price"]),
+                "setup_label": x.get("setup_label"),
+            }
+            for x in alerts
+        ],
+        "ohlc": _fetch_ohlc(ticker, days_back=90),
+    }
+
+    _TICKER_CACHE[ticker] = (now + _TICKER_TTL, payload)
+    return {**payload, "cached": False}
