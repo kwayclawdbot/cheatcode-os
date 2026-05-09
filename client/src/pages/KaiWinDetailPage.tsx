@@ -588,7 +588,7 @@ function ShareControls({ detail }: { detail: KaiWinDetail }) {
   const offscreenRef = useRef<HTMLDivElement | null>(null);
 
   const copyShareUrl = async () => {
-    const shareUrl = `${window.location.origin}/share/${detail.ticker}`;
+    const shareUrl = `${window.location.origin}/kai/wins/${detail.ticker}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);

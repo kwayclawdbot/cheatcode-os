@@ -21,11 +21,7 @@
       "destination": "https://cheatcode-os-trpc-production.up.railway.app/api/upload"
     },
     {
-      "source": "/share/:ticker",
-      "destination": "/api/share/:ticker"
-    },
-    {
-      "source": "/((?!api/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
