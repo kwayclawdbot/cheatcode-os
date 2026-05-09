@@ -6,7 +6,7 @@
 // — Twitter, iMessage, Discord, Slack, etc. fetch this HTML, see the og tags,
 // and render a rich preview with the dynamically generated card.
 
-export const config = { runtime: "edge" };
+export const config = { runtime: "nodejs" };
 
 const BACKEND =
   "https://cheatcode-os-api-production.up.railway.app/api/v1";

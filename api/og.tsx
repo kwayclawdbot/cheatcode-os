@@ -4,7 +4,9 @@
 // peak / entry. Same visual language as the in-app ShareCard.
 import { ImageResponse } from "@vercel/og";
 
-export const config = { runtime: "edge" };
+// Node runtime — @vercel/og supports both, and Node avoids the "unsupported
+// modules" build error this monorepo hit on Edge.
+export const config = { runtime: "nodejs" };
 
 const BACKEND =
   "https://cheatcode-os-api-production.up.railway.app/api/v1";
