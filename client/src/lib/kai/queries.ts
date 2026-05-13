@@ -255,10 +255,16 @@ const TRIGGER_SELECT =
   "vol_ratio, score_morning, or_high, or_low, vwap, eod_outcome, " +
   "post_fire_invalidated, sms_body, sms_sent";
 
+// Only surface rows that actually went to SMS subscribers. The
+// kai_swing_trigger_engine.py also writes rows for internal beta/scanner
+// fires (sms_sent=false, beta_phone_only=true) — those should NEVER appear
+// in the user-facing feed because the user never received them. Filtering
+// on sms_sent=true matches exactly what was broadcast.
 export async function fetchTodayTriggers(): Promise<KaiTriggerEvent[]> {
   const { data, error } = await supabase
     .from("kai_trigger_events")
     .select(TRIGGER_SELECT)
+    .eq("sms_sent", true)
     .gte("fired_at", easternMidnightIso())
     .order("fired_at", { ascending: false })
     .limit(50);
@@ -272,6 +278,7 @@ export async function fetchHistoryTriggers(days = 7): Promise<KaiTriggerEvent[]>
   const { data, error } = await supabase
     .from("kai_trigger_events")
     .select(TRIGGER_SELECT)
+    .eq("sms_sent", true)
     .gte("fired_at", since.toISOString())
     .order("fired_at", { ascending: false })
     .limit(500);
