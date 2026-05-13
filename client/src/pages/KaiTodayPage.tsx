@@ -51,6 +51,7 @@ const OUTCOME_STYLES: Record<
   stopped:     { label: "STOPPED", color: "var(--kai-red)",   bg: "color-mix(in oklab, var(--kai-red) 14%, transparent)",   border: "color-mix(in oklab, var(--kai-red) 45%, transparent)" },
   loss:        { label: "LOSS",    color: "var(--kai-red)",   bg: "color-mix(in oklab, var(--kai-red) 14%, transparent)",   border: "color-mix(in oklab, var(--kai-red) 45%, transparent)" },
   invalidated: { label: "INVALID", color: "var(--kai-text-muted)", bg: "var(--kai-surface-2)", border: "var(--kai-border)" },
+  expired:     { label: "EXPIRED", color: "var(--kai-text-muted)", bg: "var(--kai-surface-2)", border: "var(--kai-border)" },
   open:        { label: "OPEN",    color: "var(--kai-gold)",  bg: "color-mix(in oklab, var(--kai-gold) 10%, transparent)",  border: "color-mix(in oklab, var(--kai-gold) 40%, transparent)" },
 };
 

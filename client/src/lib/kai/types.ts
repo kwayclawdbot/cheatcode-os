@@ -39,6 +39,7 @@ export type KaiTriggerOutcome =
   | "tp_hit"
   | "stopped"
   | "invalidated"
+  | "expired"
   | "win"
   | "loss"
   | "open";

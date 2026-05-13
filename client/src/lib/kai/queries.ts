@@ -167,7 +167,13 @@ interface KaiTriggerRow {
 function resolveOutcome(r: KaiTriggerRow): KaiTriggerEvent["outcome"] {
   if (r.post_fire_invalidated) return "invalidated";
   const raw = (r.eod_outcome ?? "").toLowerCase().trim();
-  if (raw === "tp_hit" || raw === "stopped" || raw === "win" || raw === "loss") {
+  if (
+    raw === "tp_hit" ||
+    raw === "stopped" ||
+    raw === "win" ||
+    raw === "loss" ||
+    raw === "expired"
+  ) {
     return raw;
   }
   if (raw === "invalidated") return "invalidated";
