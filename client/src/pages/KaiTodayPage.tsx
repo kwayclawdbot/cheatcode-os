@@ -15,7 +15,7 @@ import { useKaiWeeklyUniverse } from "@/hooks/kai/useKaiWeeklyUniverse";
 import { useKaiMutedTickers } from "@/hooks/kai/useKaiMutedTickers";
 import { useMarketSession } from "@/hooks/kai/useMarketSession";
 import { useKaiLiveQuotes } from "@/hooks/kai/useKaiLiveQuotes";
-import type { KaiSystemPick } from "@/lib/kai/types";
+import type { KaiSystemPick, KaiTriggerOutcome } from "@/lib/kai/types";
 
 const REGIME_COPY: Record<string, string> = {
   neutral: "Neutral regime",
@@ -42,13 +42,41 @@ function fmtWatchlistDate(d: string): string {
   return `${months[dt.getMonth()]} ${dt.getDate()}`;
 }
 
+const OUTCOME_STYLES: Record<
+  KaiTriggerOutcome,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  tp_hit:      { label: "TP HIT",  color: "var(--kai-green)", bg: "color-mix(in oklab, var(--kai-green) 14%, transparent)", border: "color-mix(in oklab, var(--kai-green) 45%, transparent)" },
+  win:         { label: "WIN",     color: "var(--kai-green)", bg: "color-mix(in oklab, var(--kai-green) 14%, transparent)", border: "color-mix(in oklab, var(--kai-green) 45%, transparent)" },
+  stopped:     { label: "STOPPED", color: "var(--kai-red)",   bg: "color-mix(in oklab, var(--kai-red) 14%, transparent)",   border: "color-mix(in oklab, var(--kai-red) 45%, transparent)" },
+  loss:        { label: "LOSS",    color: "var(--kai-red)",   bg: "color-mix(in oklab, var(--kai-red) 14%, transparent)",   border: "color-mix(in oklab, var(--kai-red) 45%, transparent)" },
+  invalidated: { label: "INVALID", color: "var(--kai-text-muted)", bg: "var(--kai-surface-2)", border: "var(--kai-border)" },
+  open:        { label: "OPEN",    color: "var(--kai-gold)",  bg: "color-mix(in oklab, var(--kai-gold) 10%, transparent)",  border: "color-mix(in oklab, var(--kai-gold) 40%, transparent)" },
+};
+
+function OutcomeBadge({ outcome }: { outcome: KaiTriggerOutcome }) {
+  const s = OUTCOME_STYLES[outcome];
+  return (
+    <span
+      className="px-1.5 py-0.5 rounded-sm border text-[9px] font-mono tracking-[0.12em]"
+      style={{ color: s.color, background: s.bg, borderColor: s.border }}
+    >
+      {s.label}
+    </span>
+  );
+}
+
 export function KaiTodayPage() {
   const [, navigate] = useLocation();
   const [universeOpen, setUniverseOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
   const session = useMarketSession();
-  const { events, loading: triggersLoading } = useKaiTriggerEvents({ scope: "today", realtime: true });
+  const {
+    events,
+    loading: triggersLoading,
+    error: triggersError,
+  } = useKaiTriggerEvents({ scope: "today", realtime: true });
   const { watchlist, add, remove } = useKaiWatchlist();
   const {
     top10,
@@ -195,7 +223,31 @@ export function KaiTodayPage() {
             {events.length} fired
           </span>
         </div>
-        {events.length === 0 ? (
+        {triggersError ? (
+          <div
+            className="border rounded-sm px-4 py-4 text-[11px] font-mono space-y-2"
+            style={{
+              borderColor: "color-mix(in oklab, var(--kai-red) 50%, transparent)",
+              background: "color-mix(in oklab, var(--kai-red) 12%, var(--kai-surface))",
+              color: "var(--kai-red)",
+            }}
+          >
+            <div className="font-semibold tracking-wider uppercase text-[10px]">
+              Failed to load triggers
+            </div>
+            <div style={{ color: "var(--kai-text-muted)" }}>
+              {triggersError}
+            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-[10px] tracking-[0.15em] uppercase underline"
+              style={{ color: "var(--kai-gold)" }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : events.length === 0 ? (
           <div
             className="border rounded-sm px-4 py-6 text-center text-[11px] font-mono space-y-1"
             style={{
@@ -266,7 +318,17 @@ export function KaiTodayPage() {
                     >
                       {t.side}
                     </span>
+                    <OutcomeBadge outcome={t.outcome} />
                   </div>
+                  {t.premise && (
+                    <div
+                      className="text-[10px] font-mono leading-snug mt-0.5 truncate"
+                      style={{ color: "var(--kai-text-muted)" }}
+                      title={t.premise}
+                    >
+                      {t.premise}
+                    </div>
+                  )}
                   {t.source === "user_pick" && (
                     <div
                       className="text-[9px] font-mono tracking-[0.15em] mt-0.5"

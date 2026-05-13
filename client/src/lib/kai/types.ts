@@ -32,6 +32,17 @@ export interface KaiMutedTicker {
   muted_at: string;
 }
 
+// Resolved outcome surfaced on the trigger row UI. Distinct from the raw
+// eod_outcome column so we can collapse post_fire_invalidated + EOD outcome
+// into a single discriminator the renderer can switch on.
+export type KaiTriggerOutcome =
+  | "tp_hit"
+  | "stopped"
+  | "invalidated"
+  | "win"
+  | "loss"
+  | "open";
+
 export interface KaiTriggerEvent {
   id: number;
   ticker: string;
@@ -42,6 +53,10 @@ export interface KaiTriggerEvent {
   stop_price: number | null;
   target_price: number | null;
   source: KaiTriggerSource;
+  /** Resolved outcome — `open` until EOD evaluation runs. */
+  outcome: KaiTriggerOutcome;
+  /** The one-liner premise sent to SMS users (payload.sms_body). */
+  premise: string | null;
   payload: Record<string, unknown> | null;
 }
 

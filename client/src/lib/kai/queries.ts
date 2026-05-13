@@ -164,6 +164,16 @@ interface KaiTriggerRow {
   sms_sent: boolean | null;
 }
 
+function resolveOutcome(r: KaiTriggerRow): KaiTriggerEvent["outcome"] {
+  if (r.post_fire_invalidated) return "invalidated";
+  const raw = (r.eod_outcome ?? "").toLowerCase().trim();
+  if (raw === "tp_hit" || raw === "stopped" || raw === "win" || raw === "loss") {
+    return raw;
+  }
+  if (raw === "invalidated") return "invalidated";
+  return "open";
+}
+
 function mapTriggerRow(r: KaiTriggerRow): KaiTriggerEvent {
   return {
     id: r.id,
@@ -175,6 +185,8 @@ function mapTriggerRow(r: KaiTriggerRow): KaiTriggerEvent {
     stop_price: null,
     target_price: null,
     source: "system",
+    outcome: resolveOutcome(r),
+    premise: r.sms_body ?? null,
     payload: {
       setup_label: r.setup_label,
       vol_ratio: r.vol_ratio,
@@ -189,6 +201,49 @@ function mapTriggerRow(r: KaiTriggerRow): KaiTriggerEvent {
   };
 }
 
+/**
+ * ISO timestamp for today's midnight in US/Eastern, regardless of viewer's
+ * local timezone. Markets and alert pipelines run on ET, so "today's
+ * triggers" must mean "since 00:00 ET" — not 00:00 wherever the user lives.
+ */
+function easternMidnightIso(): string {
+  // en-CA gives YYYY-MM-DD without locale formatting surprises
+  const ymd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  // Determine current ET offset by formatting `Z` portion. Simpler: build a
+  // Date as if YYYY-MM-DDT00:00 were ET, then ask Intl what UTC that is.
+  // The `tzOffsetMinutes` trick: parse YYYY-MM-DDT00:00:00 as UTC, then
+  // shift back by the actual ET offset for that calendar day (handles DST).
+  const utcMid = new Date(`${ymd}T00:00:00Z`);
+  // Format that UTC instant in ET — gives back the wall-clock ET time. The
+  // delta between that and 00:00 tells us the offset to subtract.
+  const etWall = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(utcMid);
+  const get = (t: string) => Number(etWall.find((p) => p.type === t)?.value ?? 0);
+  const etDateAsUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  const offsetMs = utcMid.getTime() - etDateAsUtc;
+  return new Date(utcMid.getTime() + offsetMs).toISOString();
+}
+
 const TRIGGER_SELECT =
   "id, ticker, fired_at, direction, fired_price, fired_type, setup_label, " +
   "vol_ratio, score_morning, or_high, or_low, vwap, eod_outcome, " +
@@ -198,7 +253,7 @@ export async function fetchTodayTriggers(): Promise<KaiTriggerEvent[]> {
   const { data, error } = await supabase
     .from("kai_trigger_events")
     .select(TRIGGER_SELECT)
-    .gte("fired_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+    .gte("fired_at", easternMidnightIso())
     .order("fired_at", { ascending: false })
     .limit(50);
   if (error) throw error;
